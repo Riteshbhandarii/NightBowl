@@ -1,0 +1,13 @@
+---
+import Base from '../layouts/Base.astro';
+import TopBar from '../components/TopBar.astro';
+import Scene from '../components/Scene.astro';
+import MenuBook from '../components/MenuBook.astro';
+import { SITE } from '../data/content';
+---
+
+<Base title={SITE.name} description="Ritesh Bhandari — portfolio and kitchen log, served from a late-night ramen stall.">
+  <TopBar />
+  <Scene />
+  <MenuBook />
+</Base>

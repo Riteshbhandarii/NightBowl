@@ -1,0 +1,45 @@
+---
+// The 3D ramen stall. All wiring lives in ../lib/scene.js
+---
+
+<canvas id="scene" aria-label="Interactive 3D ramen stall. Use the Open menu button for a text version of everything."></canvas>
+<div class="loading" id="loading">lighting the lanterns…</div>
+<div class="pins" id="pins"></div>
+<div class="hint" id="hint">drag to look around · tap a sign to open the menu</div>
+<div class="credit">built from scratch · placeholder cook until the real model drops in</div>
+
+<script>
+  import { initScene } from '../lib/scene.js';
+
+  const canvas = document.getElementById('scene') as HTMLCanvasElement;
+  const loading = document.getElementById('loading');
+
+  function boot() {
+    let controls: { setBookOpen(v: boolean): void } | null = null;
+    try {
+      controls = initScene(canvas, (key: string) => {
+        document.dispatchEvent(new CustomEvent('nb:open', { detail: key }));
+      });
+    } catch (err) {
+      console.error(err);
+      if (loading) {
+        loading.textContent = 'scene error — use the Open menu button';
+        (loading as HTMLElement).style.letterSpacing = '0.08em';
+      }
+      return;
+    }
+    loading?.classList.add('gone');
+    document.addEventListener('nb:bookstate', (e) => {
+      controls?.setBookOpen((e as CustomEvent).detail);
+    });
+  }
+
+  if ('fonts' in document) {
+    let done = false;
+    const go = () => { if (!done) { done = true; boot(); } };
+    (document as any).fonts.ready.then(go);
+    setTimeout(go, 1400);
+  } else {
+    boot();
+  }
+</script>

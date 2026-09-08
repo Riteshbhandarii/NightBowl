@@ -1,0 +1,288 @@
+---
+import { getCollection } from 'astro:content';
+import { SITE, GUIDE, SPECIALS, BILL } from '../data/content';
+
+const projects = (await getCollection('projects')).sort((a, b) => a.data.order - b.data.order);
+const byCourse = (c: string) => projects.filter((p) => p.data.course === c);
+const mains = byCourse('mains');
+const smallPlates = byCourse('small-plates');
+const offMenu = byCourse('off-menu');
+
+const posts = (await getCollection('posts')).sort(
+  (a, b) => a.data.order - b.data.order || +b.data.date - +a.data.date
+);
+const fmtDate = (d: Date) =>
+  d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+
+const anyDraft =
+  projects.some((p) => p.data.draftCopy) || GUIDE.draftCopy || SPECIALS.draftCopy || BILL.draftCopy;
+---
+
+<div class="backdrop" id="backdrop"></div>
+<div class="book-wrap">
+  <div class="book" id="book" role="dialog" aria-modal="true" aria-label={`${SITE.name} menu`}>
+    <button class="book-close" id="bookClose" aria-label="Close menu">×</button>
+    <div class="book-inner">
+      <div class="page left" id="pageLeft"></div>
+      <div class="page right" id="pageRight"></div>
+    </div>
+    <div class="page-turn" id="pageTurn"></div>
+    <div class="cover" aria-hidden="true">
+      <div class="seal">{SITE.name.charAt(0).toUpperCase()}</div>
+      <h1>{SITE.name}</h1>
+      <p>open late</p>
+      <span class="tap">tap to open</span>
+    </div>
+    <nav class="tabs" id="tabs" aria-label="Menu sections">
+      <button data-tab="menu">Menu</button>
+      <button data-tab="guide">The Guide</button>
+      <button data-tab="log">Kitchen Log</button>
+      <button data-tab="bill">The Bill</button>
+    </nav>
+  </div>
+</div>
+
+{/* ---- pre-rendered section content; the client script moves it into the pages ---- */}
+<div id="sectionData" hidden>
+  <section data-sec="menu">
+    <div class="pg">
+      <div data-side="l">
+        <span class="eyebrow">{SITE.name} — est. 2026</span>
+        <h2>The Menu</h2>
+        <p class="sub">Everything here was built by the cook. Ask the guide about any of it.</p>
+        <p>The big builds first, then the small sharp tools, then the ventures and the research.</p>
+        <div class="special">
+          <h3>Today’s specials</h3>
+          {SPECIALS.items.map((it) => (
+            <div class="item">
+              <div class="row"><span class="name">{it.name}</span><span class="leader"></span><span class="tag">{it.note}</span></div>
+              <p class="desc">{it.line}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+      <div data-side="r">
+        <div class="course">
+          <h3>Mains</h3>
+          <p class="cnote">the builds I most like explaining</p>
+          {mains.map((p) => (
+            <div class="item">
+              <div class="row"><span class="name">{p.data.name}</span><span class="leader"></span><span class="tag">{p.data.tag}</span></div>
+              <p class="desc">{p.body?.trim()} {p.data.url && (<a href={p.data.url} target="_blank" rel="noopener">open ↗</a>)}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+    <div class="pg">
+      <div data-side="l">
+        <div class="course">
+          <h3>Small plates</h3>
+          <p class="cnote">focused tools and experiments</p>
+          {smallPlates.map((p) => (
+            <div class="item">
+              <div class="row"><span class="name">{p.data.name}</span><span class="leader"></span><span class="tag">{p.data.tag}</span></div>
+              <p class="desc">{p.body?.trim()} {p.data.url && (<a href={p.data.url} target="_blank" rel="noopener">open ↗</a>)}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+      <div data-side="r">
+        <div class="course">
+          <h3>Off the menu</h3>
+          <p class="cnote">ventures and research</p>
+          {offMenu.map((p) => (
+            <div class="item">
+              <div class="row"><span class="name">{p.data.name}</span><span class="leader"></span><span class="tag">{p.data.tag}</span></div>
+              <p class="desc">{p.body?.trim()} {p.data.url && (<a href={p.data.url} target="_blank" rel="noopener">open ↗</a>)}</p>
+            </div>
+          ))}
+        </div>
+        <p class="sub" style="margin-top:20px">More detail, and the parts that aren’t on GitHub, coming with the full site.</p>
+      </div>
+    </div>
+  </section>
+
+  <section data-sec="guide">
+    <div class="pg">
+      <div data-side="l">
+        <span class="eyebrow">your host for the evening</span>
+        <h2>The Guide</h2>
+        <p class="sub">{GUIDE.intro}</p>
+        <div class="portrait" aria-hidden="true"><span>the cook, in person, once there's an illustration</span></div>
+      </div>
+      <div data-side="r">
+        {GUIDE.body.map((para) => <p>{para}</p>)}
+        <p style="margin-top:16px">
+          <a href={SITE.github} target="_blank" rel="noopener" style="font-family:'Space Mono',monospace;font-size:11px;color:var(--accent)">github.com/Riteshbhandarii ↗</a>
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <section data-sec="log">
+    <div class="pg">
+      <div data-side="l">
+        <span class="eyebrow">from the kitchen</span>
+        <h2>Kitchen Log</h2>
+        <p class="sub">Short notes on what got built and what broke.</p>
+        <p>Ritesh writes these. The titles below are the queue.</p>
+      </div>
+      <div data-side="r">
+        {posts.map((post) => (
+          <article class="logline">
+            <time>{post.data.status === 'published' ? fmtDate(post.data.date) : 'coming soon'}</time>
+            <h3>{post.data.title}</h3>
+            <p>{post.data.excerpt}</p>
+          </article>
+        ))}
+      </div>
+    </div>
+  </section>
+
+  <section data-sec="bill">
+    <div class="pg">
+      <div data-side="l">
+        <span class="eyebrow">settle up</span>
+        <h2>The Bill</h2>
+        <p class="sub">{BILL.intro}</p>
+        {!BILL.cvReady && <p>The full CV as a PDF arrives once the copy is final. Until then the links are the source of truth.</p>}
+      </div>
+      <div data-side="r">
+        <ul class="bill">
+          {BILL.rows.map(([k, v]) => (
+            <li><b>{k}</b><span>{v}</span></li>
+          ))}
+          <li><b>GitHub</b><span><a href={SITE.github} target="_blank" rel="noopener">github.com/Riteshbhandarii</a></span></li>
+          <li><b>LinkedIn</b><span><a href={SITE.linkedin} target="_blank" rel="noopener">ritesh-bhandari</a></span></li>
+          {BILL.cvReady && <li><b>CV</b><span><a href="/cv.pdf" target="_blank" rel="noopener">download PDF</a></span></li>}
+        </ul>
+        <p class="total">Total: one hire. — service not included</p>
+      </div>
+    </div>
+  </section>
+
+  {anyDraft && <p class="draft" data-draft>Draft copy, written by the assistant. Ritesh replaces it in his own voice.</p>}
+</div>
+
+<script>
+  const book = document.getElementById('book')!;
+  const backdrop = document.getElementById('backdrop')!;
+  const pageLeft = document.getElementById('pageLeft')!;
+  const pageRight = document.getElementById('pageRight')!;
+  const pageTurn = document.getElementById('pageTurn')!;
+  const tabsEl = document.getElementById('tabs')!;
+  const closeBtn = document.getElementById('bookClose')!;
+  const cover = book.querySelector('.cover')!;
+  const REDUCED = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  const draftHtml = document.querySelector('#sectionData [data-draft]')?.outerHTML ?? '';
+
+  // parse the pre-rendered content into { key: [ {l, r}, ... ] }
+  const SECTIONS: Record<string, { l: string; r: string }[]> = {};
+  document.querySelectorAll('#sectionData section[data-sec]').forEach((sec) => {
+    const key = (sec as HTMLElement).dataset.sec!;
+    SECTIONS[key] = [...sec.querySelectorAll(':scope > .pg')].map((pg) => ({
+      l: pg.querySelector('[data-side="l"]')?.innerHTML ?? '',
+      r: pg.querySelector('[data-side="r"]')?.innerHTML ?? '',
+    }));
+  });
+
+  let isOpen = false;
+  let curTab: string | null = null;
+  let curPage = 0;
+  let lastFocus: HTMLElement | null = null;
+
+  function render(withTurn: boolean) {
+    const pages = SECTIONS[curTab!] || [];
+    const pg = pages[curPage] || { l: '', r: '' };
+    const multi = pages.length > 1;
+    const mobile = window.matchMedia('(max-width: 860px)').matches;
+    const lastPage = curPage >= pages.length - 1;
+
+    if (withTurn && !REDUCED && !mobile) {
+      pageTurn.innerHTML =
+        '<div class="page right" style="position:absolute;inset:0;overflow:hidden">' + pageRight.innerHTML + '</div>';
+      pageTurn.classList.remove('run');
+      void pageTurn.offsetWidth;
+      pageTurn.classList.add('run');
+      setTimeout(() => pageTurn.classList.remove('run'), 640);
+    }
+
+    // draft stamp goes on the last visible page
+    const stamp = lastPage ? draftHtml : '';
+    if (mobile) {
+      pageLeft.innerHTML = '';
+      pageRight.innerHTML = pg.l + '<div style="height:14px"></div>' + pg.r + stamp;
+    } else {
+      pageLeft.innerHTML = pg.l;
+      pageRight.innerHTML = pg.r + stamp;
+    }
+    pageLeft.scrollTop = 0;
+    pageRight.scrollTop = 0;
+
+    if (multi) {
+      const b = document.createElement('button');
+      b.className = 'pageflip-hint';
+      b.textContent = lastPage ? '← back a page' : 'turn the page →';
+      b.addEventListener('click', () => {
+        curPage = lastPage ? 0 : curPage + 1;
+        render(true);
+      });
+      pageRight.appendChild(b);
+    }
+  }
+
+  function setTab(tab: string, fromClick: boolean) {
+    if (!SECTIONS[tab]) return;
+    curTab = tab;
+    curPage = 0;
+    [...tabsEl.children].forEach((c) =>
+      c.classList.toggle('active', (c as HTMLElement).dataset.tab === tab)
+    );
+    render(fromClick && isOpen);
+  }
+
+  function open(tab: string) {
+    lastFocus = document.activeElement as HTMLElement;
+    setTab(tab || 'menu', false);
+    backdrop.classList.add('open');
+    book.classList.add('open');
+    isOpen = true;
+    document.dispatchEvent(new CustomEvent('nb:bookstate', { detail: true }));
+    if (REDUCED) {
+      book.classList.add('flipped');
+    } else {
+      setTimeout(() => book.classList.add('flipped'), 180);
+      setTimeout(() => { if (isOpen) book.classList.add('flipped'); }, 1400);
+    }
+    setTimeout(() => closeBtn.focus(), 260);
+  }
+
+  function close() {
+    book.classList.remove('open', 'flipped');
+    backdrop.classList.remove('open');
+    isOpen = false;
+    document.dispatchEvent(new CustomEvent('nb:bookstate', { detail: false }));
+    lastFocus?.focus();
+  }
+
+  closeBtn.addEventListener('click', close);
+  backdrop.addEventListener('click', close);
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && isOpen) close(); });
+  cover.addEventListener('click', () => book.classList.add('flipped'));
+  tabsEl.addEventListener('click', (e) => {
+    const b = (e.target as HTMLElement).closest('button[data-tab]') as HTMLElement | null;
+    if (b) setTab(b.dataset.tab!, true);
+  });
+  document.addEventListener('nb:open', (e) => open((e as CustomEvent).detail));
+
+  book.addEventListener('keydown', (e) => {
+    if ((e as KeyboardEvent).key !== 'Tab' || !isOpen) return;
+    const f = book.querySelectorAll<HTMLElement>('button, a[href], [tabindex]');
+    if (!f.length) return;
+    const first = f[0], last = f[f.length - 1];
+    if ((e as KeyboardEvent).shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+    else if (!(e as KeyboardEvent).shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+  });
+</script>

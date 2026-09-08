@@ -1,0 +1,42 @@
+---
+import { SITE } from '../data/content';
+---
+
+<header class="topbar">
+  <a class="wordmark" href="/" aria-label={`${SITE.name} — home`}>
+    <b>{SITE.name}</b>
+    <span>{SITE.tagline}</span>
+  </a>
+
+  <nav class="nav" aria-label="Sections">
+    <button data-open="menu">Menu</button>
+    <button data-open="guide">The Guide</button>
+    <button data-open="log">Kitchen Log</button>
+    <button data-open="bill">The Bill</button>
+    <span class="sep" aria-hidden="true"></span>
+    <button class="icon" id="themeBtn" aria-label="Switch colour theme" title="Switch colour theme">◐</button>
+  </nav>
+
+  <button class="menu-toggle" data-open="menu" aria-haspopup="dialog">Open menu</button>
+</header>
+
+<script>
+  // nav + theme toggle
+  document.querySelectorAll('[data-open]').forEach((b) => {
+    b.addEventListener('click', () => {
+      document.dispatchEvent(new CustomEvent('nb:open', { detail: (b as HTMLElement).dataset.open }));
+    });
+  });
+
+  const themeBtn = document.getElementById('themeBtn');
+  function currentTheme() {
+    const t = document.documentElement.getAttribute('data-theme');
+    if (t) return t;
+    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  }
+  themeBtn?.addEventListener('click', () => {
+    const next = currentTheme() === 'dark' ? 'light' : 'dark';
+    document.documentElement.setAttribute('data-theme', next);
+    try { localStorage.setItem('nightbowl-theme', next); } catch (e) {}
+  });
+</script>
