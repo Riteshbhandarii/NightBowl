@@ -67,6 +67,9 @@ export function initScene(canvas, onHotspot) {
   const box = (w, h, d, color, o) => new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m(color, o));
   const cyl = (rt, rb, h, color, o, seg = 22) => new THREE.Mesh(new THREE.CylinderGeometry(rt, rb, h, seg), m(color, o));
   const sph = (r, color, o, s = 18) => new THREE.Mesh(new THREE.SphereGeometry(r, s, s - 4), m(color, o));
+  // total height of a capsule is len + 2r; callers pass the total they want
+  const cap = (r, total, color, o, seg = 14) =>
+    new THREE.Mesh(new THREE.CapsuleGeometry(r, Math.max(0.001, total - r * 2), 5, seg), m(color, o));
   const pos = (mesh, x, y, z) => { mesh.position.set(x, y, z); return mesh; };
 
   function textTexture(draw, w, h) {
@@ -85,6 +88,8 @@ export function initScene(canvas, onHotspot) {
   const key = new THREE.DirectionalLight(0xffd7a6, 0.3);
   key.position.set(-5, 7, 6);
   scene.add(key);
+
+  let _faceShut = null, _faceOpen = null;  // read by buildPerson during construction
 
   /* ---------- stall ---------- */
   buildStall();
@@ -254,29 +259,10 @@ export function initScene(canvas, onHotspot) {
   }
 
   /* ---------- articulated stand-in person ---------- */
-  function buildPerson(opt = {}) {
-    const sc = opt.scale || 1;
-    const skin = opt.skin || 0xcf9264;
-    const shirt = opt.shirt || 0x39506b;
-    const p = new THREE.Group();
-
-    const hip = new THREE.Group();
-    hip.position.y = 0.8;
-    p.add(hip);
-    hip.add(pos(box(0.26, 0.16, 0.16, shirt, { rough: 0.9 }), 0, 0, 0));
-
-    const torso = new THREE.Group();
-    torso.position.y = 0.12;
-    hip.add(torso);
-    torso.add(pos(cyl(0.15, 0.18, 0.44, shirt, { rough: 0.9 }, 14), 0, 0.22, 0));
-    if (opt.apron) torso.add(pos(box(0.3, 0.4, 0.1, 0xe7dcc5, { rough: 1 }), 0, 0.14, 0.1));
-    torso.add(pos(cyl(0.05, 0.05, 0.08, skin, { rough: 1 }, 10), 0, 0.46, 0));
-
-    const head = new THREE.Group();
-    head.position.y = 0.56;
-    torso.add(head);
-    head.add(pos(sph(0.13, skin, { rough: 1 }, 18), 0, 0, 0));
-    const faceTex = textTexture((g, w, h) => {
+  function faceTexture(open) {
+    if (open && _faceOpen) return _faceOpen;
+    if (!open && _faceShut) return _faceShut;
+    const tex = textTexture((g, w, h) => {
       g.clearRect(0, 0, w, h);
       g.fillStyle = '#20140c';
       g.beginPath(); g.arc(w * 0.38, h * 0.46, 7, 0, 7); g.fill();
@@ -284,30 +270,98 @@ export function initScene(canvas, onHotspot) {
       g.strokeStyle = '#20140c'; g.lineWidth = 4; g.lineCap = 'round';
       g.beginPath(); g.moveTo(w * 0.33, h * 0.36); g.lineTo(w * 0.43, h * 0.34); g.stroke();
       g.beginPath(); g.moveTo(w * 0.57, h * 0.34); g.lineTo(w * 0.67, h * 0.36); g.stroke();
-      g.beginPath(); g.moveTo(w * 0.42, h * 0.62); g.quadraticCurveTo(w * 0.5, h * 0.68, w * 0.58, h * 0.62); g.stroke();
+      if (open) {
+        g.beginPath();
+        g.ellipse(w * 0.5, h * 0.645, w * 0.055, h * 0.05, 0, 0, 7);
+        g.fill();
+      } else {
+        g.beginPath();
+        g.moveTo(w * 0.42, h * 0.62);
+        g.quadraticCurveTo(w * 0.5, h * 0.68, w * 0.58, h * 0.62);
+        g.stroke();
+      }
     }, 128, 128);
-    const face = new THREE.Mesh(new THREE.PlaneGeometry(0.2, 0.2), new THREE.MeshBasicMaterial({ map: faceTex, transparent: true }));
-    face.position.set(0, 0.01, 0.122);
+    if (open) _faceOpen = tex; else _faceShut = tex;
+    return tex;
+  }
+
+  function buildPerson(opt = {}) {
+    const sc = opt.scale || 1;
+    const bw = opt.build || 1;   // shoulder / torso width
+    const hs = opt.headScale || 1;
+    const skin = opt.skin || 0xcf9264;
+    const shirt = opt.shirt || 0x39506b;
+    const p = new THREE.Group();
+
+    const hip = new THREE.Group();
+    hip.position.y = 0.8;
+    p.add(hip);
+    const pelvis = pos(sph(0.135 * bw, shirt, { rough: 0.9 }, 16), 0, 0, 0);
+    pelvis.scale.set(1, 0.66, 0.82);
+    hip.add(pelvis);
+
+    const torso = new THREE.Group();
+    torso.position.y = 0.12;
+    hip.add(torso);
+    // lathed profile: waist in, chest out, shoulders back in. a real silhouette
+    // rather than a cylinder, for the same handful of triangles.
+    const prof = [
+      [0.115, 0.00], [0.142, 0.07], [0.163, 0.16], [0.172, 0.25],
+      [0.168, 0.33], [0.150, 0.40], [0.112, 0.45], [0.055, 0.475],
+    ].map(([r, y]) => new THREE.Vector2(r * bw, y));
+    const trunk = new THREE.Mesh(new THREE.LatheGeometry(prof, 20), m(shirt, { rough: 0.9 }));
+    trunk.scale.z = 0.84;
+    torso.add(trunk);
+    const traps = pos(sph(0.155 * bw, shirt, { rough: 0.9 }, 14), 0, 0.4, 0);
+    traps.scale.set(1, 0.42, 0.8);
+    torso.add(traps);
+    if (opt.apron) {
+      // a curved panel wrapping the front of the torso. as a flat box it read as a
+      // slab bolted to his chest once the trunk stopped being a cylinder.
+      const ap = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.15 * bw, 0.182 * bw, 0.44, 18, 1, true, -1.15, 2.3),
+        m(0xe7dcc5, { rough: 1 })
+      );
+      ap.material.side = THREE.DoubleSide;
+      ap.position.set(0, 0.17, 0);
+      ap.scale.z = 0.86;
+      torso.add(ap);
+    }
+    torso.add(pos(cap(0.043, 0.13, skin, { rough: 1 }, 12), 0, 0.5, 0));
+
+    const head = new THREE.Group();
+    head.position.y = 0.585;
+    torso.add(head);
+    head.add(pos(sph(0.105 * hs, skin, { rough: 1 }, 18), 0, 0, 0));
+    const face = new THREE.Mesh(
+      new THREE.PlaneGeometry(0.163, 0.163),
+      new THREE.MeshBasicMaterial({ map: faceTexture(false), transparent: true })
+    );
+    face.position.set(0, 0.008, 0.099 * hs);
     head.add(face);
-    head.add(pos(sph(0.135, opt.hair || 0x1c1510, { rough: 1 }, 16), 0, 0.03, -0.01));
+    head.add(pos(sph(0.111 * hs, opt.hair || 0x1c1510, { rough: 1 }, 16), 0, 0.024, -0.008));
     if (opt.cap != null) {
-      head.add(pos(cyl(0.14, 0.14, 0.06, opt.cap, { rough: 1 }, 14), 0, 0.07, 0));
-      head.add(pos(box(0.24, 0.02, 0.02, opt.cap), 0, 0.05, 0));
+      head.add(pos(cyl(0.115 * hs, 0.115 * hs, 0.05, opt.cap, { rough: 1 }, 14), 0, 0.057, 0));
+      head.add(pos(box(0.196 * hs, 0.017, 0.017, opt.cap), 0, 0.04, 0));
     }
     if (opt.toque) {
-      const toque = pos(cyl(0.16, 0.15, 0.14, 0xf3efe6, { rough: 1 }, 18), 0, 0.13, 0);
-      const puff = pos(sph(0.17, 0xf3efe6, { rough: 1 }, 14), 0, 0.24, 0);
+      const toque = pos(cyl(0.131, 0.123, 0.115, 0xf3efe6, { rough: 1 }, 18), 0, 0.106, 0);
+      const puff = pos(sph(0.139, 0xf3efe6, { rough: 1 }, 14), 0, 0.196, 0);
       puff.scale.y = 0.7;
       head.add(toque); head.add(puff);
     }
 
     const arm = (side) => {
       const sh = new THREE.Group();
-      sh.position.set(side * 0.19, 0.36, 0);
-      sh.add(pos(cyl(0.045, 0.05, 0.24, shirt, { rough: 0.9 }, 8), 0, -0.12, 0));
+      sh.position.set(side * 0.185 * bw, 0.36, 0);
+      sh.add(pos(sph(0.056 * bw, shirt, { rough: 0.9 }, 14), 0, 0, 0)); // deltoid
+      sh.add(pos(cap(0.044, 0.25, shirt, { rough: 0.9 }), 0, -0.12, 0));
       const elbow = new THREE.Group(); elbow.position.y = -0.24;
-      elbow.add(pos(cyl(0.04, 0.045, 0.22, skin, { rough: 1 }, 8), 0, -0.11, 0));
-      elbow.add(pos(box(0.06, 0.07, 0.05, skin, { rough: 1 }), 0, -0.24, 0));
+      elbow.add(pos(sph(0.04, skin, { rough: 1 }, 12), 0, 0, 0)); // elbow joint
+      elbow.add(pos(cap(0.037, 0.23, skin, { rough: 1 }), 0, -0.11, 0));
+      const hand = pos(sph(0.045, skin, { rough: 1 }, 12), 0, -0.245, 0);
+      hand.scale.set(0.78, 1.25, 0.6);
+      elbow.add(hand);
       sh.add(elbow);
       torso.add(sh);
       return { sh, elbow };
@@ -317,17 +371,22 @@ export function initScene(canvas, onHotspot) {
     const leg = (side) => {
       const hp = new THREE.Group();
       hp.position.set(side * 0.09, 0, 0);
-      hp.add(pos(cyl(0.06, 0.065, 0.4, 0x2c2c34, { rough: 0.9 }, 8), 0, -0.2, 0));
+      hp.add(pos(sph(0.075, 0x2c2c34, { rough: 0.9 }, 12), 0, 0, 0)); // hip joint
+      hp.add(pos(cap(0.066, 0.42, 0x2c2c34, { rough: 0.9 }), 0, -0.2, 0));
       const knee = new THREE.Group(); knee.position.y = -0.4;
-      knee.add(pos(cyl(0.05, 0.055, 0.38, 0x2c2c34, { rough: 0.9 }, 8), 0, -0.19, 0));
-      knee.add(pos(box(0.09, 0.05, 0.18, 0x161616, { rough: 0.9 }), 0, -0.38, 0.04));
+      knee.add(pos(sph(0.056, 0x2c2c34, { rough: 0.9 }, 12), 0, 0, 0)); // knee joint
+      knee.add(pos(cap(0.052, 0.4, 0x2c2c34, { rough: 0.9 }), 0, -0.19, 0));
+      const shoe = pos(cap(0.05, 0.19, 0x161616, { rough: 0.9 }, 12), 0, -0.375, 0.03);
+      shoe.rotation.x = Math.PI / 2;
+      shoe.scale.set(0.86, 1, 0.7);
+      knee.add(shoe);
       hp.add(knee);
       hip.add(hp);
       return { hp, knee };
     };
     const legL = leg(-1), legR = leg(1);
 
-    p.userData.rig = { hip, torso, head, armL, armR, legL, legR };
+    p.userData.rig = { hip, torso, head, armL, armR, legL, legR, face };
     p.scale.setScalar(sc);
     return p;
   }
@@ -345,30 +404,43 @@ export function initScene(canvas, onHotspot) {
     rig.torso.rotation.z = Math.sin(phase) * 0.03 * amt;
   }
 
+  // one person hunched over a bowl, chopsticks in hand
+  function seatedPerson(sp, phaseOffset) {
+    const d = buildPerson({
+      shirt: sp.shirt, hair: sp.hair,
+      scale: sp.scale ?? 0.96, build: sp.build ?? 1, headScale: sp.headScale ?? 1,
+    });
+    d.position.set(sp.x, 0, 1.5);
+    d.rotation.y = Math.PI;
+    const r = d.userData.rig;
+    r.hip.position.y = 0.64;
+    r.legL.hp.rotation.x = -1.5; r.legR.hp.rotation.x = -1.5;
+    r.legL.knee.rotation.x = 1.5; r.legR.knee.rotation.x = 1.5;
+    r.armL.sh.rotation.x = -0.5; r.armR.sh.rotation.x = -0.7;
+    r.armR.elbow.rotation.x = -1.0;
+    const stick = pos(box(0.012, 0.012, 0.16, 0x8a6a3c), 0, -0.24, 0.02);
+    stick.rotation.x = 0.5;
+    r.armR.elbow.add(stick);
+    d.userData.phase = phaseOffset;
+    diners.push(d);
+    scene.add(d);
+    return d;
+  }
+
+  function buildStool(x) {
+    scene.add(pos(cyl(0.17, 0.17, 0.06, 0xb0423a, { rough: 0.7 }, 18), x, 0.56, 1.52));
+    scene.add(pos(cyl(0.03, 0.05, 0.56, 0x2a2018, {}, 10), x, 0.28, 1.52));
+  }
+
   function buildDiners() {
     const spots = [
-      { x: -1.9, hair: 0x2a1c12, shirt: 0x6b4a2f },
-      { x: -0.9, hair: 0x14100c, shirt: 0x394a5e },
-      { x: 1.75, hair: 0x3a2a1a, shirt: 0x5a5560 },
+      { x: -1.9, hair: 0x2a1c12, shirt: 0x6b4a2f, scale: 1.0, build: 1.08, headScale: 0.97 },
+      { x: -0.9, hair: 0x14100c, shirt: 0x394a5e, scale: 0.92, build: 0.94, headScale: 1.03 },
+      { x: 1.75, hair: 0x3a2a1a, shirt: 0x5a5560, scale: 0.97, build: 1.0, headScale: 1.0 },
     ];
     spots.forEach((sp, i) => {
-      scene.add(pos(cyl(0.17, 0.17, 0.06, 0xb0423a, { rough: 0.7 }, 18), sp.x, 0.56, 1.52));
-      scene.add(pos(cyl(0.03, 0.05, 0.56, 0x2a2018, {}, 10), sp.x, 0.28, 1.52));
-      const d = buildPerson({ shirt: sp.shirt, hair: sp.hair, scale: 0.96 });
-      d.position.set(sp.x, 0, 1.5);
-      d.rotation.y = Math.PI;
-      const r = d.userData.rig;
-      r.hip.position.y = 0.64;
-      r.legL.hp.rotation.x = -1.5; r.legR.hp.rotation.x = -1.5;
-      r.legL.knee.rotation.x = 1.5; r.legR.knee.rotation.x = 1.5;
-      r.armL.sh.rotation.x = -0.5; r.armR.sh.rotation.x = -0.7;
-      r.armR.elbow.rotation.x = -1.0;
-      const stick = pos(box(0.012, 0.012, 0.16, 0x8a6a3c), 0, -0.24, 0.02);
-      stick.rotation.x = 0.5;
-      r.armR.elbow.add(stick);
-      d.userData.phase = i * 2.1;
-      diners.push(d);
-      scene.add(d);
+      buildStool(sp.x);
+      seatedPerson(sp, i * 2.1);
     });
   }
 
@@ -390,11 +462,11 @@ export function initScene(canvas, onHotspot) {
     const bld2 = bld.clone(); bld2.position.set(12, 6, -16); bld2.scale.set(0.7, 0.8, 1);
     scene.add(bld2);
 
-    const w1 = buildPerson({ shirt: 0x22202a, hair: 0x101010, scale: 1.02 });
+    const w1 = buildPerson({ shirt: 0x22202a, hair: 0x101010, scale: 1.04, build: 1.07, headScale: 0.96 });
     w1.position.set(-8, 0, 3.4); w1.rotation.y = Math.PI / 2;
     w1.userData.speed = 0.9; w1.userData.range = 8;
     walkers.push(w1); scene.add(w1);
-    const w2 = buildPerson({ shirt: 0x2b2530, hair: 0x1a1a1a, scale: 0.98 });
+    const w2 = buildPerson({ shirt: 0x2b2530, hair: 0x1a1a1a, scale: 0.95, build: 0.92, headScale: 1.02 });
     w2.position.set(7, 0, 4.1); w2.rotation.y = -Math.PI / 2;
     w2.userData.speed = -0.65; w2.userData.range = 7;
     walkers.push(w2); scene.add(w2);
@@ -629,7 +701,7 @@ export function initScene(canvas, onHotspot) {
       wk.position.x += wd.speed * dt;
       if (wk.position.x > wd.range) wk.position.x = -wd.range;
       if (wk.position.x < -wd.range) wk.position.x = wd.range;
-      walkRig(wk.userData.rig, t * 3.0 + i, 1);
+      walkRig(wk.userData.rig, t * (2.75 + i * 0.55) + i * 1.9, 1);
     }
 
     for (const grp of steamGroups) {
