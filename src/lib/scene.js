@@ -597,6 +597,8 @@ export function initScene(canvas, onHotspot, opts = {}) {
   // function declaration, not a const arrow: initAI calls this during scene
   // construction, which happens above this line.
   function rnd(a, b) { return a + Math.random() * (b - a); }
+  // wall clock in seconds, for anything that schedules rather than eases
+  function nowSec() { return performance.now() / 1000; }
   function pickPlan(plan) {
     let total = 0;
     for (const e of plan) total += e.w;
@@ -609,27 +611,28 @@ export function initScene(canvas, onHotspot, opts = {}) {
     npc.userData.ai = {
       kind, cur: base(), tgt: base(),
       act: kind === 'cook' ? 'stir' : 'eat',
-      t: Math.random() * 3, dur: rnd(3, 7),
+      startedAt: nowSec() - Math.random() * 3, dur: rnd(3, 7),
       locked: false, face: 0,
     };
   }
   function setAct(npc, act, dur) {
     const ai = npc.userData.ai;
     if (!ai) return;
-    ai.act = act; ai.t = 0; ai.dur = dur;
+    ai.act = act; ai.startedAt = nowSec(); ai.dur = dur;
   }
 
   function tickNPC(npc, dt) {
     const ai = npc.userData.ai;
     if (!ai) return;
-    ai.t += dt;
-    if (!ai.locked && ai.t >= ai.dur) {
+    let tl = nowSec() - ai.startedAt;
+    if (!ai.locked && tl >= ai.dur) {
       const plan = pickPlan(ai.kind === 'cook' ? COOK_PLAN : DINER_PLAN);
-      ai.act = plan.act; ai.t = 0; ai.dur = rnd(plan.dur[0], plan.dur[1]);
+      ai.act = plan.act; ai.startedAt = nowSec(); ai.dur = rnd(plan.dur[0], plan.dur[1]);
+      tl = 0;
     }
     const base = ai.kind === 'cook' ? standingPose() : seatedPose();
     const fn = (ai.kind === 'cook' ? COOK_ACTS : SEATED_ACTS)[ai.act];
-    if (fn) fn(base, ai.t, npc);
+    if (fn) fn(base, tl, npc);
     ai.tgt = base;
     // exponential smoothing, framerate independent
     easePose(ai.cur, ai.tgt, 1 - Math.exp(-dt * 7));
@@ -645,13 +648,13 @@ export function initScene(canvas, onHotspot, opts = {}) {
     el.className = 'say';
     el.textContent = text;
     document.body.appendChild(el);
-    bubbles.push({ el, npc, t: 0, dur });
+    bubbles.push({ el, npc, bornAt: nowSec(), dur });
   }
-  function updateBubbles(dt) {
+  function updateBubbles() {
     for (let i = bubbles.length - 1; i >= 0; i--) {
       const b = bubbles[i];
-      b.t += dt;
-      if (b.t >= b.dur) { b.el.remove(); bubbles.splice(i, 1); continue; }
+      const t = nowSec() - b.bornAt;
+      if (t >= b.dur) { b.el.remove(); bubbles.splice(i, 1); continue; }
       b.npc.userData.rig.head.getWorldPosition(_bubV);
       _bubV.y += 0.52; // clears the "you" tag, which sits just above head height
       _bubV.project(camera);
@@ -660,7 +663,7 @@ export function initScene(canvas, onHotspot, opts = {}) {
       if (off) continue;
       b.el.style.left = (_bubV.x * 0.5 + 0.5) * window.innerWidth + 'px';
       b.el.style.top = (-_bubV.y * 0.5 + 0.5) * window.innerHeight + 'px';
-      b.el.style.opacity = String(Math.max(0, Math.min(1, Math.min(b.t, b.dur - b.t) / 0.35)));
+      b.el.style.opacity = String(Math.max(0, Math.min(1, Math.min(t, b.dur - t) / 0.35)));
     }
   }
   const pickLine = (arr) => (arr && arr.length ? arr[(Math.random() * arr.length) | 0] : '');
@@ -670,23 +673,23 @@ export function initScene(canvas, onHotspot, opts = {}) {
      once every twenty seconds is what makes the place feel occupied. One beat
      runs at a time; it locks its cast, fires timed cues, then releases them. */
   let beat = null;
-  let nextBeat = 6;
+  let nextBeatAt = 0; // set on the first tick, once the clock is meaningful
 
   function startBeat(cast, dur, cues) {
     for (const n of cast) if (n.userData.ai) n.userData.ai.locked = true;
-    beat = { cast, dur, cues, t: 0, i: 0 };
+    beat = { cast, dur, cues, startedAt: nowSec(), i: 0 };
   }
-  function tickBeat(dt) {
+  function tickBeat() {
     if (!beat) return;
-    beat.t += dt;
-    while (beat.i < beat.cues.length && beat.t >= beat.cues[beat.i].at) {
+    const t = nowSec() - beat.startedAt;
+    while (beat.i < beat.cues.length && t >= beat.cues[beat.i].at) {
       beat.cues[beat.i].go();
       beat.i++;
     }
-    if (beat.t >= beat.dur) {
+    if (t >= beat.dur) {
       for (const n of beat.cast) if (n.userData.ai) n.userData.ai.locked = false;
       beat = null;
-      nextBeat = rnd(11, 21);
+      nextBeatAt = nowSec() + rnd(11, 21);
     }
   }
 
@@ -741,11 +744,11 @@ export function initScene(canvas, onHotspot, opts = {}) {
     }
   }
 
-  function tickDirector(dt) {
+  function tickDirector() {
     if (REDUCED) return;
-    if (beat) { tickBeat(dt); return; }
-    nextBeat -= dt;
-    if (nextBeat <= 0) chooseBeat();
+    if (!nextBeatAt) nextBeatAt = nowSec() + 6;
+    if (beat) { tickBeat(); return; }
+    if (nowSec() >= nextBeatAt) chooseBeat();
   }
 
   function walkRig(rig, phase, amt) {
@@ -1324,10 +1327,10 @@ export function initScene(canvas, onHotspot, opts = {}) {
       if (guideRig && guide.userData.ai) applyPose(guideRig, guide.userData.ai.cur);
     } else {
       // the director only performs for someone who is actually sitting down
-      if (phase === 'seated') tickDirector(dt);
+      if (phase === 'seated') tickDirector();
       for (const d of diners) tickNPC(d, dt);
       if (guideRig && guide.userData.ai) tickNPC(guide, dt);
-      updateBubbles(dt);
+      updateBubbles();
     }
 
     for (let i = 0; i < walkers.length; i++) {
