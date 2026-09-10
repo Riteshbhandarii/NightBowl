@@ -45,7 +45,11 @@ jobs:
       # stretch when frames are slow.
       - name: Smoke test
         env:
-          SMOKE_FLAGS: --use-angle=swiftshader --enable-unsafe-swiftshader --disable-dev-shm-usage
+          # no-sandbox: Chrome's sandbox does not work on the hosted runners.
+          # swiftshader: the runner has no GPU, so WebGL needs software rendering.
+          SMOKE_FLAGS: >-
+            --no-sandbox --disable-setuid-sandbox --disable-dev-shm-usage
+            --use-angle=swiftshader --enable-unsafe-swiftshader
         run: npm run smoke
 
       - name: Upload build output on failure

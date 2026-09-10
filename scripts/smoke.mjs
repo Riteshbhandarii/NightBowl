@@ -60,17 +60,35 @@ async function session(flags, run) {
     ...(process.env.SMOKE_FLAGS ? process.env.SMOKE_FLAGS.split(' ') : []),
     ...flags,
     'about:blank',
-  ], { stdio: 'ignore' });
+  ], { stdio: ['ignore', 'pipe', 'pipe'] });
+
+  // Keep Chrome's own output. If it fails to start, that output is the only
+  // thing that says why, and discarding it turns a five minute fix into a
+  // guessing game against CI.
+  let chromeLog = '';
+  const keep = (d) => { chromeLog = (chromeLog + d).slice(-4000); };
+  chrome.stdout.on('data', keep);
+  chrome.stderr.on('data', keep);
+  let exited = null;
+  chrome.on('exit', (code, sig) => { exited = `exit=${code} signal=${sig}`; });
 
   let target = null;
-  for (let i = 0; i < 60 && !target; i++) {
+  for (let i = 0; i < 120 && !target && exited === null; i++) {
     await sleep(500);
     try {
       const list = await (await fetch(`http://127.0.0.1:${PORT}/json/list`)).json();
       target = list.find((t) => t.type === 'page');
     } catch { /* not up yet */ }
   }
-  if (!target) { chrome.kill('SIGKILL'); rmSync(profile, { recursive: true, force: true }); throw new Error('Chrome did not expose a debugging target'); }
+  if (!target) {
+    chrome.kill('SIGKILL');
+    rmSync(profile, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
+    throw new Error(
+      `Chrome never exposed a debugging target on port ${PORT}`
+      + (exited ? ` (process ${exited})` : ' (still running)')
+      + (chromeLog ? `\n--- chrome output ---\n${chromeLog.trim()}` : '\n(no output captured)')
+    );
+  }
 
   const ws = new WebSocket(target.webSocketDebuggerUrl);
   await new Promise((res, rej) => {
