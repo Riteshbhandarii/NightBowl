@@ -1371,6 +1371,40 @@ export function initScene(canvas, onHotspot, opts = {}) {
 
   return {
     setBookOpen(v) { bookOpen = v; hideHint(); },
+
+    // Used by scripts/smoke.mjs. The thing worth catching here is a non-finite
+    // value leaking into a rig: it renders as a vanished or mangled character
+    // and throws nothing at all, so a "no console errors" check sails past it.
+    selfCheck() {
+      let nonFinite = 0;
+      const scan = (o) => {
+        if (!o) return;
+        const { rotation: r, position: p } = o;
+        for (const v of [r.x, r.y, r.z, p.x, p.y, p.z]) if (!Number.isFinite(v)) nonFinite++;
+      };
+      const rigs = diners.map((d) => d.userData.rig).concat(walkers.map((w) => w.userData.rig));
+      if (guideRig) rigs.push(guideRig);
+      for (const rg of rigs) {
+        if (!rg) continue;
+        scan(rg.hip); scan(rg.torso); scan(rg.head);
+        scan(rg.armL.sh); scan(rg.armL.elbow); scan(rg.armR.sh); scan(rg.armR.elbow);
+        scan(rg.legL.hp); scan(rg.legL.knee); scan(rg.legR.hp); scan(rg.legR.knee);
+      }
+      for (const d of diners) scan(d);
+      for (const w of walkers) scan(w);
+      scan(guide);
+      scan(camera);
+      return {
+        phase,
+        diners: diners.length,
+        walkers: walkers.length,
+        cook: !!guide,
+        hotspots: hotspots.length,
+        bubbles: bubbles.length,
+        nonFinite,
+      };
+    },
+
     dispose() {
       cancelAnimationFrame(raf);
       window.removeEventListener('resize', onResize);
