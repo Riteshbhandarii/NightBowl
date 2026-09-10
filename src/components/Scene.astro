@@ -1,7 +1,9 @@
 ---
 // The 3D ramen stall. All wiring lives in ../lib/scene.js
+import { CHATTER } from '../data/content';
 ---
 
+<script id="nbChatter" type="application/json" set:html={JSON.stringify(CHATTER)} is:inline></script>
 <canvas id="scene" aria-label="Interactive 3D ramen stall. Use the Open menu button for a text version of everything."></canvas>
 <div class="loading" id="loading">lighting the lanterns…</div>
 <div class="pins" id="pins"></div>
@@ -17,9 +19,11 @@
   function boot() {
     let controls: { setBookOpen(v: boolean): void } | null = null;
     try {
+      let chatter: any = { cook: [], diner: [] };
+      try { chatter = JSON.parse(document.getElementById('nbChatter')!.textContent!); } catch (e) {}
       controls = initScene(canvas, (key: string) => {
         document.dispatchEvent(new CustomEvent('nb:open', { detail: key }));
-      });
+      }, { chatter });
     } catch (err) {
       console.error(err);
       if (loading) {

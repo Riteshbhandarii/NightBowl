@@ -10,7 +10,8 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
-export function initScene(canvas, onHotspot) {
+export function initScene(canvas, onHotspot, opts = {}) {
+  const CHATTER = opts.chatter || { cook: [], diner: [] };
   const REDUCED = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   let bookOpen = false;
   let raf = 0;
@@ -439,6 +440,314 @@ export function initScene(canvas, onHotspot) {
     return p;
   }
 
+  /* ================= NPC acting =================
+     A pose is a flat set of joint targets. An action writes one; the rig eases
+     toward it every frame. That means any action blends into any other for free,
+     with no explicit crossfade code and no snapping.
+     ============================================== */
+
+  function seatedPose() {
+    return {
+      hipY: 0.64, torsoX: 0.08, torsoY: 0, torsoZ: 0,
+      headX: 0, headY: 0, headZ: 0,
+      lShX: -0.5, lShZ: 0, lElX: 0,
+      rShX: -0.7, rShZ: 0, rElX: -1.0,
+      mouth: 0,
+    };
+  }
+  function standingPose() {
+    return {
+      hipY: 0.8, torsoX: 0.07, torsoY: 0, torsoZ: 0,
+      headX: 0.15, headY: 0, headZ: 0,
+      lShX: -0.95, lShZ: 0.1, lElX: -0.75,
+      rShX: -1.0, rShZ: -0.12, rElX: -0.6,
+      mouth: 0,
+    };
+  }
+
+  function easePose(cur, tgt, k) {
+    for (const key in tgt) cur[key] += (tgt[key] - cur[key]) * k;
+  }
+
+  function applyPose(rig, c) {
+    rig.hip.position.y = c.hipY;
+    rig.torso.rotation.set(c.torsoX, c.torsoY, c.torsoZ);
+    rig.head.rotation.set(c.headX, c.headY, c.headZ);
+    rig.armL.sh.rotation.x = c.lShX; rig.armL.sh.rotation.z = c.lShZ;
+    rig.armL.elbow.rotation.x = c.lElX;
+    rig.armR.sh.rotation.x = c.rShX; rig.armR.sh.rotation.z = c.rShZ;
+    rig.armR.elbow.rotation.x = c.rElX;
+    const open = c.mouth > 0.5;
+    const f = rig.face;
+    if (f && f.userData.open !== open) {
+      f.userData.open = open;
+      f.material.map = faceTexture(open);
+      f.material.needsUpdate = true;
+    }
+  }
+
+  // mouth flap: fast, irregular, and only while a line is actually up
+  const flap = (tl) => (Math.sin(tl * 17) + Math.sin(tl * 26.3) > 0.1 ? 1 : 0);
+
+  // ---- seated actions ----
+  const SEATED_ACTS = {
+    eat(p, tl) {
+      const s = Math.sin(tl * 2.6) * 0.5 + 0.5;
+      p.rElX = -0.7 - s * 0.7;
+      p.torsoX = 0.08 + s * 0.12;
+      p.headX = s * 0.15;
+    },
+    pause(p, tl) {
+      p.rElX = -0.85;
+      p.torsoX = 0.06 + Math.sin(tl * 0.9) * 0.02;
+      p.headX = 0.05;
+      p.headY = Math.sin(tl * 0.5) * 0.3;
+    },
+    drink(p, tl) {
+      const lift = Math.sin(Math.min(Math.PI, tl * 1.1));
+      p.lShX = -0.5 - lift * 0.55;
+      p.lElX = -lift * 1.5;
+      p.rShX = -0.7 - lift * 0.3;
+      p.torsoX = 0.08 - lift * 0.06;
+      p.headX = -lift * 0.25;
+    },
+    talk(p, tl, npc) {
+      p.torsoY = npc.userData.ai.face * 0.5;
+      p.headY = npc.userData.ai.face * 0.7;
+      p.headX = Math.sin(tl * 3.1) * 0.06;
+      p.rShX = -0.55 + Math.sin(tl * 2.2) * 0.18;
+      p.rElX = -0.75 + Math.sin(tl * 2.9) * 0.25;
+      p.mouth = flap(tl);
+    },
+    listen(p, tl, npc) {
+      p.torsoY = npc.userData.ai.face * 0.4;
+      p.headY = npc.userData.ai.face * 0.65;
+      // a nod every couple of seconds
+      p.headX = Math.max(0, Math.sin(tl * 1.4)) * 0.16;
+      p.rElX = -0.9;
+    },
+    lookUp(p, tl) {
+      p.headX = -0.16;
+      p.torsoX = 0.02;
+      p.rElX = -0.9;
+    },
+  };
+
+  // ---- cook actions ----
+  const COOK_ACTS = {
+    stir(p, tl) {
+      const st = tl * 1.9;
+      p.hipY = 0.8 + Math.sin(tl * 1.1) * 0.012;
+      p.torsoX = 0.07 + Math.sin(tl * 1.1) * 0.022 + Math.sin(tl * 0.85) * 0.014;
+      p.torsoY = Math.sin(tl * 0.5) * 0.1;
+      p.headX = 0.15 + Math.sin(tl * 0.9) * 0.05;
+      p.headY = Math.sin(tl * 0.37) * 0.2;
+      p.rShX = -1.0 + Math.sin(st) * 0.1;
+      p.rShZ = -0.12 + Math.cos(st) * 0.12;
+      p.rElX = -0.6 + Math.sin(st + 1.1) * 0.15;
+    },
+    plate(p, tl) {
+      p.torsoX = 0.3;
+      p.headX = 0.42;
+      p.lShX = -1.25; p.lElX = -0.5;
+      p.rShX = -1.2 + Math.sin(tl * 3.4) * 0.16;
+      p.rElX = -0.85 + Math.sin(tl * 4.1) * 0.2;
+    },
+    serve(p, tl) {
+      const push = Math.sin(Math.min(Math.PI, tl * 1.5));
+      p.torsoX = 0.1 + push * 0.22;
+      p.headX = 0.2 + push * 0.12;
+      p.lShX = -1.15 - push * 0.5; p.lElX = -0.35;
+      p.rShX = -1.15 - push * 0.5; p.rElX = -0.3;
+    },
+    chat(p, tl) {
+      p.torsoX = 0.02;
+      p.torsoY = Math.sin(tl * 0.7) * 0.12;
+      p.headX = -0.05 + Math.sin(tl * 2.6) * 0.05;
+      p.headY = Math.sin(tl * 0.9) * 0.16;
+      p.lShX = -0.7; p.lElX = -0.5;
+      p.rShX = -0.85 + Math.sin(tl * 2.4) * 0.22;
+      p.rShZ = -0.2 + Math.cos(tl * 1.7) * 0.16;
+      p.rElX = -0.9 + Math.sin(tl * 3.1) * 0.3;
+      p.mouth = flap(tl);
+    },
+    wipe(p, tl) {
+      p.torsoX = 0.24;
+      p.torsoY = Math.sin(tl * 2.1) * 0.22;
+      p.headX = 0.34;
+      p.rShX = -1.3; p.rElX = -0.4;
+      p.rShZ = Math.sin(tl * 2.1) * 0.3;
+      p.lShX = -0.6; p.lElX = -0.3;
+    },
+  };
+
+  // ---- per-NPC state machine ----
+  // Each NPC picks its own next action on a timer. The director can lock one out
+  // of self-selection while a scripted beat is using it.
+  const DINER_PLAN = [
+    { act: 'eat', w: 5, dur: [4, 9] },
+    { act: 'pause', w: 2, dur: [2.5, 4.5] },
+    { act: 'drink', w: 1, dur: [2.6, 3.4] },
+  ];
+  const COOK_PLAN = [
+    { act: 'stir', w: 5, dur: [5, 10] },
+    { act: 'plate', w: 2, dur: [3, 5] },
+    { act: 'wipe', w: 1, dur: [3.5, 5.5] },
+  ];
+  // function declaration, not a const arrow: initAI calls this during scene
+  // construction, which happens above this line.
+  function rnd(a, b) { return a + Math.random() * (b - a); }
+  function pickPlan(plan) {
+    let total = 0;
+    for (const e of plan) total += e.w;
+    let r = Math.random() * total;
+    for (const e of plan) { r -= e.w; if (r <= 0) return e; }
+    return plan[0];
+  }
+
+  function initAI(npc, kind, base) {
+    npc.userData.ai = {
+      kind, cur: base(), tgt: base(),
+      act: kind === 'cook' ? 'stir' : 'eat',
+      t: Math.random() * 3, dur: rnd(3, 7),
+      locked: false, face: 0,
+    };
+  }
+  function setAct(npc, act, dur) {
+    const ai = npc.userData.ai;
+    if (!ai) return;
+    ai.act = act; ai.t = 0; ai.dur = dur;
+  }
+
+  function tickNPC(npc, dt) {
+    const ai = npc.userData.ai;
+    if (!ai) return;
+    ai.t += dt;
+    if (!ai.locked && ai.t >= ai.dur) {
+      const plan = pickPlan(ai.kind === 'cook' ? COOK_PLAN : DINER_PLAN);
+      ai.act = plan.act; ai.t = 0; ai.dur = rnd(plan.dur[0], plan.dur[1]);
+    }
+    const base = ai.kind === 'cook' ? standingPose() : seatedPose();
+    const fn = (ai.kind === 'cook' ? COOK_ACTS : SEATED_ACTS)[ai.act];
+    if (fn) fn(base, ai.t, npc);
+    ai.tgt = base;
+    // exponential smoothing, framerate independent
+    easePose(ai.cur, ai.tgt, 1 - Math.exp(-dt * 7));
+    applyPose(npc.userData.rig, ai.cur);
+  }
+
+  /* ---------- speech ---------- */
+  const bubbles = [];
+  const _bubV = new THREE.Vector3();
+  function say(npc, text, dur = 3.4) {
+    if (!npc || !text) return;
+    const el = document.createElement('div');
+    el.className = 'say';
+    el.textContent = text;
+    document.body.appendChild(el);
+    bubbles.push({ el, npc, t: 0, dur });
+  }
+  function updateBubbles(dt) {
+    for (let i = bubbles.length - 1; i >= 0; i--) {
+      const b = bubbles[i];
+      b.t += dt;
+      if (b.t >= b.dur) { b.el.remove(); bubbles.splice(i, 1); continue; }
+      b.npc.userData.rig.head.getWorldPosition(_bubV);
+      _bubV.y += 0.52; // clears the "you" tag, which sits just above head height
+      _bubV.project(camera);
+      const off = _bubV.z > 1;
+      b.el.style.display = off ? 'none' : '';
+      if (off) continue;
+      b.el.style.left = (_bubV.x * 0.5 + 0.5) * window.innerWidth + 'px';
+      b.el.style.top = (-_bubV.y * 0.5 + 0.5) * window.innerHeight + 'px';
+      b.el.style.opacity = String(Math.max(0, Math.min(1, Math.min(b.t, b.dur - b.t) / 0.35)));
+    }
+  }
+  const pickLine = (arr) => (arr && arr.length ? arr[(Math.random() * arr.length) | 0] : '');
+
+  /* ---------- the director ----------
+     Independent loops read as machinery. Two characters acknowledging each other
+     once every twenty seconds is what makes the place feel occupied. One beat
+     runs at a time; it locks its cast, fires timed cues, then releases them. */
+  let beat = null;
+  let nextBeat = 6;
+
+  function startBeat(cast, dur, cues) {
+    for (const n of cast) if (n.userData.ai) n.userData.ai.locked = true;
+    beat = { cast, dur, cues, t: 0, i: 0 };
+  }
+  function tickBeat(dt) {
+    if (!beat) return;
+    beat.t += dt;
+    while (beat.i < beat.cues.length && beat.t >= beat.cues[beat.i].at) {
+      beat.cues[beat.i].go();
+      beat.i++;
+    }
+    if (beat.t >= beat.dur) {
+      for (const n of beat.cast) if (n.userData.ai) n.userData.ai.locked = false;
+      beat = null;
+      nextBeat = rnd(11, 21);
+    }
+  }
+
+  function chooseBeat() {
+    const cook = guideRig ? guide : null;
+    const seated = diners.filter((d) => d.userData.ai);
+    if (!seated.length) return;
+    const roll = Math.random();
+
+    // 1. the cook plates a bowl and puts it in front of someone
+    if (cook && roll < 0.42) {
+      const who = seated[(Math.random() * seated.length) | 0];
+      who.userData.ai.face = who.position.x < 0 ? 0.5 : -0.5;
+      startBeat([cook, who], 9.2, [
+        { at: 0.0, go: () => setAct(cook, 'plate', 3.4) },
+        { at: 3.4, go: () => { setAct(cook, 'serve', 2.2); setAct(who, 'lookUp', 2.6); } },
+        { at: 4.4, go: () => say(cook, pickLine(CHATTER.cook), 3.2) },
+        { at: 5.8, go: () => setAct(cook, 'chat', 2.0) },
+        { at: 6.2, go: () => setAct(who, 'listen', 2.4) },
+        { at: 8.0, go: () => { setAct(cook, 'stir', 6); setAct(who, 'eat', 7); } },
+      ]);
+      return;
+    }
+
+    // 2. the cook says something across the counter
+    if (cook && roll < 0.68) {
+      const who = seated[(Math.random() * seated.length) | 0];
+      who.userData.ai.face = who.position.x < 0 ? 0.5 : -0.5;
+      startBeat([cook, who], 7.4, [
+        { at: 0.0, go: () => { setAct(cook, 'chat', 4.2); setAct(who, 'listen', 4.6); } },
+        { at: 0.3, go: () => say(cook, pickLine(CHATTER.cook), 3.4) },
+        { at: 4.4, go: () => say(who, pickLine(CHATTER.diner), 2.4) },
+        { at: 4.4, go: () => { setAct(who, 'talk', 2.4); setAct(cook, 'stir', 3); } },
+        { at: 6.6, go: () => setAct(who, 'eat', 6) },
+      ]);
+      return;
+    }
+
+    // 3. two people at the counter talk to each other
+    if (seated.length >= 2) {
+      const sorted = [...seated].sort((a, b) => a.position.x - b.position.x);
+      const i = (Math.random() * (sorted.length - 1)) | 0;
+      const a = sorted[i], b = sorted[i + 1];
+      a.userData.ai.face = -0.55; b.userData.ai.face = 0.55;
+      startBeat([a, b], 8.6, [
+        { at: 0.0, go: () => { setAct(a, 'talk', 3.2); setAct(b, 'listen', 3.6); } },
+        { at: 0.2, go: () => say(a, pickLine(CHATTER.diner), 2.8) },
+        { at: 3.4, go: () => { setAct(b, 'talk', 2.6); setAct(a, 'listen', 2.8); } },
+        { at: 3.6, go: () => say(b, pickLine(CHATTER.diner), 2.6) },
+        { at: 6.4, go: () => { setAct(a, 'eat', 6); setAct(b, 'eat', 6); } },
+      ]);
+    }
+  }
+
+  function tickDirector(dt) {
+    if (REDUCED) return;
+    if (beat) { tickBeat(dt); return; }
+    nextBeat -= dt;
+    if (nextBeat <= 0) chooseBeat();
+  }
+
   function walkRig(rig, phase, amt) {
     rig.legL.hp.rotation.x = Math.sin(phase) * 0.55 * amt;
     rig.legR.hp.rotation.x = Math.sin(phase + Math.PI) * 0.55 * amt;
@@ -453,7 +762,7 @@ export function initScene(canvas, onHotspot) {
   }
 
   // one person hunched over a bowl, chopsticks in hand
-  function seatedPerson(sp, phaseOffset) {
+  function seatedPerson(sp) {
     const d = buildPerson({
       shirt: sp.shirt, hair: sp.hair,
       scale: sp.scale ?? 0.96, build: sp.build ?? 1, headScale: sp.headScale ?? 1,
@@ -469,7 +778,7 @@ export function initScene(canvas, onHotspot) {
     const stick = pos(box(0.012, 0.012, 0.16, 0x8a6a3c), 0, -0.24, 0.02);
     stick.rotation.x = 0.5;
     r.armR.elbow.add(stick);
-    d.userData.phase = phaseOffset;
+    initAI(d, 'diner', seatedPose);
     diners.push(d);
     scene.add(d);
     return d;
@@ -492,7 +801,7 @@ export function initScene(canvas, onHotspot) {
     ];
     spots.forEach((sp, i) => {
       buildStool(sp.x);
-      seatedPerson(sp, i * 2.1);
+      seatedPerson(sp);
     });
   }
 
@@ -519,10 +828,9 @@ export function initScene(canvas, onHotspot) {
   // you, on the stool. built up front but hidden until the camera leaves you,
   // so the empty seat is not still empty once you are supposedly sitting in it.
   function buildYou() {
-    you = seatedPerson(
-      { x: SEAT.x, hair: 0x241a12, shirt: 0x8c4436, scale: 0.99, build: 1.02, headScale: 0.99 },
-      4.4
-    );
+    you = seatedPerson({
+      x: SEAT.x, hair: 0x241a12, shirt: 0x8c4436, scale: 0.99, build: 1.02, headScale: 0.99,
+    });
     you.visible = false;
     you.traverse((n) => {
       if (!n.material) return;
@@ -607,7 +915,13 @@ export function initScene(canvas, onHotspot) {
     guide = buildPerson({ shirt: 0xffffff, apron: true, toque: true, skin: 0xd7a173, hair: 0x241a12 });
     guide.position.set(-0.3, 0, -0.5);
     guideRig = guide.userData.rig;
+    // a ladle in the stirring hand, so the motion reads as cooking
+    const ladle = pos(cyl(0.012, 0.012, 0.2, 0x9a8058, {}, 8), 0, -0.26, 0.02);
+    ladle.rotation.x = 0.45;
+    ladle.add(pos(sph(0.045, 0x8d939a, { metal: 0.5, rough: 0.4 }, 10), 0, -0.11, 0.01));
+    guideRig.armR.elbow.add(ladle);
     addBlobShadow(guide, 0.4, 0.7);
+    initAI(guide, 'cook', standingPose);
     scene.add(guide);
     registerHotspot('guide', 'The Guide', guide, new THREE.Vector3(-0.3, 1.7, -0.5));
     buildPins();
@@ -1005,12 +1319,15 @@ export function initScene(canvas, onHotspot) {
 
     if (guideMixer) guideMixer.update(dt);
 
-    for (const d of diners) {
-      const rg = d.userData.rig;
-      const s = REDUCED ? 0 : (Math.sin(t * 1.6 + d.userData.phase) * 0.5 + 0.5);
-      rg.armR.elbow.rotation.x = -0.7 - s * 0.7;
-      rg.torso.rotation.x = 0.08 + s * 0.12;
-      rg.head.rotation.x = s * 0.15;
+    if (REDUCED) {
+      for (const d of diners) applyPose(d.userData.rig, d.userData.ai.cur);
+      if (guideRig && guide.userData.ai) applyPose(guideRig, guide.userData.ai.cur);
+    } else {
+      // the director only performs for someone who is actually sitting down
+      if (phase === 'seated') tickDirector(dt);
+      for (const d of diners) tickNPC(d, dt);
+      if (guideRig && guide.userData.ai) tickNPC(guide, dt);
+      updateBubbles(dt);
     }
 
     for (let i = 0; i < walkers.length; i++) {

@@ -45,3 +45,26 @@ export const BILL = {
   cvReady: false,
   draftCopy: true,
 };
+
+// ── Ambient NPC chatter in the 3D scene. Short lines, spoken as speech bubbles.
+// Placeholder in the assistant's voice — Ritesh rewrites these like the rest.
+export const CHATTER = {
+  // the cook, talking across the counter
+  cook: [
+    'Broth\u2019s been on since four.',
+    'Careful, that bowl is hot.',
+    'Chess engine? He trained it on his own games.',
+    'Ask him about the pipeline one. He likes that one.',
+    'Two minutes on the noodles. No more.',
+    'Thesis is nearly done. He\u2019ll tell you it isn\u2019t.',
+  ],
+  // the regulars, to each other
+  diner: [
+    'This is the good one.',
+    'Long day?',
+    'Same again next week.',
+    'Told you it was worth the walk.',
+    'Still open at this hour. Every night.',
+  ],
+  draftCopy: true,
+};

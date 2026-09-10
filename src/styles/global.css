@@ -199,6 +199,26 @@ img { max-width: 100%; }
   flex: none;
 }
 
+/* what the cook and the regulars say to each other */
+.say {
+  position: fixed;
+  transform: translate(-50%, -100%);
+  z-index: 11;
+  max-width: 230px;
+  padding: 7px 12px;
+  border-radius: 13px 13px 13px 4px;
+  background: rgba(247, 240, 226, 0.94);
+  color: #221812;
+  font-size: 12.5px;
+  line-height: 1.35;
+  font-weight: 500;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.45);
+  pointer-events: none;
+  white-space: normal;
+  text-wrap: balance;
+}
+:root[data-theme='dark'] .say { background: rgba(250, 244, 232, 0.95); }
+
 /* the quiet tag over your own head once you are sitting down */
 .you-pin {
   position: fixed;
