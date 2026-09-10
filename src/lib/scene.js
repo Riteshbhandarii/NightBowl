@@ -88,8 +88,44 @@ export function initScene(canvas, onHotspot) {
   const key = new THREE.DirectionalLight(0xffd7a6, 0.3);
   key.position.set(-5, 7, 6);
   scene.add(key);
+  // rim: sits behind the subjects relative to camera, so it catches the outline of
+  // heads and shoulders. cool, to read against the warm lanterns.
+  const rim = new THREE.DirectionalLight(0x9db4ec, 0.95);
+  rim.position.set(2.5, 5, -7);
+  scene.add(rim);
 
   let _faceShut = null, _faceOpen = null;  // read by buildPerson during construction
+  let _blobTex = null;
+  function blobTexture() {
+    if (_blobTex) return _blobTex;
+    _blobTex = textTexture((g, w, h) => {
+      const r = w / 2;
+      const grd = g.createRadialGradient(r, r, 0, r, r, r);
+      grd.addColorStop(0, 'rgba(0,0,0,0.9)');
+      grd.addColorStop(0.5, 'rgba(0,0,0,0.4)');
+      grd.addColorStop(1, 'rgba(0,0,0,0)');
+      g.clearRect(0, 0, w, h);
+      g.fillStyle = grd;
+      g.fillRect(0, 0, w, h);
+    }, 128, 128);
+    return _blobTex;
+  }
+  const _blobGeo = new THREE.PlaneGeometry(1, 1);
+  function addBlobShadow(parent, radius, opacity = 0.5, y = 0.012) {
+    const blob = new THREE.Mesh(
+      _blobGeo,
+      new THREE.MeshBasicMaterial({
+        map: blobTexture(), transparent: true, opacity,
+        depthWrite: false, color: 0xffffff,
+      })
+    );
+    blob.rotation.x = -Math.PI / 2;
+    blob.position.y = y;
+    blob.scale.set(radius * 2, radius * 2, 1);
+    blob.renderOrder = -1;
+    parent.add(blob);
+    return blob;
+  }
 
   /* ---------- stall ---------- */
   buildStall();
@@ -430,6 +466,10 @@ export function initScene(canvas, onHotspot) {
   function buildStool(x) {
     scene.add(pos(cyl(0.17, 0.17, 0.06, 0xb0423a, { rough: 0.7 }, 18), x, 0.56, 1.52));
     scene.add(pos(cyl(0.03, 0.05, 0.56, 0x2a2018, {}, 10), x, 0.28, 1.52));
+    const g = new THREE.Group();
+    g.position.set(x, 0, 1.52);
+    addBlobShadow(g, 0.46, 0.75);
+    scene.add(g);
   }
 
   function buildDiners() {
@@ -463,10 +503,12 @@ export function initScene(canvas, onHotspot) {
     scene.add(bld2);
 
     const w1 = buildPerson({ shirt: 0x22202a, hair: 0x101010, scale: 1.04, build: 1.07, headScale: 0.96 });
+    addBlobShadow(w1, 0.36, 0.6);
     w1.position.set(-8, 0, 3.4); w1.rotation.y = Math.PI / 2;
     w1.userData.speed = 0.9; w1.userData.range = 8;
     walkers.push(w1); scene.add(w1);
     const w2 = buildPerson({ shirt: 0x2b2530, hair: 0x1a1a1a, scale: 0.95, build: 0.92, headScale: 1.02 });
+    addBlobShadow(w2, 0.34, 0.6);
     w2.position.set(7, 0, 4.1); w2.rotation.y = -Math.PI / 2;
     w2.userData.speed = -0.65; w2.userData.range = 7;
     walkers.push(w2); scene.add(w2);
@@ -497,6 +539,7 @@ export function initScene(canvas, onHotspot) {
     guide = buildPerson({ shirt: 0xffffff, apron: true, toque: true, skin: 0xd7a173, hair: 0x241a12 });
     guide.position.set(-0.3, 0, -0.5);
     guideRig = guide.userData.rig;
+    addBlobShadow(guide, 0.4, 0.7);
     scene.add(guide);
     registerHotspot('guide', 'The Guide', guide, new THREE.Vector3(-0.3, 1.7, -0.5));
     buildPins();
