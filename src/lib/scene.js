@@ -588,8 +588,11 @@ export function initScene(canvas, onHotspot) {
   let startT = 0;
   function frame() {
     raf = requestAnimationFrame(frame);
-    const t = clock.getElapsedTime();
+    // getDelta() first: getElapsedTime() calls it internally and consumes the
+    // delta, so asking for elapsed first leaves dt at ~0 forever (which froze the
+    // street walkers and the animation mixer). elapsedTime is safe to read direct.
     const dt = Math.min(clock.getDelta(), 0.05);
+    const t = clock.elapsedTime;
     if (!startT) startT = t;
     const intro = REDUCED ? 1 : Math.min(1, (t - startT) / 2.6);
     const ease = 1 - Math.pow(1 - intro, 3);
@@ -611,25 +614,6 @@ export function initScene(canvas, onHotspot) {
     camera.lookAt(target);
 
     if (guideMixer) guideMixer.update(dt);
-
-    if (guideRig && guide) {
-      if (REDUCED) {
-        guide.position.x = -0.3;
-        guideRig.torso.rotation.y = Math.sin(t * 0.6) * 0.15;
-      } else {
-        const gx = Math.sin(t * 0.34) * 1.0 - 0.3;
-        guide.position.x = gx;
-        guide.rotation.y = Math.cos(t * 0.34) >= 0 ? -1.3 : 1.3;
-        walkRig(guideRig, t * 3.4, 1);
-        for (const hs of hotspots) if (hs.key === 'guide') hs.anchor.x = gx;
-      }
-    } else if (guide && !guideRig && !REDUCED) {
-      // GLB cook: gentle patrol, no procedural limb work
-      const gx = Math.sin(t * 0.3) * 0.9 - 0.3;
-      guide.position.x = gx;
-      guide.rotation.y = (Math.cos(t * 0.3) >= 0 ? 1 : -1) * 0.4 + Math.PI;
-      for (const hs of hotspots) if (hs.key === 'guide') hs.anchor.x = gx;
-    }
 
     for (const d of diners) {
       const rg = d.userData.rig;
