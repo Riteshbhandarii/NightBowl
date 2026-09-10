@@ -1,0 +1,57 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Serve the built site
+        run: |
+          npx astro preview --port 4321 &
+          for i in $(seq 1 60); do
+            curl -sf http://localhost:4321/ >/dev/null && exit 0
+            sleep 1
+          done
+          echo "preview server never came up"
+          exit 1
+
+      # The runner has no GPU, so WebGL needs the software rasteriser. This also
+      # means the scene runs at a low framerate, which is a useful thing to test
+      # against: the intro is driven by wall clock precisely so that it does not
+      # stretch when frames are slow.
+      - name: Smoke test
+        env:
+          SMOKE_FLAGS: --use-angle=swiftshader --enable-unsafe-swiftshader --disable-dev-shm-usage
+        run: npm run smoke
+
+      - name: Upload build output on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist
+          retention-days: 5

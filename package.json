@@ -9,7 +9,8 @@
     "dev": "astro dev",
     "build": "astro build",
     "preview": "astro preview",
-    "astro": "astro"
+    "astro": "astro",
+    "smoke": "node scripts/smoke.mjs"
   },
   "dependencies": {
     "@astrojs/mdx": "^8.0.0",
