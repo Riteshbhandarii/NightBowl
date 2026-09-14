@@ -32,6 +32,8 @@ import { CHATTER } from '../data/content';
       }
       return;
     }
+    // only reachable when explicitly asked for, so normal loads stay clean
+    if (location.search.includes('nbtest')) (window as any).__nightbowl = controls;
     loading?.classList.add('gone');
     document.addEventListener('nb:bookstate', (e) => {
       controls?.setBookOpen((e as CustomEvent).detail);
