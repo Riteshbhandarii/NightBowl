@@ -161,14 +161,19 @@ does bite. Measured, against a nominal 6000ms:
 | laptop GPU, 6x + starved frames | 11.8fps | 97ms | 6176ms | 176ms | 10169ms |
 | laptop software renderer, idle | 8.3fps | 462ms | 6034ms | 34ms | 14481ms |
 | laptop software renderer, 6x + starved | 7.1fps | 587ms | 6211ms | 211ms | 16940ms |
-| **CI runner, idle** | **0.8fps** | **4259ms** | **8640ms** | **2640ms** | **150000ms** |
-| **CI runner, 6x CPU throttle** | **0.8fps** | **5110ms** | **9171ms** | **3171ms** | **150000ms** |
-| **CI runner, 6x + starved frames** | **0.9fps** | **1487ms** | **7590ms** | **1590ms** | **133000ms** |
+| **CI runner, idle** | **0.8fps** | **4241ms** | **8328ms** | **2328ms** | **142767ms** |
+| **CI runner, 6x CPU throttle** | **0.7fps** | **4845ms** | **8704ms** | **2704ms** | **174070ms** |
+| **CI runner, 6x + starved frames** | **0.9fps** | **2210ms** | **6357ms** | **357ms** | **127146ms** |
 
 The runner is worth looking at. With no GPU and a shared virtual machine it
 draws this intro at under one frame per second, with single frames over four
 seconds long. The intro still finishes within one frame of its deadline. A
-frame-counted version would have taken two and a half minutes.
+frame-counted version would have taken over two minutes.
+
+The runner rows move between runs — a second run of the same commit gave
+8640ms, 9171ms and 7590ms with worst frames of 4259ms, 5110ms and 1487ms. Both
+runs pass, because the allowance moves with the frame time rather than being a
+fixed number. That is the point of bounding by one frame.
 
 **The bound is one frame, not a percentage.** An animation driven by the wall
 clock finishes on the first frame at or after its deadline, so it can overshoot
