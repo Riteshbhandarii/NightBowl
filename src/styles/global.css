@@ -332,13 +332,16 @@ img { max-width: 100%; }
   z-index: 41;
   display: grid;
   place-items: center;
-  padding: clamp(12px, 3vw, 40px);
+  /* Leave the fore-edge tabs and close button real room instead of letting
+     them hang outside a nearly full-width book and clip at the viewport. */
+  padding: clamp(16px, 2.5vw, 32px) clamp(108px, 8vw, 128px)
+    clamp(16px, 2.5vw, 32px) clamp(16px, 2.5vw, 32px);
   pointer-events: none;
 }
 .book {
   position: relative;
-  width: min(940px, 96vw);
-  height: min(660px, 88vh);
+  width: min(1180px, 100%);
+  height: min(780px, 90dvh);
   pointer-events: auto;
   transform: scale(0.86) translateY(14px);
   opacity: 0;
@@ -365,7 +368,7 @@ img { max-width: 100%; }
   background-image:
     radial-gradient(120% 80% at 0% 0%, rgba(255, 255, 255, 0.12), transparent 60%),
     url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='120' height='120' filter='url(%23n)' opacity='0.035'/%3E%3C/svg%3E");
-  padding: clamp(22px, 3.4vw, 44px) clamp(20px, 3.2vw, 44px);
+  padding: clamp(26px, 3.5vw, 52px) clamp(24px, 3.4vw, 52px);
   overflow-y: auto;
   overflow-x: hidden;
 }
@@ -436,7 +439,8 @@ img { max-width: 100%; }
 .tabs {
   position: absolute;
   top: 54px;
-  right: -1px;
+  right: 0;
+  transform: translateX(100%);
   z-index: 7;
   display: flex;
   flex-direction: column;
@@ -459,11 +463,11 @@ img { max-width: 100%; }
   border-radius: 0 6px 6px 0;
   padding: 9px 12px 9px 10px;
   cursor: pointer;
-  transform: translateX(66%);
-  transition: transform 0.18s ease, color 0.18s ease, border-color 0.18s ease;
+  transform: none;
+  transition: color 0.18s ease, border-color 0.18s ease;
   white-space: nowrap;
 }
-.tabs button:hover { transform: translateX(30%); color: var(--ink); }
+.tabs button:hover { transform: none; color: var(--ink); }
 .tabs button.active { transform: translateX(0); color: var(--accent); border-left-color: var(--accent); background: var(--paper); }
 
 .book-close {
@@ -483,18 +487,18 @@ img { max-width: 100%; }
 }
 
 /* page content typography */
-.eyebrow { font-family: 'Space Mono', monospace; font-size: 10px; letter-spacing: 0.26em; text-transform: uppercase; color: var(--accent); }
+.eyebrow { font-family: 'Space Mono', monospace; font-size: 10.5px; letter-spacing: 0.26em; text-transform: uppercase; color: var(--accent); }
 .page h2 {
   margin: 8px 0 4px;
   font-family: 'Zilla Slab', Georgia, serif;
   font-weight: 700;
-  font-size: clamp(24px, 3.4vw, 32px);
+  font-size: clamp(28px, 3.2vw, 38px);
   line-height: 1.08;
   color: var(--ink);
   text-wrap: balance;
 }
-.page h2 + .sub { margin: 0 0 18px; font-style: italic; color: var(--ink-soft); font-size: 14px; }
-.page p { line-height: 1.62; margin: 0 0 13px; color: var(--ink); font-size: 14.5px; }
+.page h2 + .sub { margin: 0 0 20px; font-style: italic; color: var(--ink-soft); font-size: clamp(14px, 1.15vw, 16px); }
+.page p { line-height: 1.62; margin: 0 0 14px; color: var(--ink); font-size: clamp(14.5px, 1.15vw, 16px); }
 .page p.draft {
   font-family: 'Space Mono', monospace;
   font-size: 10.5px;
@@ -507,15 +511,15 @@ img { max-width: 100%; }
 
 .course { margin-top: 22px; }
 .course:first-of-type { margin-top: 6px; }
-.course h3 { margin: 0 0 3px; font-family: 'Zilla Slab', serif; font-weight: 700; font-size: 13px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--accent-2); }
-.course > .cnote { margin: 0 0 12px; font-style: italic; font-size: 12.5px; color: var(--ink-soft); }
+.course h3 { margin: 0 0 3px; font-family: 'Zilla Slab', serif; font-weight: 700; font-size: 14px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--accent-2); }
+.course > .cnote { margin: 0 0 12px; font-style: italic; font-size: 13.5px; color: var(--ink-soft); }
 
 .item { margin: 0 0 14px; }
 .item .row { display: flex; align-items: baseline; gap: 8px; }
-.item .name { font-family: 'Zilla Slab', serif; font-weight: 700; font-size: 15px; color: var(--ink); flex: none; }
+.item .name { font-family: 'Zilla Slab', serif; font-weight: 700; font-size: 16px; color: var(--ink); flex: none; }
 .item .leader { flex: 1; border-bottom: 1.5px dotted var(--line); transform: translateY(-4px); }
-.item .tag { flex: none; font-family: 'Space Mono', monospace; font-size: 10.5px; color: var(--accent-2); white-space: nowrap; }
-.item .desc { margin: 4px 0 0; font-size: 13px; line-height: 1.5; color: var(--ink-soft); }
+.item .tag { flex: none; font-family: 'Space Mono', monospace; font-size: 11px; color: var(--accent-2); white-space: nowrap; }
+.item .desc { margin: 4px 0 0; font-size: 14px; line-height: 1.5; color: var(--ink-soft); }
 .item a { font-family: 'Space Mono', monospace; font-size: 10.5px; color: var(--accent); text-decoration: none; border-bottom: 1px solid currentColor; }
 .item a:hover { color: var(--accent-2); }
 
@@ -528,7 +532,7 @@ img { max-width: 100%; }
   background: color-mix(in srgb, var(--accent) 8%, var(--paper));
 }
 .special h3 { margin: 0 0 8px; font-family: 'Zilla Slab', serif; font-size: 12px; letter-spacing: 0.2em; text-transform: uppercase; color: var(--accent); }
-.special .item .name { font-size: 14px; }
+.special .item .name { font-size: 15px; }
 
 .logline { padding: 12px 0; border-bottom: 1px solid var(--line); }
 .logline:last-of-type { border-bottom: 0; }
@@ -585,20 +589,39 @@ img { max-width: 100%; }
   .book { width: 100%; height: 100%; }
   .book-inner { border-radius: 0; }
   .page.left { display: none; }
-  .page.right { flex-basis: 100%; box-shadow: none; border-radius: 0; padding-top: 104px; padding-bottom: 52px; }
+  .page.right {
+    flex-basis: 100%;
+    box-shadow: none;
+    border-radius: 0;
+    padding-top: calc(104px + env(safe-area-inset-top));
+    padding-right: max(44px, env(safe-area-inset-right));
+    padding-bottom: max(52px, env(safe-area-inset-bottom));
+    padding-left: max(44px, env(safe-area-inset-left));
+  }
   .page-turn { display: none !important; }
   .tabs {
     top: 0; left: 0; right: 0;
+    transform: none;
     flex-direction: row;
     flex-wrap: wrap;
     gap: 4px;
-    padding: 10px 52px 10px 12px;
+    padding:
+      max(10px, env(safe-area-inset-top))
+      max(52px, env(safe-area-inset-right))
+      10px
+      max(12px, env(safe-area-inset-left));
     background: var(--paper);
     border-bottom: 1px solid var(--paper-edge);
   }
   .tabs button { transform: none !important; border: 1px solid var(--paper-edge); border-radius: 6px; font-size: 9.5px; padding: 8px 9px; }
   .tabs button.active { border-color: var(--accent); background: var(--paper-2); }
-  .book-close { top: 12px; right: 12px; }
+  .book-close {
+    top: max(12px, env(safe-area-inset-top));
+    right: max(12px, env(safe-area-inset-right));
+  }
   .book-wrap { padding: 0; }
+  .page h2 { font-size: clamp(26px, 8vw, 34px); }
+  .page p, .page h2 + .sub { font-size: 14.5px; }
+  .item .desc { font-size: 13px; }
   .pageflip-hint { right: 16px; }
 }
