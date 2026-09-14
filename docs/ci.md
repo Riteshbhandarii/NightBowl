@@ -152,27 +152,37 @@ to break by accident and impossible to notice on a fast machine.
 Throttling the CPU is not enough to test it — the intro is cheap, and 6x
 throttling barely moved the frame rate on a machine with a GPU (30.1fps either
 way). So the check also burns 80ms of every frame on the main thread, which
-does bite. Measured:
+does bite. Measured, against a nominal 6000ms:
 
-| where | frame rate during the intro | worst single frame | intro took |
-|---|---|---|---|
-| GPU, idle | 30.0fps | 52ms | 6028ms |
-| GPU, 6x CPU throttle | 30.1fps | 48ms | 6038ms |
-| GPU, 6x + starved frames | 11.8fps | 97ms | 6176ms |
-| software renderer, idle | 8.4fps | 587ms | 6049ms |
-| software renderer, 6x + starved | 7.2fps | 399ms | 6212ms |
+| where | frame rate | worst single frame | intro took | overshoot | if frame-counted |
+|---|---|---|---|---|---|
+| laptop GPU, idle | 30.0fps | 52ms | 6028ms | 28ms | 4000ms |
+| laptop GPU, 6x CPU throttle | 30.1fps | 48ms | 6038ms | 38ms | 3987ms |
+| laptop GPU, 6x + starved frames | 11.8fps | 97ms | 6176ms | 176ms | 10169ms |
+| laptop software renderer, idle | 8.3fps | 462ms | 6034ms | 34ms | 14481ms |
+| laptop software renderer, 6x + starved | 7.1fps | 587ms | 6211ms | 211ms | 16940ms |
+| **CI runner, idle** | **0.8fps** | **4259ms** | **8640ms** | **2640ms** | **150000ms** |
+| **CI runner, 6x CPU throttle** | **0.8fps** | **5110ms** | **9171ms** | **3171ms** | **150000ms** |
+| **CI runner, 6x + starved frames** | **0.9fps** | **1487ms** | **7590ms** | **1590ms** | **133000ms** |
 
-Frame times vary by more than ten times across those rows. The intro duration
-varies by 3%. That is the property being asserted.
+The runner is worth looking at. With no GPU and a shared virtual machine it
+draws this intro at under one frame per second, with single frames over four
+seconds long. The intro still finishes within one frame of its deadline. A
+frame-counted version would have taken two and a half minutes.
 
-For comparison: frame deltas are capped at 0.05s, so a version driven by
-accumulated deltas would take 6.0 / (7.2 × 0.05) ≈ 17 seconds on the bottom
-row instead of 6.2.
+**The bound is one frame, not a percentage.** An animation driven by the wall
+clock finishes on the first frame at or after its deadline, so it can overshoot
+by about one frame and no more. On the laptop that is tens of milliseconds; on
+the runner it is seconds. Any fixed percentage would either be meaningless on
+the laptop or permanently red on the runner. The check allows one worst-case
+frame plus 750ms for the poll interval and the 80ms the test itself burns.
 
-*Red means:* the intro duration moved by more than 15%, which means it is being
-driven by frame count somewhere. There is also a check that the starvation
-really did slow the frames down, so this cannot pass by failing to load the
-machine.
+*Red means:* the intro took longer than one frame past its deadline, which
+means something is driving it by counting frames rather than reading the clock.
+The failure prints the overshoot, what one frame allows, and what a
+frame-counted version would have taken, so the three are directly comparable.
+There is also a separate check that the starvation really did slow the frames
+down, so this cannot pass by failing to load the machine.
 
 ### NPC pose audit
 

@@ -751,20 +751,28 @@ await session(['--force-prefers-reduced-motion'], async (ctx) => {
 //
 // The intro is driven by performance.now(), not by accumulated frame deltas,
 // precisely so a slow machine drops frames instead of stretching the animation.
-// dt is capped at 0.05s, so a dt-driven version of the same move would take
-// 6.0 / (fps * 0.05) seconds: about 17s at the 7.2fps measured below.
+// dt is capped at 0.05s, so a frame-counted version of the same move would take
+// 6.0 / (fps * 0.05) seconds — 150 seconds at the 0.8fps the CI runner manages.
 //
 // CPU throttling alone does not prove this: the intro is cheap enough that 6x
 // throttling barely moves the frame rate on a machine with a GPU (measured
 // 30.0fps at 1x, 30.1fps at 6x). So each frame is also deliberately starved by
-// burning 80ms on the main thread, which does drive it down. Measured across
-// GPU and software rendering, frame times varied by more than ten times
-// (worst frame 48ms to 587ms) and the duration by 3%.
-// docs/ci.md carries the full table.
+// burning 80ms on the main thread, and there is a separate check that the
+// starvation really bit, so this cannot pass by failing to load the machine.
+//
+// Frame rates measured for this check span 0.8fps to 30fps and worst frames
+// 48ms to 5110ms. docs/ci.md carries the full table.
 console.log('\nwalk-in intro is wall-clock driven');
 
 const INTRO_NOMINAL_MS = 6000; // BEAT.walk + BEAT.sit + BEAT.hold + BEAT.pull in src/lib/scene.js
-const INTRO_TOLERANCE = 0.15;  // measured worst case was 3.5% over; 15% still rules out any stretch
+
+// A wall-clock animation finishes on the first frame at or after its deadline,
+// so it can only ever overshoot by about one frame. That, not a percentage, is
+// the right bound: the CI runner draws this intro at 0.8fps with single frames
+// over four seconds long, where any fixed percentage is either meaningless or
+// permanently red. The extra 750ms covers the poll interval and, in the starved
+// trial, the 80ms this test itself burns after each frame.
+const INTRO_POLL_SLACK_MS = 750;
 
 for (const trial of [
   { name: 'unthrottled', rate: 1, hogMs: 0 },
@@ -814,12 +822,19 @@ for (const trial of [
     })()`);
 
     if (run.error) { check(`intro ${trial.name}: can be started`, false, run.error); return; }
-    const drift = Math.abs(run.ms - INTRO_NOMINAL_MS) / INTRO_NOMINAL_MS;
+    const overshoot = run.ms - INTRO_NOMINAL_MS;
+    const allowed = run.worst + INTRO_POLL_SLACK_MS;
+    // What the same move would have taken driven by accumulated frame deltas
+    // instead, given dt is capped at 0.05s. This is the number the measurement
+    // has to be nowhere near.
+    const ifFrameCounted = INTRO_NOMINAL_MS / Math.max(run.fps * 0.05, 1e-6);
     const detail = `${Math.round(run.ms)}ms vs ${INTRO_NOMINAL_MS}ms nominal`
-      + ` (${(drift * 100).toFixed(1)}% off) at ${run.fps.toFixed(1)}fps,`
-      + ` worst frame ${Math.round(run.worst)}ms`;
+      + ` at ${run.fps.toFixed(1)}fps, worst frame ${Math.round(run.worst)}ms`
+      + ` — overshoot ${Math.round(overshoot)}ms, one frame allows ${Math.round(allowed)}ms,`
+      + ` frame-counted would be ${Math.round(ifFrameCounted)}ms`;
     check(`intro ${trial.name}: completes`, run.phase === 'seated', `phase=${run.phase} ${detail}`);
-    check(`intro ${trial.name}: takes its wall-clock duration`, drift <= INTRO_TOLERANCE, detail);
+    check(`intro ${trial.name}: overshoots by at most one frame`,
+      overshoot <= allowed && overshoot >= -allowed, detail);
     if (trial.hogMs) {
       // Without this the previous check proves nothing: it has to be shown that
       // the frame rate really did collapse during the run being measured.
