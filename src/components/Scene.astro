@@ -1,14 +1,29 @@
 ---
 // The 3D ramen stall. All wiring lives in ../lib/scene.js
-import { CHATTER } from '../data/content';
+import { getCollection } from 'astro:content';
+import { CHATTER, NAVIGATION, SCENE, SITE } from '../data/content';
+
+const projects = (await getCollection('projects'))
+  .sort((a, b) => a.data.order - b.data.order)
+  .map((project) => ({ name: project.data.name, tag: project.data.tag }));
+const sceneContent = {
+  chatter: CHATTER,
+  labels: {
+    ...SCENE,
+    siteName: SITE.name,
+    siteInitial: SITE.name.charAt(0).toUpperCase(),
+    navigation: NAVIGATION,
+  },
+  menuItems: projects,
+};
 ---
 
-<script id="nbChatter" type="application/json" set:html={JSON.stringify(CHATTER)} is:inline></script>
-<canvas id="scene" aria-label="Interactive 3D ramen stall. Use the Open menu button for a text version of everything."></canvas>
-<div class="loading" id="loading">lighting the lanterns…</div>
+<script id="nbSceneContent" type="application/json" set:html={JSON.stringify(sceneContent)} is:inline></script>
+<canvas id="scene" aria-label={SCENE.canvasLabel}></canvas>
+<div class="loading" id="loading" data-error={SCENE.error}>{SCENE.loading}</div>
 <div class="pins" id="pins"></div>
-<div class="hint" id="hint">drag to look around · tap a sign to open the menu</div>
-<div class="credit">built from scratch · placeholder cook until the real model drops in</div>
+<div class="hint" id="hint">{SCENE.hint}</div>
+<div class="credit">{SCENE.credit}</div>
 
 <script>
   import { initScene } from '../lib/scene.js';
@@ -19,15 +34,15 @@ import { CHATTER } from '../data/content';
   function boot() {
     let controls: { setBookOpen(v: boolean): void } | null = null;
     try {
-      let chatter: any = { cook: [], diner: [] };
-      try { chatter = JSON.parse(document.getElementById('nbChatter')!.textContent!); } catch (e) {}
+      let sceneContent: any = { chatter: { cook: [], diner: [] }, labels: {}, menuItems: [] };
+      try { sceneContent = JSON.parse(document.getElementById('nbSceneContent')!.textContent!); } catch (e) {}
       controls = initScene(canvas, (key: string) => {
         document.dispatchEvent(new CustomEvent('nb:open', { detail: key }));
-      }, { chatter });
+      }, sceneContent);
     } catch (err) {
       console.error(err);
       if (loading) {
-        loading.textContent = 'scene error — use the Open menu button';
+        loading.textContent = (loading as HTMLElement).dataset.error || 'Scene unavailable';
         (loading as HTMLElement).style.letterSpacing = '0.08em';
       }
       return;

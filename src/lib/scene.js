@@ -12,6 +12,24 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
 export function initScene(canvas, onHotspot, opts = {}) {
   const CHATTER = opts.chatter || { cook: [], diner: [] };
+  const LABELS = {
+    siteName: 'nightbowl',
+    siteInitial: 'N',
+    mainSignLine: 'OPEN LATE  ·  RAMEN',
+    menuSignTitle: 'MENU',
+    menuSignFooter: 'tap to open the menu',
+    logSignTitle: 'KITCHEN LOG',
+    logSignItems: [],
+    logSignFooter: 'fresh batches inside',
+    specialsHotspot: 'Specials',
+    seatHotspot: 'Take a seat',
+    seatPrompt: 'take a seat',
+    seatAria: 'Take the empty seat at the counter',
+    youLabel: 'you',
+    navigation: { menu: 'Menu', guide: 'The Guide', log: 'Kitchen Log', bill: 'The Bill' },
+    ...(opts.labels || {}),
+  };
+  const MENU_ITEMS = Array.isArray(opts.menuItems) ? opts.menuItems.slice(0, 8) : [];
   const REDUCED = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   let bookOpen = false;
   let raf = 0;
@@ -165,9 +183,9 @@ export function initScene(canvas, onHotspot, opts = {}) {
       g.fillStyle = '#0f0d0c'; g.fillRect(0, 0, w, 7); g.fillRect(0, h - 7, w, 7);
       g.fillStyle = '#f0d9a8'; g.textAlign = 'center'; g.textBaseline = 'middle';
       g.font = "700 150px 'Zilla Slab', Georgia, serif";
-      g.fillText('nightbowl', w / 2, h / 2 - 8);
+      g.fillText(LABELS.siteName, w / 2, h / 2 - 8, w - 120);
       g.fillStyle = '#d1663a'; g.font = "400 40px 'Space Mono', monospace";
-      g.fillText('OPEN LATE  ·  RAMEN  ·  EST. 2026', w / 2, h - 50);
+      g.fillText(LABELS.mainSignLine, w / 2, h - 50, w - 120);
     }, 2048, 340);
     const sign = new THREE.Mesh(new THREE.PlaneGeometry(6.4, 1.06), new THREE.MeshBasicMaterial({ map: signTex }));
     sign.position.set(0, 2.74, 1.46); sign.rotation.x = -0.02;
@@ -179,7 +197,7 @@ export function initScene(canvas, onHotspot, opts = {}) {
       g.strokeStyle = '#f0d9a8'; g.lineWidth = 8;
       g.beginPath(); g.arc(w / 2, h * 0.5, h * 0.26, 0, Math.PI * 2); g.stroke();
       g.fillStyle = '#f0d9a8'; g.textAlign = 'center'; g.textBaseline = 'middle';
-      g.font = "700 96px 'Zilla Slab', serif"; g.fillText('N', w / 2, h * 0.5 + 4);
+      g.font = "700 96px 'Zilla Slab', serif"; g.fillText(LABELS.siteInitial, w / 2, h * 0.5 + 4);
     }, 256, 256);
     const norenMat = new THREE.MeshStandardMaterial({ map: norenTex, roughness: 1, side: THREE.DoubleSide });
     for (let i = -1; i <= 1; i++) {
@@ -192,44 +210,42 @@ export function initScene(canvas, onHotspot, opts = {}) {
       g.fillStyle = '#221b16'; g.fillRect(0, 0, w, h);
       g.strokeStyle = '#5a4327'; g.lineWidth = 16; g.strokeRect(12, 12, w - 24, h - 24);
       g.fillStyle = '#d1663a'; g.textAlign = 'left'; g.textBaseline = 'top';
-      g.font = "700 104px 'Zilla Slab', serif"; g.fillText('MENU', 74, 56);
+      g.font = "700 104px 'Zilla Slab', serif"; g.fillText(LABELS.menuSignTitle, 74, 56);
       g.strokeStyle = '#463625'; g.lineWidth = 4;
       g.beginPath(); g.moveTo(74, 188); g.lineTo(w - 74, 188); g.stroke();
-      const items = [['Chess Engine', 'PyTorch'], ['chat-systems', 'Django'], ['weather ETL', 'Airflow'],
-        ['CV runner', 'MediaPipe'], ['ML-Final', 'Keras'], ['Cleanclip', 'Python'], ['SisuSpeak', 'startup'], ['Thesis', 'research']];
       g.textBaseline = 'middle';
-      items.forEach((it, k) => {
+      MENU_ITEMS.forEach((item, k) => {
         const y = 262 + k * 84;
         g.fillStyle = '#e8d7b0'; g.font = "500 44px 'Hanken Grotesk', sans-serif"; g.textAlign = 'left';
-        g.fillText(it[0], 78, y);
+        g.fillText(item.name, 78, y, 650);
         g.fillStyle = '#997c48'; g.font = "400 32px 'Space Mono', monospace"; g.textAlign = 'right';
-        g.fillText(it[1], w - 78, y);
+        g.fillText(item.tag, w - 78, y, 250);
       });
       g.fillStyle = '#6b5636'; g.textAlign = 'left'; g.font = "400 28px 'Space Mono', monospace";
-      g.fillText('tap to open the menu', 78, h - 48);
+      g.fillText(LABELS.menuSignFooter, 78, h - 48, w - 156);
     }, 1024, 1320);
     const menuBoard = new THREE.Mesh(new THREE.PlaneGeometry(2.05, 2.6), new THREE.MeshStandardMaterial({ map: menuTex, roughness: 0.9 }));
     menuBoard.position.set(-1.75, 1.62, -1.1);
     s.add(menuBoard);
-    registerHotspot('menu', 'Menu', menuBoard, new THREE.Vector3(-1.75, 2.6, -1.05));
+    registerHotspot('menu', LABELS.navigation.menu, menuBoard, new THREE.Vector3(-1.75, 2.6, -1.05));
 
     const posterTex = textTexture((g, w, h) => {
       g.fillStyle = '#e8dbbf'; g.fillRect(0, 0, w, h);
       g.fillStyle = '#a5341d'; g.fillRect(0, 0, w, 96);
       g.fillStyle = '#e8dbbf'; g.textAlign = 'center'; g.textBaseline = 'middle';
-      g.font = "700 56px 'Zilla Slab', serif"; g.fillText('KITCHEN LOG', w / 2, 48);
+      g.font = "700 56px 'Zilla Slab', serif"; g.fillText(LABELS.logSignTitle, w / 2, 48, w - 50);
       g.fillStyle = '#3a2f22'; g.textAlign = 'left'; g.font = "400 34px 'Hanken Grotesk', sans-serif";
-      ['— why a ramen stall', '— a chess engine, my games', '— a boring Airflow DAG', '— what the model learned'].forEach((t, k) => {
+      LABELS.logSignItems.slice(0, 6).forEach((t, k) => {
         g.fillText(t, 42, 168 + k * 60);
       });
       g.fillStyle = '#8a6a3c'; g.font = "400 26px 'Space Mono', monospace";
-      g.fillText('fresh batches inside', 42, h - 42);
+      g.fillText(LABELS.logSignFooter, 42, h - 42, w - 84);
     }, 512, 640);
     const poster = new THREE.Mesh(new THREE.PlaneGeometry(1.2, 1.5), new THREE.MeshStandardMaterial({ map: posterTex, roughness: 0.95 }));
     poster.position.set(1.8, 1.75, -1.09);
     s.add(pos(box(1.36, 1.66, 0.06, 0x2a2018), 1.8, 1.75, -1.14));
     s.add(poster);
-    registerHotspot('log', 'Kitchen Log', poster, new THREE.Vector3(1.8, 2.56, -1.03));
+    registerHotspot('log', LABELS.navigation.log, poster, new THREE.Vector3(1.8, 2.56, -1.03));
 
     [-2.3, 0, 2.3].forEach((x) => {
       const lg = new THREE.Group();
@@ -260,7 +276,7 @@ export function initScene(canvas, onHotspot, opts = {}) {
     potG.position.set(1.5, 1.09, 0.55);
     g.add(potG);
     addSteam(new THREE.Vector3(1.5, 1.82, 0.55), 0.34, 9);
-    registerHotspot('menu', 'Specials', potG, new THREE.Vector3(1.5, 2.05, 0.55));
+    registerHotspot('menu', LABELS.specialsHotspot, potG, new THREE.Vector3(1.5, 2.05, 0.55));
 
     [-2.15, -1.5, -0.85].forEach((x, k) => {
       const z = 0.5 + (k % 2) * 0.12;
@@ -276,7 +292,7 @@ export function initScene(canvas, onHotspot, opts = {}) {
     boxG.add(fa); boxG.add(fb);
     boxG.position.set(2.55, 1.09, 0.6); boxG.rotation.y = 0.4;
     g.add(boxG);
-    registerHotspot('bill', 'The Bill', boxG, new THREE.Vector3(2.55, 1.72, 0.6));
+    registerHotspot('bill', LABELS.navigation.bill, boxG, new THREE.Vector3(2.55, 1.72, 0.6));
 
     [-2.7, -2.4, 2.75].forEach((x) => {
       g.add(pos(cyl(0.05, 0.07, 0.34, 0x2f6f5e, { rough: 0.4, metal: 0.1 }, 12), x, 0.72, 0.15));
@@ -825,7 +841,7 @@ export function initScene(canvas, onHotspot, opts = {}) {
     ring.position.y = 0.016;
     g.add(ring);
     scene.add(g);
-    registerHotspot('seat', 'Take a seat', g, new THREE.Vector3(SEAT.x, 1.0, SEAT.z));
+    registerHotspot('seat', LABELS.seatHotspot, g, new THREE.Vector3(SEAT.x, 1.0, SEAT.z));
   }
 
   // you, on the stool. built up front but hidden until the camera leaves you,
@@ -926,7 +942,7 @@ export function initScene(canvas, onHotspot, opts = {}) {
     addBlobShadow(guide, 0.4, 0.7);
     initAI(guide, 'cook', standingPose);
     scene.add(guide);
-    registerHotspot('guide', 'The Guide', guide, new THREE.Vector3(-0.3, 1.7, -0.5));
+    registerHotspot('guide', LABELS.navigation.guide, guide, new THREE.Vector3(-0.3, 1.7, -0.5));
     buildPins();
   }
 
@@ -950,7 +966,7 @@ export function initScene(canvas, onHotspot, opts = {}) {
             gltf.animations.find((a) => /idle|breath/i.test(a.name)) || gltf.animations[0];
           guideMixer.clipAction(clip).play();
         }
-        registerHotspot('guide', 'The Guide', guide, new THREE.Vector3(-0.3, 1.9, -0.5));
+        registerHotspot('guide', LABELS.navigation.guide, guide, new THREE.Vector3(-0.3, 1.9, -0.5));
         buildPins();
       },
       undefined,
@@ -978,7 +994,10 @@ export function initScene(canvas, onHotspot, opts = {}) {
       const el = document.createElement('button');
       el.className = 'pin';
       el.setAttribute('aria-label', 'Open ' + hs.label);
-      el.innerHTML = '<span class="dot" aria-hidden="true"></span>' + labelFor(hs.key);
+      const dot = document.createElement('span');
+      dot.className = 'dot';
+      dot.setAttribute('aria-hidden', 'true');
+      el.append(dot, document.createTextNode(labelFor(hs.key)));
       el.addEventListener('click', () => onHotspot(hs.key));
       el.addEventListener('mouseenter', () => { hs._hover = true; });
       el.addEventListener('mouseleave', () => { hs._hover = false; });
@@ -987,7 +1006,7 @@ export function initScene(canvas, onHotspot, opts = {}) {
     });
   }
   function labelFor(key) {
-    return { menu: 'Menu', guide: 'The Guide', log: 'Kitchen Log', bill: 'The Bill' }[key] || key;
+    return LABELS.navigation[key] || key;
   }
   // pins are built once the cook (async) is registered; this is the safety net
   setTimeout(buildPins, 3000);
@@ -1226,8 +1245,11 @@ export function initScene(canvas, onHotspot, opts = {}) {
   if (phase === 'street') {
     seatPin = document.createElement('button');
     seatPin.className = 'seat-pin';
-    seatPin.innerHTML = '<span class="dot" aria-hidden="true"></span>take a seat';
-    seatPin.setAttribute('aria-label', 'Take the empty seat at the counter');
+    const dot = document.createElement('span');
+    dot.className = 'dot';
+    dot.setAttribute('aria-hidden', 'true');
+    seatPin.append(dot, document.createTextNode(LABELS.seatPrompt));
+    seatPin.setAttribute('aria-label', LABELS.seatAria);
     seatPin.addEventListener('click', takeSeat);
     document.body.appendChild(seatPin);
   }
@@ -1235,7 +1257,7 @@ export function initScene(canvas, onHotspot, opts = {}) {
     if (youPin) return;
     youPin = document.createElement('div');
     youPin.className = 'you-pin';
-    youPin.textContent = 'you';
+    youPin.textContent = LABELS.youLabel;
     document.body.appendChild(youPin);
   }
   function updateYouPin() {

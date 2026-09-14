@@ -1,0 +1,46 @@
+---
+import { getCollection, render, type CollectionEntry } from 'astro:content';
+import LogLayout from '../../../layouts/LogLayout.astro';
+
+export async function getStaticPaths() {
+  const posts = await getCollection('posts');
+  return posts.map((post) => ({
+    params: { slug: post.id.replace(/\.(md|mdx)$/, '') },
+    props: { post },
+  }));
+}
+
+interface Props {
+  post: CollectionEntry<'posts'>;
+}
+
+const { post } = Astro.props;
+const { Content } = await render(post);
+const fmtDate = (date: Date) =>
+  date.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+---
+
+<LogLayout title={`Preview: ${post.data.title}`} description={post.data.excerpt} noindex>
+  <aside class="preview-banner">
+    Draft preview · {post.data.status} · <a href="/keystatic">Back to admin</a>
+  </aside>
+  <main class="log-main">
+    <article class="log-article">
+      <header>
+        <div class="entry-meta">
+          <time datetime={post.data.date.toISOString()}>{fmtDate(post.data.date)}</time>
+          <span>Not indexed</span>
+        </div>
+        <h1>{post.data.title}</h1>
+        <p class="log-deck">{post.data.excerpt}</p>
+        {(post.data.tags ?? []).length > 0 && (
+          <ul class="entry-tags" aria-label="Tags">
+            {(post.data.tags ?? []).map((tag) => <li>{tag}</li>)}
+          </ul>
+        )}
+      </header>
+      <div class="article-rule"></div>
+      <div class="article-body"><Content /></div>
+    </article>
+  </main>
+</LogLayout>

@@ -6,8 +6,25 @@ import MenuBook from '../components/MenuBook.astro';
 import { SITE } from '../data/content';
 ---
 
-<Base title={SITE.name} description="Ritesh Bhandari — portfolio and kitchen log, served from a late-night ramen stall.">
+<Base title={SITE.name} description={SITE.homeDescription}>
+  <aside class="preview-banner" id="previewBanner" hidden>
+    Draft preview · <a href="/keystatic">Back to admin</a>
+  </aside>
   <TopBar />
   <Scene />
   <MenuBook />
 </Base>
+
+<script>
+  if (new URLSearchParams(window.location.search).get('preview') === 'menu') {
+    const banner = document.getElementById('previewBanner');
+    if (banner) banner.hidden = false;
+    const openPreview = () =>
+      document.dispatchEvent(new CustomEvent('nb:open', { detail: 'menu' }));
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', openPreview, { once: true });
+    } else {
+      openPreview();
+    }
+  }
+</script>
