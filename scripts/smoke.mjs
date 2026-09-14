@@ -153,8 +153,29 @@ await session([], async (ctx) => {
 
   const before = await evaluate('window.__nightbowl.selfCheck()');
   check('cook, diners and walkers exist',
-    before.cook && before.diners >= 4 && before.walkers >= 2,
-    `cook=${before.cook} diners=${before.diners} walkers=${before.walkers}`);
+    before.cook && before.diners === 3 && before.visitor && before.walkers >= 2,
+    `cook=${before.cook} diners=${before.diners} visitor=${before.visitor} walkers=${before.walkers}`);
+  check('visitor is not an autonomous diner', !before.visitorAutonomous);
+  check('each diner owns a reachable bowl, chopsticks and cup',
+    before.dinerStations.length === 3 && before.dinerStations.every((station) =>
+      Math.abs(station.seatX - station.bowlX) < 0.01
+      && station.bowlZ >= 0.85
+      && station.hasHeldChopsticks
+      && station.hasCup),
+    JSON.stringify(before.dinerStations));
+  check('diner props match what their hands are doing',
+    before.dinerActions.every((state) =>
+      state.action === 'eat' && state.biting
+        ? state.heldChopsticks && !state.restingChopsticks && !state.heldCup
+        : state.action === 'drink'
+          ? state.heldCup && !state.counterCup && !state.heldChopsticks
+          : state.restingChopsticks && state.counterCup && !state.heldChopsticks && !state.heldCup),
+    JSON.stringify(before.dinerActions));
+  check('cook works at the pot with real props',
+    before.cookStationOffset >= 0.3 && before.cookStationOffset <= 0.6
+      && before.cookHasWorkingProps
+      && before.pot.scale <= 0.6 && before.pot.y <= 1.03,
+    JSON.stringify(before.pot));
   check('three detailed ramen bowls exist',
     before.ramenBowls === 3 && before.heroBowls === 1
       && before.ramenIngredients.every((parts) => parts.length === 8),
@@ -185,6 +206,28 @@ await session([], async (ctx) => {
     (await evaluate(`document.getElementById('pins').style.display`)) === '');
   check('seat prompt is gone', !(await evaluate(`!!document.querySelector('.seat-pin')`)));
   check('you are shown at the counter', await evaluate(`!!document.querySelector('.you-pin')`));
+
+  // Force one bowl empty and observe the complete cook-to-diner service loop.
+  check('test can empty a diner bowl', await evaluate('window.__nightbowl.testEmptyBowl(0)'));
+  let sawService = false, sawLift = false, sawFilledCarry = false, serviceDone = false;
+  for (let i = 0; i < 40 && !serviceDone; i++) {
+    await sleep(250);
+    const state = await evaluate('window.__nightbowl.selfCheck()');
+    // Read the latched audit rather than sampling for a transient: under a slow
+    // software renderer the carry phase can pass entirely between two polls.
+    sawService ||= state.serviceAudit?.started || (!!state.service?.active && state.cookAction === 'serve');
+    sawLift ||= !!state.serviceAudit?.lifted;
+    sawFilledCarry ||= !!state.serviceAudit?.filledCarry;
+    serviceDone = !state.service
+      && state.dinerActions[0].fill > 0.95
+      && !state.dinerActions[0].needsService
+      && state.dinerActions[0].bowlVisible;
+  }
+  check('cook reacts to an empty bowl', sawService);
+  check('cook takes the empty bowl off the counter', sawLift);
+  check('the bowl refilled is the one in the cook\'s hands, seat left empty', sawFilledCarry);
+  check('cook returns a full bowl and diner resumes', serviceDone,
+    JSON.stringify((await evaluate('window.__nightbowl.selfCheck()')).dinerActions[0]));
 
   // the director is on a randomised timer, so poll rather than assume a moment
   let spoke = false;
