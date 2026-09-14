@@ -107,6 +107,10 @@ error, which are the ones you would otherwise find out about from a visitor:
 - the walk-in intro actually finishes, so the site becomes usable
 - every viewport from a 280px phone to a 1920px monitor: nothing overflows
   sideways, the navigation and the menu book stay reachable
+- the navigation pins stay on the objects they label, do not land on top of
+  each other, and are only hidden when their anchor really is off screen
+- the walk-in intro takes the same wall-clock time on a starved machine as on
+  an idle one
 - touch drag and two-finger pinch work and do not scroll the page underneath
 - reduced-motion is honoured
 - the menu still opens when the 3D scene is switched off entirely
@@ -122,6 +126,53 @@ npm run build
 npm run preview        # leave this running in one terminal
 npm run smoke          # in another terminal
 ```
+
+### Navigation pins
+
+The four pins floating over the stall are HTML buttons, not part of the 3D
+scene. Every frame their screen position is recalculated from a point in the
+scene, so they can slide off the thing they label without anything erroring.
+
+The check measures where each pin actually is and where its object actually is,
+both in screen coordinates, at all eight viewports. It fails if a pin stops
+overlapping its object, if two pins land on top of each other so one cannot be
+clicked, or if a pin hides while its anchor is plainly on screen.
+
+One pin does not pass today: **The Bill** floats between 3 and 35 pixels above
+the tip box depending on viewport. It is listed by name in `PIN_DRIFT` in
+`scripts/smoke.mjs` and tracked by issue #45, so the other three cannot quietly
+join it. When #45 is fixed, delete that entry.
+
+### The walk-in intro under load
+
+The walk-in is driven by the wall clock rather than by counting frames, so a
+slow machine drops frames instead of stretching the animation out. That is easy
+to break by accident and impossible to notice on a fast machine.
+
+Throttling the CPU is not enough to test it — the intro is cheap, and 6x
+throttling barely moved the frame rate on a machine with a GPU (30.1fps either
+way). So the check also burns 80ms of every frame on the main thread, which
+does bite. Measured:
+
+| where | frame rate during the intro | worst single frame | intro took |
+|---|---|---|---|
+| GPU, idle | 30.0fps | 52ms | 6028ms |
+| GPU, 6x CPU throttle | 30.1fps | 48ms | 6038ms |
+| GPU, 6x + starved frames | 11.8fps | 97ms | 6176ms |
+| software renderer, idle | 8.4fps | 587ms | 6049ms |
+| software renderer, 6x + starved | 7.2fps | 399ms | 6212ms |
+
+Frame times vary by more than ten times across those rows. The intro duration
+varies by 3%. That is the property being asserted.
+
+For comparison: frame deltas are capped at 0.05s, so a version driven by
+accumulated deltas would take 6.0 / (7.2 × 0.05) ≈ 17 seconds on the bottom
+row instead of 6.2.
+
+*Red means:* the intro duration moved by more than 15%, which means it is being
+driven by frame count somewhere. There is also a check that the starvation
+really did slow the frames down, so this cannot pass by failing to load the
+machine.
 
 ### NPC pose audit
 
@@ -167,6 +218,15 @@ npm run preview        # one terminal
 npm run audit:npc      # another
 ```
 
+*To see what a finding actually looks like:*
+```
+npm run audit:visual
+```
+That freezes the scene at the worst moment of each defect, points the camera at
+the limb in question and writes photographs to `docs/pose-shots/`, one per
+issue, from two angles. A measurement in millimetres is enough to fail a build
+and not enough to fix a pose.
+
 *If the new pose is actually correct* and the audit is the thing that is wrong,
 add the printed `id` to `scripts/npc-audit-accepted.json` along with the issue
 that owns it. Everything on that list is reported but does not fail the build.
@@ -192,11 +252,23 @@ actually open `/admin`, edit, and save.
 *Reproduce them:*
 ```
 npm run build
-npm run preview
+npm run preview                       # production build on 4321
 npm run smoke:cms -- --mode production
 
-npm run dev
+npm run dev -- --port 4322            # dev server on its own port
 npm run smoke:cms -- --url http://127.0.0.1:4322 --mode local
+```
+
+The port matters. `npm run dev` defaults to 4321, which `npm run preview` is
+already using, so without `--port 4322` Astro quietly picks the next free port
+and the smoke test then measures whatever is still on 4322 — possibly a server
+left running from an hour ago. CI gives each server its own port for the same
+reason. If a check passes or fails in a way that makes no sense, confirm what
+is actually listening before believing the result:
+
+```
+lsof -nP -iTCP:4321 -sTCP:LISTEN
+lsof -nP -iTCP:4322 -sTCP:LISTEN
 ```
 
 ---
@@ -263,6 +335,7 @@ npm run preview        # serve the production build, leave running
 
 npm run smoke          # browser suite, all viewports
 npm run audit:npc      # character pose audit
+npm run audit:visual   # photograph the poses the audit flags -> docs/pose-shots/
 npm run smoke:cms -- --mode production
 
 npm run baseline       # frame rates and memory, ~15 min, hardware only
