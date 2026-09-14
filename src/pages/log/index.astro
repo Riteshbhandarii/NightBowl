@@ -1,0 +1,45 @@
+---
+import { getCollection } from 'astro:content';
+import LogLayout from '../../layouts/LogLayout.astro';
+import { LOG } from '../../data/content';
+
+const posts = (await getCollection('posts')).sort(
+  (a, b) => a.data.order - b.data.order || +b.data.date - +a.data.date
+);
+const fmtDate = (date: Date) =>
+  date.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+const slug = (id: string) => id.replace(/\.(md|mdx)$/, '');
+const readingTime = (body = '') => Math.max(1, Math.ceil(body.trim().split(/\s+/).filter(Boolean).length / 200));
+---
+
+<LogLayout title={LOG.title} description={LOG.indexDescription}>
+  <main class="log-main">
+    <div class="log-kicker">{LOG.indexKicker}</div>
+    <h1>{LOG.title}</h1>
+    <p class="log-deck">{LOG.indexDeck}</p>
+
+    <ol class="log-index">
+      {posts.map((post) => (
+        <li class:list={{ draft: post.data.status === 'draft' }}>
+          <div class="entry-meta">
+            <time datetime={post.data.date.toISOString()}>
+              {post.data.status === 'published' ? fmtDate(post.data.date) : LOG.draftDateLabel}
+            </time>
+            <span>{readingTime(post.body)} {LOG.readingSuffix}</span>
+          </div>
+          <h2>
+            {post.data.status === 'published'
+              ? <a href={`/log/${slug(post.id)}/`}>{post.data.title}</a>
+              : post.data.title}
+          </h2>
+          <p>{post.data.excerpt}</p>
+          {post.data.tags.length > 0 && (
+            <ul class="entry-tags" aria-label="Tags">
+              {post.data.tags.map((tag) => <li>{tag}</li>)}
+            </ul>
+          )}
+        </li>
+      ))}
+    </ol>
+  </main>
+</LogLayout>

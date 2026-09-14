@@ -23,6 +23,7 @@ const posts = defineCollection({
     date: z.coerce.date(),
     status: z.enum(['draft', 'published']).default('draft'),
     excerpt: z.string(),
+    tags: z.array(z.string()).default([]),
     order: z.number().default(99),
   }),
 });

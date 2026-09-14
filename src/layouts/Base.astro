@@ -4,8 +4,13 @@ import '../styles/global.css';
 interface Props {
   title: string;
   description?: string;
+  bodyClass?: string;
 }
-const { title, description = "Ritesh Bhandari — portfolio and kitchen log, served from a late-night ramen stall." } = Astro.props;
+const {
+  title,
+  description = "Ritesh Bhandari — portfolio and kitchen log, served from a late-night ramen stall.",
+  bodyClass,
+} = Astro.props;
 ---
 
 <!doctype html>
@@ -34,7 +39,7 @@ const { title, description = "Ritesh Bhandari — portfolio and kitchen log, ser
       } catch (e) {}
     </script>
   </head>
-  <body>
+  <body class={bodyClass}>
     <slot />
   </body>
 </html>

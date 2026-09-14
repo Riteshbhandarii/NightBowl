@@ -1,0 +1,107 @@
+.reading-page {
+  min-height: 100%;
+  overflow: auto;
+  background:
+    radial-gradient(circle at 18% 0%, rgba(178, 58, 36, 0.14), transparent 34rem),
+    linear-gradient(180deg, #17111b, #0f0d13 70%);
+  color: #efe4d0;
+}
+
+.log-header {
+  width: min(1120px, calc(100% - 40px));
+  margin: 0 auto;
+  padding: 24px 0;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 24px;
+  border-bottom: 1px solid rgba(239, 228, 208, 0.16);
+}
+
+.log-brand {
+  font: 700 24px/1 'Zilla Slab', Georgia, serif;
+  color: #f0d9a8;
+  text-decoration: none;
+}
+
+.log-header nav { display: flex; gap: 22px; }
+.log-header nav a, .back-link {
+  font: 400 10px/1.4 'Space Mono', monospace;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(239, 228, 208, 0.7);
+  text-decoration: none;
+}
+.log-header nav a:hover, .back-link:hover { color: #ef9a4c; }
+
+.log-main {
+  width: min(820px, calc(100% - 40px));
+  margin: 0 auto;
+  padding: clamp(64px, 10vw, 112px) 0 120px;
+}
+
+.log-kicker, .entry-meta {
+  font-family: 'Space Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #e0b06a;
+}
+
+.log-main > h1, .log-article h1 {
+  max-width: 13ch;
+  margin: 12px 0 18px;
+  font: 700 clamp(44px, 8vw, 74px)/0.98 'Zilla Slab', Georgia, serif;
+  color: #f6efe0;
+  text-wrap: balance;
+}
+
+.log-deck {
+  max-width: 650px;
+  margin: 0;
+  font: 400 clamp(18px, 2.4vw, 22px)/1.55 'Zilla Slab', Georgia, serif;
+  color: rgba(239, 228, 208, 0.72);
+}
+
+.log-index { margin: 72px 0 0; padding: 0; list-style: none; }
+.log-index > li { padding: 30px 0 34px; border-top: 1px solid rgba(239, 228, 208, 0.18); }
+.log-index > li.draft {
+  margin-inline: -18px;
+  padding-inline: 18px;
+  border-left: 2px solid rgba(224, 176, 106, 0.72);
+  background: rgba(224, 176, 106, 0.035);
+}
+.entry-meta { display: flex; justify-content: space-between; gap: 16px; }
+.log-index h2 { margin: 10px 0 7px; font: 700 clamp(25px, 4vw, 34px)/1.1 'Zilla Slab', Georgia, serif; }
+.log-index h2 a { color: #f6efe0; text-decoration: none; }
+.log-index h2 a:hover { color: #ef9a4c; }
+.log-index > li > p { max-width: 650px; margin: 0; color: rgba(239, 228, 208, 0.68); line-height: 1.65; }
+
+.entry-tags { display: flex; flex-wrap: wrap; gap: 8px; margin: 14px 0 0; padding: 0; list-style: none; }
+.entry-tags li { font: 400 10px/1.4 'Space Mono', monospace; color: rgba(239, 228, 208, 0.55); }
+.entry-tags li::before { content: '#'; color: #ef9a4c; }
+
+.log-article { position: relative; }
+.log-article > header { margin-top: 34px; }
+.article-rule { width: 72px; height: 3px; margin: 48px 0; background: #b23a24; }
+.article-body { max-width: 700px; font-size: 17px; line-height: 1.75; color: rgba(246, 239, 224, 0.88); }
+.article-body h2, .article-body h3 { margin: 2em 0 0.6em; font-family: 'Zilla Slab', Georgia, serif; line-height: 1.15; color: #f6efe0; }
+.article-body h2 { font-size: 34px; }
+.article-body h3 { font-size: 25px; }
+.article-body a { color: #ef9a4c; }
+.article-body pre { overflow-x: auto; padding: 18px; border: 1px solid rgba(239, 228, 208, 0.14); border-radius: 5px; background: #09080b; }
+.article-body code { font-family: 'Space Mono', monospace; font-size: 0.88em; }
+.article-body img { display: block; height: auto; margin: 32px auto; border-radius: 5px; }
+.article-body blockquote { margin: 28px 0; padding-left: 20px; border-left: 3px solid #b23a24; color: rgba(239, 228, 208, 0.68); }
+.article-contents { margin-top: 56px; padding-top: 24px; border-top: 1px solid rgba(239, 228, 208, 0.16); }
+.article-contents strong { font-family: 'Space Mono', monospace; font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: #e0b06a; }
+.article-contents ul { margin: 12px 0 0; padding-left: 18px; }
+.article-contents a { color: rgba(239, 228, 208, 0.72); }
+
+@media (max-width: 620px) {
+  .log-header { align-items: flex-start; }
+  .log-header nav { flex-direction: column; align-items: flex-end; gap: 8px; }
+  .log-main { padding-top: 56px; }
+  .log-index { margin-top: 48px; }
+  .entry-meta { flex-direction: column; gap: 4px; }
+}
