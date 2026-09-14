@@ -46,6 +46,21 @@ export const BILL = {
   draftCopy: true,
 };
 
+export const LOG = {
+  title: 'Kitchen Log',
+  eyebrow: 'from the kitchen',
+  menuSubtitle: 'Short notes on what got built and what broke.',
+  menuIntro: 'Working notes, technical breakdowns and the decisions behind the projects.',
+  indexLinkLabel: 'Open the complete log →',
+  indexKicker: 'working notes from the pass',
+  indexDeck: 'Build notes, technical breakdowns, failures worth keeping, and the decisions behind the work.',
+  indexDescription: 'Technical notes and project breakdowns from Ritesh Bhandari.',
+  draftDateLabel: 'coming soon',
+  readingSuffix: 'min read',
+  allEntries: '← all entries',
+  backToStall: 'back to the stall',
+};
+
 // ── Ambient NPC chatter in the 3D scene. Short lines, spoken as speech bubbles.
 // Placeholder in the assistant's voice — Ritesh rewrites these like the rest.
 export const CHATTER = {

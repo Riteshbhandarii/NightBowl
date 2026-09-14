@@ -1,6 +1,6 @@
 ---
 import { getCollection } from 'astro:content';
-import { SITE, GUIDE, SPECIALS, BILL } from '../data/content';
+import { SITE, GUIDE, SPECIALS, BILL, LOG } from '../data/content';
 
 const projects = (await getCollection('projects')).sort((a, b) => a.data.order - b.data.order);
 const byCourse = (c: string) => projects.filter((p) => p.data.course === c);
@@ -13,6 +13,8 @@ const posts = (await getCollection('posts')).sort(
 );
 const fmtDate = (d: Date) =>
   d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+const postSlug = (id: string) => id.replace(/\.(md|mdx)$/, '');
+const readingTime = (body = '') => Math.max(1, Math.ceil(body.trim().split(/\s+/).filter(Boolean).length / 200));
 
 const anyDraft =
   projects.some((p) => p.data.draftCopy) || GUIDE.draftCopy || SPECIALS.draftCopy || BILL.draftCopy;
@@ -123,19 +125,36 @@ const anyDraft =
   <section data-sec="log">
     <div class="pg">
       <div data-side="l">
-        <span class="eyebrow">from the kitchen</span>
-        <h2>Kitchen Log</h2>
-        <p class="sub">Short notes on what got built and what broke.</p>
-        <p>Ritesh writes these. The titles below are the queue.</p>
+        <div class="log-sheet log-sheet-intro">
+          <span class="eyebrow">{LOG.eyebrow}</span>
+          <h2>{LOG.title}</h2>
+          <p class="sub">{LOG.menuSubtitle}</p>
+          <p>{LOG.menuIntro}</p>
+          <a class="log-index-link" href="/log/">{LOG.indexLinkLabel}</a>
+        </div>
       </div>
       <div data-side="r">
-        {posts.map((post) => (
-          <article class="logline">
-            <time>{post.data.status === 'published' ? fmtDate(post.data.date) : 'coming soon'}</time>
-            <h3>{post.data.title}</h3>
-            <p>{post.data.excerpt}</p>
-          </article>
-        ))}
+        <div class="log-sheet log-sheet-list">
+          {posts.map((post) => (
+            <article class:list={['logline', { draft: post.data.status === 'draft' }]}>
+              <div class="log-meta">
+                <time>{post.data.status === 'published' ? fmtDate(post.data.date) : LOG.draftDateLabel}</time>
+                <span>{readingTime(post.body)} {LOG.readingSuffix}</span>
+              </div>
+              <h3>
+                {post.data.status === 'published'
+                  ? <a href={`/log/${postSlug(post.id)}/`}>{post.data.title}</a>
+                  : post.data.title}
+              </h3>
+              <p>{post.data.excerpt}</p>
+              {post.data.tags.length > 0 && (
+                <ul class="log-tags" aria-label="Tags">
+                  {post.data.tags.map((tag) => <li>{tag}</li>)}
+                </ul>
+              )}
+            </article>
+          ))}
+        </div>
       </div>
     </div>
   </section>
@@ -218,6 +237,8 @@ const anyDraft =
       pageLeft.innerHTML = pg.l;
       pageRight.innerHTML = pg.r + stamp;
     }
+    pageLeft.dataset.section = curTab!;
+    pageRight.dataset.section = curTab!;
     pageLeft.scrollTop = 0;
     pageRight.scrollTop = 0;
 
