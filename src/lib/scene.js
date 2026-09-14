@@ -50,6 +50,17 @@ export function initScene(canvas, onHotspot) {
   const norenFlaps = [];
   const diners = [];
   const walkers = [];
+  // the one stool that is never taken, and the ring that advertises it
+  const SEAT = { x: 0.1, z: 1.52 };
+  let seatGlowMat = null;
+  let you = null;          // the figure that takes the stool once you sit
+  let youMats = [];        // their materials, so they can fade in
+  let youReveal = 0;
+  let youPin = null;       // the small "you" tag over their head
+  // intro state: 'street' = first person on the pavement, 'sitting' = the walk-in
+  // and sit move, 'seated' = the scene exactly as it has always behaved.
+  // the walk in plays on every load; only reduced motion skips it.
+  let phase = REDUCED ? 'seated' : 'street';
   let guide = null;
   let guideMixer = null;
   let guideRig = null;
@@ -131,6 +142,7 @@ export function initScene(canvas, onHotspot) {
   buildStall();
   buildCounterItems();
   buildDiners();
+  buildEmptySeat();
   buildStreet();
   buildGround();
   loadCook();
@@ -484,6 +496,62 @@ export function initScene(canvas, onHotspot) {
     });
   }
 
+  /* ---------- the free stool: the one seat that is always open ---------- */
+  function buildEmptySeat() {
+    const g = new THREE.Group();
+    g.position.set(SEAT.x, 0, SEAT.z);
+    g.add(pos(cyl(0.17, 0.17, 0.06, 0xb0423a, { rough: 0.7 }, 18), 0, 0.56, 0));
+    g.add(pos(cyl(0.03, 0.05, 0.56, 0x2a2018, {}, 10), 0, 0.28, 0));
+    buildYou();
+    // a warm ring on the ground so the open stool reads as an invitation
+    seatGlowMat = new THREE.MeshBasicMaterial({
+      color: 0xffc46b, transparent: true, opacity: 0.22, depthWrite: false, side: THREE.DoubleSide,
+    });
+    seatGlowMat.visible = phase !== 'seated'; // skipped intro: never show the ring
+    const ring = new THREE.Mesh(new THREE.RingGeometry(0.23, 0.36, 32), seatGlowMat);
+    ring.rotation.x = -Math.PI / 2;
+    ring.position.y = 0.016;
+    g.add(ring);
+    scene.add(g);
+    registerHotspot('seat', 'Take a seat', g, new THREE.Vector3(SEAT.x, 1.0, SEAT.z));
+  }
+
+  // you, on the stool. built up front but hidden until the camera leaves you,
+  // so the empty seat is not still empty once you are supposedly sitting in it.
+  function buildYou() {
+    you = seatedPerson(
+      { x: SEAT.x, hair: 0x241a12, shirt: 0x8c4436, scale: 0.99, build: 1.02, headScale: 0.99 },
+      4.4
+    );
+    you.visible = false;
+    you.traverse((n) => {
+      if (!n.material) return;
+      const list = Array.isArray(n.material) ? n.material : [n.material];
+      for (const mat of list) youMats.push({ mat, wasTransparent: mat.transparent, base: mat.opacity });
+    });
+    // a small warm light just off your shoulder. not a spotlight on a stage, more
+    // like the lantern happens to fall on you.
+    setYouReveal(0);
+  }
+
+  // fade in by opacity alone. depthWrite is deliberately never touched: switching it
+  // off for the fade and failing to switch it back leaves the figure with no
+  // self-occlusion, so their far arm shows straight through their chest.
+  function setYouReveal(v) {
+    youReveal = v;
+    if (!you) return;
+    you.visible = v > 0.001;
+    const solid = v >= 0.995;
+    for (const e of youMats) {
+      const wantTransparent = solid ? e.wasTransparent : true;
+      if (e.mat.transparent !== wantTransparent) {
+        e.mat.transparent = wantTransparent;
+        e.mat.needsUpdate = true;
+      }
+      e.mat.opacity = solid ? e.base : e.base * v;
+    }
+  }
+
   function buildStreet() {
     const winTex = textTexture((g, w, h) => {
       g.fillStyle = '#0c0a16'; g.fillRect(0, 0, w, h);
@@ -587,7 +655,7 @@ export function initScene(canvas, onHotspot) {
     if (pinsBuilt) return;
     pinsBuilt = true;
     const seen = new Set();
-    [...hotspots].sort((a, b) => (ORDER[a.key] || 9) - (ORDER[b.key] || 9)).forEach((hs) => {
+    [...hotspots].filter((h) => h.key !== 'seat').sort((a, b) => (ORDER[a.key] || 9) - (ORDER[b.key] || 9)).forEach((hs) => {
       if (seen.has(hs.key)) return; // one pin per section (the pot + board both open "menu")
       seen.add(hs.key);
       const el = document.createElement('button');
@@ -631,7 +699,145 @@ export function initScene(canvas, onHotspot) {
   const cam = { az: 0.78, el: 0.28, r: 9.6, azT: 0.5, elT: 0.17, rT: 6.7 };
   const target = new THREE.Vector3(0, 1.2, 0.25);
   let dragging = false, movedFar = false, dnX = 0, dnY = 0, lX = 0, lY = 0, dnT = 0, userMoved = false;
-  if (REDUCED) { cam.az = cam.azT; cam.el = cam.elT; cam.r = cam.rT; }
+
+  function orbitPos(az, el, r) {
+    return new THREE.Vector3(
+      target.x + r * Math.cos(el) * Math.sin(az),
+      target.y + r * Math.sin(el) + 0.5,
+      target.z + r * Math.cos(el) * Math.cos(az)
+    );
+  }
+
+  /* ---------- the intro: stand in the street, take the seat, then hand
+       the camera back to the normal outside view ---------- */
+  // 'street' = first person on the pavement, waiting for the click
+  // 'sitting' = the short walk-in-and-sit move
+  // 'seated'  = everything from here is the scene exactly as it always was
+  let sitStart = 0;
+  let seatPin = null;
+  const _look = new THREE.Vector3();
+
+  // the walk in, in four beats. each one is timed rather than keyframed so the
+  // velocity stays continuous instead of stopping dead at every waypoint.
+  const BEAT = { walk: 2.7, sit: 1.3, hold: 0.4, pull: 1.6 };
+  const SIT_END = BEAT.walk + BEAT.sit + BEAT.hold + BEAT.pull;
+
+  const STAND_Y = 1.60;    // eye height on your feet
+  const APPROACH_Z = 2.30; // where you stop, just behind the stool
+  const SEAT_Y = 1.14;     // eye height once you are down
+  const SEAT_Z = 1.60;
+  const LOOK_STREET = [SEAT.x, 1.88, 0.55];
+  const LOOK_STAND = [SEAT.x, 1.62, 0.45];
+  const LOOK_SEAT = [SEAT.x, 1.30, 0.25];
+
+  let introZ = 6.4;   // where the walk started, captured on click
+  let restPos = null; // the orbit rest pose, captured on click
+
+  if (phase === 'seated') {
+    cam.az = cam.azT; cam.el = cam.elT; cam.r = cam.rT;
+    setYouReveal(1); // reduced motion: you are simply already sitting there
+    buildYouPin();
+  } else if (pinWrap) {
+    pinWrap.style.display = 'none';
+  }
+
+  // a narrow (portrait) window sees far less width, so stand further back or the
+  // stall sign gets cropped. the walk in then just starts from further out.
+  function streetZ() {
+    const a = window.innerWidth / window.innerHeight;
+    return a >= 1 ? 6.4 : Math.min(9.2, 6.4 + (1 - a) * 5.2);
+  }
+
+  const lerp = (a, b, u) => a + (b - a) * u;
+  const easeInOutSine = (u) => -(Math.cos(Math.PI * u) - 1) / 2;
+  const smoothstep = (u) => u * u * (3 - 2 * u);
+  // lowering yourself onto a stool: weight leaves your legs from a standstill, the
+  // seat takes it a fraction past level, then it comes back up. starting and ending
+  // at zero speed is what keeps it from snapping the moment you stop walking.
+  const OVERSHOOT = 1.04;
+  function sitCurve(u) {
+    if (u < 0.74) return OVERSHOOT * smoothstep(u / 0.74);
+    const b = (u - 0.74) / 0.26;
+    return OVERSHOOT + (1 - OVERSHOOT) * smoothstep(b);
+  }
+
+  function sampleIntro(tt) {
+    let px, py, pz, lx, ly, lz;
+
+    if (tt < BEAT.walk) {
+      // walking up. easeInOutSine means you start from rest and slow to a stop,
+      // and sin(pi*u) is exactly that ease's velocity, so the footfalls and the
+      // body sway fade in and out with your actual pace.
+      const u = tt / BEAT.walk;
+      const e = easeInOutSine(u);
+      const pace = Math.sin(u * Math.PI);
+      px = SEAT.x + Math.sin(u * 8.5) * 0.018 * pace;
+      py = STAND_Y + Math.sin(u * 17) * 0.021 * pace;
+      pz = lerp(introZ, APPROACH_Z, e);
+      lx = SEAT.x;
+      ly = lerp(LOOK_STREET[1], LOOK_STAND[1], e);
+      lz = lerp(LOOK_STREET[2], LOOK_STAND[2], e);
+    } else if (tt < BEAT.walk + BEAT.sit) {
+      // sitting. the drop carries weight and dips just past the seat before
+      // settling; the glide forward onto the stool is smooth and separate.
+      const u = (tt - BEAT.walk) / BEAT.sit;
+      const drop = sitCurve(u);
+      const glide = easeInOutSine(u);
+      px = SEAT.x;
+      py = lerp(STAND_Y, SEAT_Y, drop);
+      pz = lerp(APPROACH_Z, SEAT_Z, glide);
+      lx = SEAT.x;
+      ly = lerp(LOOK_STAND[1], LOOK_SEAT[1], drop);
+      lz = lerp(LOOK_STAND[2], LOOK_SEAT[2], glide);
+    } else if (tt < BEAT.walk + BEAT.sit + BEAT.hold) {
+      // a beat, sitting there breathing, before the camera lets go of you
+      const b = tt - BEAT.walk - BEAT.sit;
+      px = SEAT.x;
+      // the breath fades out across the beat so the pull-out starts from exactly
+      // SEAT_Y rather than a few millimetres above it
+      py = SEAT_Y + Math.sin(b * 2.1) * 0.006 * (1 - b / BEAT.hold);
+      pz = SEAT_Z;
+      lx = LOOK_SEAT[0]; ly = LOOK_SEAT[1]; lz = LOOK_SEAT[2];
+    } else {
+      // the camera detaches and pulls out to the view the site has always had
+      const u = Math.min(1, (tt - BEAT.walk - BEAT.sit - BEAT.hold) / BEAT.pull);
+      const e = easeInOutSine(u);
+      px = lerp(SEAT.x, restPos.x, e);
+      py = lerp(SEAT_Y, restPos.y, e);
+      pz = lerp(SEAT_Z, restPos.z, e);
+      lx = lerp(LOOK_SEAT[0], target.x, e);
+      ly = lerp(LOOK_SEAT[1], target.y, e);
+      lz = lerp(LOOK_SEAT[2], target.z, e);
+    }
+
+    camera.position.set(px, py, pz);
+    _look.set(lx, ly, lz);
+    camera.lookAt(_look);
+  }
+
+  function takeSeat() {
+    if (phase !== 'street') return;
+    phase = 'sitting';
+    // wall clock, not accumulated dt: dt is capped at 0.05 so on anything under
+    // 20fps the intro would stretch out well past its 6s instead of just dropping
+    // frames. a timed move should take the same time on every machine.
+    sitStart = performance.now();
+    introZ = streetZ();
+    restPos = orbitPos(cam.azT, cam.elT, cam.rT);
+    seatPin?.classList.add('gone');
+  }
+
+  function seated() {
+    phase = 'seated';
+    cam.az = cam.azT; cam.el = cam.elT; cam.r = cam.rT;
+    if (seatGlowMat) seatGlowMat.visible = false;
+    setYouReveal(1);
+    if (pinWrap) pinWrap.style.display = '';
+    buildYouPin();
+    if (hintEl) { hintEl.classList.remove('gone'); hintTimer = setTimeout(hideHint, 7000); }
+    seatPin?.remove();
+    seatPin = null;
+  }
 
   function ndc(e) {
     const r = canvas.getBoundingClientRect();
@@ -639,8 +845,12 @@ export function initScene(canvas, onHotspot) {
     pointer.y = -((e.clientY - r.top) / r.height) * 2 + 1;
   }
   const onDown = (e) => {
-    dragging = true; movedFar = false; userMoved = true;
+    if (phase === 'sitting') return;
+    ndc(e); // a tap may never fire pointermove, so seed the ray here too
+    movedFar = false;
     dnX = lX = e.clientX; dnY = lY = e.clientY; dnT = performance.now();
+    if (phase !== 'seated') return; // no orbiting while you are still standing
+    dragging = true; userMoved = true;
     canvas.classList.add('grabbing');
     try { canvas.setPointerCapture(e.pointerId); } catch (x) {}
     hideHint();
@@ -656,10 +866,13 @@ export function initScene(canvas, onHotspot) {
   };
   const onUp = () => {
     dragging = false; canvas.classList.remove('grabbing');
+    if (phase === 'sitting') return;
     if (!movedFar && performance.now() - dnT < 500) tryClick();
   };
   const onWheel = (e) => {
-    e.preventDefault(); userMoved = true;
+    e.preventDefault();
+    if (phase !== 'seated') return;
+    userMoved = true;
     cam.rT = Math.max(4.6, Math.min(10, cam.rT + e.deltaY * 0.002));
   };
   canvas.addEventListener('pointerdown', onDown);
@@ -674,21 +887,65 @@ export function initScene(canvas, onHotspot) {
     return null;
   }
   function tryClick() {
-    if (bookOpen) return;
+    if (bookOpen || phase === 'sitting') return;
     raycaster.setFromCamera(pointer, camera);
     const hit = raycaster.intersectObjects(hotspots.map((h) => h.obj), true)[0];
-    if (hit) { const k = rootHotspot(hit.object); if (k) onHotspot(k); }
+    if (!hit) return;
+    const k = rootHotspot(hit.object);
+    if (!k) return;
+    if (k === 'seat') { takeSeat(); return; }
+    if (phase === 'seated') onHotspot(k); // the stall is only clickable once you sit
   }
   function updateHover() {
-    if (bookOpen) { canvas.classList.remove('pointing'); return; }
+    if (bookOpen || phase === 'sitting') { canvas.classList.remove('pointing'); return; }
     raycaster.setFromCamera(pointer, camera);
     const hit = raycaster.intersectObjects(hotspots.map((h) => h.obj), true)[0];
-    canvas.classList.toggle('pointing', !!(hit && rootHotspot(hit.object)));
+    const k = hit && rootHotspot(hit.object);
+    canvas.classList.toggle('pointing', phase === 'street' ? k === 'seat' : !!k);
+  }
+
+  /* ---------- seat prompt ---------- */
+  const _sv = new THREE.Vector3();
+  if (phase === 'street') {
+    seatPin = document.createElement('button');
+    seatPin.className = 'seat-pin';
+    seatPin.innerHTML = '<span class="dot" aria-hidden="true"></span>take a seat';
+    seatPin.setAttribute('aria-label', 'Take the empty seat at the counter');
+    seatPin.addEventListener('click', takeSeat);
+    document.body.appendChild(seatPin);
+  }
+  function buildYouPin() {
+    if (youPin) return;
+    youPin = document.createElement('div');
+    youPin.className = 'you-pin';
+    youPin.textContent = 'you';
+    document.body.appendChild(youPin);
+  }
+  function updateYouPin() {
+    if (!youPin || !you) return;
+    _sv.set(SEAT.x, 1.62, 1.5).project(camera);
+    const off = _sv.z > 1;
+    youPin.style.display = off ? 'none' : '';
+    if (off) return;
+    youPin.style.left = (_sv.x * 0.5 + 0.5) * window.innerWidth + 'px';
+    youPin.style.top = (-_sv.y * 0.5 + 0.5) * window.innerHeight + 'px';
+    youPin.style.opacity = String(youReveal);
+  }
+
+  function updateSeatPin(t) {
+    if (seatGlowMat) {
+      seatGlowMat.opacity = phase === 'street' ? 0.16 + Math.sin(t * 2.4) * 0.1 : 0;
+    }
+    if (!seatPin) return;
+    _sv.set(SEAT.x, 1.02, SEAT.z).project(camera);
+    seatPin.style.left = (_sv.x * 0.5 + 0.5) * window.innerWidth + 'px';
+    seatPin.style.top = (-_sv.y * 0.5 + 0.5) * window.innerHeight + 'px';
   }
 
   /* ---------- hint ---------- */
   const hintEl = document.getElementById('hint');
-  let hintTimer = setTimeout(hideHint, 7000);
+  let hintTimer = phase === 'seated' ? setTimeout(hideHint, 7000) : 0;
+  if (phase !== 'seated' && hintEl) hintEl.classList.add('gone');
   function hideHint() { if (hintEl) hintEl.classList.add('gone'); clearTimeout(hintTimer); }
 
   /* ---------- resize ---------- */
@@ -712,21 +969,39 @@ export function initScene(canvas, onHotspot) {
     const intro = REDUCED ? 1 : Math.min(1, (t - startT) / 2.6);
     const ease = 1 - Math.pow(1 - intro, 3);
 
-    if (!userMoved) {
-      cam.az += ((cam.azT + Math.sin(t * 0.11) * 0.05) - cam.az) * (0.02 + 0.04 * ease);
-      cam.el += (cam.elT - cam.el) * 0.03;
-      cam.r += (cam.rT - cam.r) * 0.03;
+    if (phase === 'street') {
+      // first person, standing on the pavement. a little idle sway, nothing else.
+      camera.position.set(
+        SEAT.x + Math.sin(t * 0.5) * 0.04,
+        STAND_Y + Math.sin(t * 0.85) * 0.012,
+        streetZ()
+      );
+      camera.lookAt(LOOK_STREET[0], LOOK_STREET[1], LOOK_STREET[2]);
+    } else if (phase === 'sitting') {
+      const sitT = (performance.now() - sitStart) / 1000;
+      sampleIntro(Math.min(sitT, SIT_END));
+      // you appear once the camera has actually left the seat, part way through
+      // the pull-out, so you never materialise inside the lens
+      const pu = (sitT - (BEAT.walk + BEAT.sit + BEAT.hold)) / BEAT.pull;
+      setYouReveal(Math.max(0, Math.min(1, (pu - 0.28) / 0.42)));
+      if (sitT >= SIT_END) seated();
     } else {
-      cam.az += (cam.azT - cam.az) * 0.08;
-      cam.el += (cam.elT - cam.el) * 0.08;
-      cam.r += (cam.rT - cam.r) * 0.08;
+      if (!userMoved) {
+        cam.az += ((cam.azT + Math.sin(t * 0.11) * 0.05) - cam.az) * (0.02 + 0.04 * ease);
+        cam.el += (cam.elT - cam.el) * 0.03;
+        cam.r += (cam.rT - cam.r) * 0.03;
+      } else {
+        cam.az += (cam.azT - cam.az) * 0.08;
+        cam.el += (cam.elT - cam.el) * 0.08;
+        cam.r += (cam.rT - cam.r) * 0.08;
+      }
+      camera.position.set(
+        target.x + cam.r * Math.cos(cam.el) * Math.sin(cam.az),
+        target.y + cam.r * Math.sin(cam.el) + 0.5,
+        target.z + cam.r * Math.cos(cam.el) * Math.cos(cam.az)
+      );
+      camera.lookAt(target);
     }
-    camera.position.set(
-      target.x + cam.r * Math.cos(cam.el) * Math.sin(cam.az),
-      target.y + cam.r * Math.sin(cam.el) + 0.5,
-      target.z + cam.r * Math.cos(cam.el) * Math.cos(cam.az)
-    );
-    camera.lookAt(target);
 
     if (guideMixer) guideMixer.update(dt);
 
@@ -768,7 +1043,8 @@ export function initScene(canvas, onHotspot) {
     }
 
     updateHover();
-    updatePins();
+    if (phase === 'seated') { updatePins(); updateYouPin(); }
+    else { updateSeatPin(t); updateYouPin(); }
     renderer.render(scene, camera);
   }
   frame();
