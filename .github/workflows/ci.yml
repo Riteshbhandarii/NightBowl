@@ -1,3 +1,20 @@
+# nightbowl CI
+#
+# Four jobs. Each one exists to catch a specific way this site breaks, and the
+# comment above it says which way. If a job fails it prints what broke and what
+# to run locally, not a stack trace.
+#
+# docs/ci.md explains all of this in plain English, including how to reproduce
+# every failure on your own machine.
+#
+# One thing this CI deliberately does NOT do: judge frame rate. The runner has
+# no GPU and falls back to a software rasteriser, so any fps number measured
+# here describes Google's CPU renderer rather than a real device. Gating a
+# merge on that would be theatre. What protects the scene instead is geometry
+# cost (draw calls, triangle count) and the pose assertions, both of which are
+# deterministic and mean the same thing with or without a GPU. Real frame rates
+# come from `npm run baseline` on hardware.
+
 name: CI
 
 on:
@@ -10,24 +27,27 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
-jobs:
-  build-and-smoke:
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    env:
-      # Hosted runners need Chrome's software renderer and cannot use its sandbox.
-      SMOKE_FLAGS: >-
-        --no-sandbox --disable-setuid-sandbox --disable-dev-shm-usage
-        --use-angle=swiftshader --enable-unsafe-swiftshader
-      # Fake credentials prove the built auth route is wired without contacting GitHub.
-      KEYSTATIC_GITHUB_CLIENT_ID: nightbowl-ci-client
-      KEYSTATIC_GITHUB_CLIENT_SECRET: nightbowl-ci-client-secret
-      KEYSTATIC_SECRET: nightbowl-ci-only-secret-not-for-production
-      PUBLIC_KEYSTATIC_GITHUB_APP_SLUG: nightbowl-ci-app
+env:
+  # The hosted runner has no GPU and no usable sandbox.
+  SMOKE_FLAGS: >-
+    --no-sandbox --disable-setuid-sandbox --disable-dev-shm-usage
+    --use-angle=swiftshader --enable-unsafe-swiftshader
+  # Fake credentials prove the built auth route is wired without contacting GitHub.
+  KEYSTATIC_GITHUB_CLIENT_ID: nightbowl-ci-client
+  KEYSTATIC_GITHUB_CLIENT_SECRET: nightbowl-ci-client-secret
+  KEYSTATIC_SECRET: nightbowl-ci-only-secret-not-for-production
+  PUBLIC_KEYSTATIC_GITHUB_APP_SLUG: nightbowl-ci-app
 
+jobs:
+
+  # Catches: code that no longer compiles, a page that stops being generated,
+  # and a JavaScript payload that has quietly grown past its budget.
+  build:
+    name: build - compiles, routes exist, payload within budget
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -36,49 +56,193 @@ jobs:
       - name: Install
         run: npm ci
 
+      - name: Type check
+        run: npm run check
+      - if: failure()
+        run: |
+          echo "::error::Type check failed."
+          echo "The types above are wrong, not the checker. Reproduce with: npm run check"
+
       - name: Build
-        run: npm run check && npm run build
-
-      - name: Check generated routes
-        run: npm run check:build && npm run check:perf
-
-      - name: Serve the production build
+        run: npm run build
+      - if: failure()
         run: |
-          PORT=4321 HOST=127.0.0.1 npm run preview &
-          for i in $(seq 1 60); do
-            curl -sf http://localhost:4321/ >/dev/null && exit 0
-            sleep 1
-          done
-          echo "preview server never came up"
-          exit 1
+          echo "::error::The production build failed."
+          echo "Reproduce with: npm run build"
 
-      # The runner has no GPU, so WebGL needs the software rasteriser. This also
-      # means the scene runs at a low framerate, which is a useful thing to test
-      # against: the intro is driven by wall clock precisely so that it does not
-      # stretch when frames are slow.
-      - name: Smoke test
-        run: npm run smoke
-
-      - name: Production CMS smoke test
-        run: npm run smoke:cms -- --mode production
-
-      - name: Start local CMS
+      - name: Every expected route was generated
+        run: npm run check:build
+      - if: failure()
         run: |
-          npm run dev -- --host 127.0.0.1 --port 4322 &
-          for i in $(seq 1 60); do
-            curl -sf http://localhost:4322/admin/ >/dev/null && exit 0
-            sleep 1
-          done
-          echo "local CMS server never came up"
-          exit 1
+          echo "::error::A page that should exist was not generated."
+          echo "Usually a content file with broken frontmatter, or a route that lost its getStaticPaths."
+          echo "Reproduce with: npm run build && npm run check:build"
 
-      - name: Local editing CMS smoke test
-        run: npm run smoke:cms -- --url http://127.0.0.1:4322 --mode local
+      - name: JavaScript payload is within budget
+        run: npm run check:perf
+      - if: failure()
+        run: |
+          echo "::error::The first-load JavaScript grew past its budget."
+          echo "Something was imported into the page that pulls in more than it looks like."
+          echo "Reproduce with: npm run build && npm run check:perf"
+          echo "The budget lives in scripts/perf-budget.mjs."
 
-      - name: Upload build output on failure
-        if: failure()
+      # Handing the built output to the other jobs is what keeps this workflow
+      # to roughly one build instead of three.
+      - name: Share the build
         uses: actions/upload-artifact@v4
         with:
           name: dist
           path: dist
           retention-days: 5
+
+  # Catches: the 3D scene failing to start, a hand posed through the counter,
+  # a character sunk into a stool, a reach that never touches what it reaches
+  # for, and the cook-to-diner service loop breaking. Also every viewport from
+  # a 280px phone to a 1920px monitor, touch gestures, reduced motion, and the
+  # no-WebGL fallback.
+  scene:
+    name: scene - starts, poses are physical, works on phones
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist
+
+      - name: Serve the production build
+        run: |
+          PORT=4321 HOST=127.0.0.1 npm run preview &
+          for i in $(seq 1 60); do
+            curl -sf http://127.0.0.1:4321/ >/dev/null && exit 0
+            sleep 1
+          done
+          echo "::error::The production server never came up, so nothing could be tested."
+          echo "Reproduce with: npm run build && npm run preview"
+          exit 1
+
+      # The scene runs on the software rasteriser here, which is slow. That is
+      # useful on its own: the walk-in intro is driven by the wall clock exactly
+      # so it does not stretch when frames are slow, and this is where that gets
+      # exercised.
+      - name: Browser smoke test
+        run: npm run smoke
+      - if: failure()
+        run: |
+          echo "::error::A browser check failed. The failing check is named in the log above."
+          echo "Each line starting with FAIL says what was expected and what was measured."
+          echo "Reproduce with:"
+          echo "  npm run build"
+          echo "  npm run preview          # in one terminal"
+          echo "  npm run smoke            # in another"
+
+      - name: NPC pose audit
+        run: npm run audit:npc
+      - if: failure()
+        run: |
+          echo "::error::A character is posed somewhere physically impossible."
+          echo "The log above names the character, the action, the moment in the action,"
+          echo "and how far into the furniture the limb reached."
+          echo "Reproduce with:"
+          echo "  npm run build"
+          echo "  npm run preview          # in one terminal"
+          echo "  npm run audit:npc        # in another"
+          echo "If the new pose is correct and the old assertion was wrong, add the"
+          echo "printed id to scripts/npc-audit-accepted.json with the issue that owns it."
+
+  # Catches: the admin losing its GitHub authentication, or the
+  # draft-preview-publish flow breaking.
+  cms:
+    name: cms - admin still authenticates and publishes
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist
+
+      - name: Serve the production build
+        run: |
+          PORT=4321 HOST=127.0.0.1 npm run preview &
+          for i in $(seq 1 60); do
+            curl -sf http://127.0.0.1:4321/ >/dev/null && exit 0
+            sleep 1
+          done
+          echo "::error::The production server never came up."
+          exit 1
+
+      - name: Production admin requires a real login
+        run: npm run smoke:cms -- --mode production
+      - if: failure()
+        run: |
+          echo "::error::The production admin did not behave correctly."
+          echo "The dangerous version of this failure is the compiled site exposing the"
+          echo "unauthenticated local-file API. Check the named check in the log."
+          echo "Reproduce with: npm run build && npm run preview, then npm run smoke:cms -- --mode production"
+
+      - name: Start the local CMS
+        run: |
+          npm run dev -- --host 127.0.0.1 --port 4322 &
+          for i in $(seq 1 60); do
+            curl -sf http://127.0.0.1:4322/admin/ >/dev/null && exit 0
+            sleep 1
+          done
+          echo "::error::The development server never came up."
+          exit 1
+
+      - name: Local editing works
+        run: npm run smoke:cms -- --url http://127.0.0.1:4322 --mode local
+      - if: failure()
+        run: |
+          echo "::error::Editing content locally is broken."
+          echo "Reproduce with: npm run dev, then npm run smoke:cms -- --url http://127.0.0.1:4322 --mode local"
+
+  # Catches nothing on its own. Reports how long the whole thing took, so the
+  # cost of waiting for CI stays visible instead of being guessed at.
+  summary:
+    name: summary - how long this took
+    needs: [build, scene, cms]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Report total runtime
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          jobs=$(gh api "repos/${{ github.repository }}/actions/runs/${{ github.run_id }}/jobs" --paginate)
+          echo "## CI runtime" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| job | result | duration |" >> $GITHUB_STEP_SUMMARY
+          echo "|---|---|---|" >> $GITHUB_STEP_SUMMARY
+          echo "$jobs" | jq -r '
+            .jobs[]
+            | select(.name != "summary - how long this took")
+            | [ .name,
+                (.conclusion // "running"),
+                (if .completed_at and .started_at
+                 then ((( .completed_at | fromdateiso8601) - (.started_at | fromdateiso8601)) | tostring + "s")
+                 else "-" end) ]
+            | "| " + .[0] + " | " + .[1] + " | " + .[2] + " |"' >> $GITHUB_STEP_SUMMARY
+          started=$(echo "$jobs" | jq -r '[.jobs[].started_at | fromdateiso8601] | min')
+          ended=$(echo "$jobs" | jq -r '[.jobs[] | select(.completed_at) | .completed_at | fromdateiso8601] | max')
+          total=$(( ended - started ))
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Wall clock, first job start to last job finish: ${total}s**" >> $GITHUB_STEP_SUMMARY
+          echo "Total wall clock: ${total}s"
