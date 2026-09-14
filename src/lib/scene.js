@@ -72,6 +72,11 @@ export function initScene(canvas, onHotspot, opts = {}) {
   const norenFlaps = [];
   const diners = [];
   const walkers = [];
+  const DINER_SPECS = [
+    { x: -1.9, facing: -0.2, hair: 0x2a1c12, shirt: 0x6b4a2f, scale: 1.0, build: 1.08, headScale: 0.97 },
+    { x: -0.9, facing: 0.16, hair: 0x14100c, shirt: 0x394a5e, scale: 0.92, build: 0.94, headScale: 1.03 },
+    { x: 1.75, facing: 0.24, hair: 0x3a2a1a, shirt: 0x5a5560, scale: 0.97, build: 1.0, headScale: 1.0 },
+  ];
   // the one stool that is never taken, and the ring that advertises it
   const SEAT = { x: 0.1, z: 1.52 };
   let seatGlowMat = null;
@@ -86,6 +91,10 @@ export function initScene(canvas, onHotspot, opts = {}) {
   let guide = null;
   let guideMixer = null;
   let guideRig = null;
+  let cookingPot = null;
+  let service = null;
+  let serviceBowl = null;
+  let serviceAudit = { started: false, lifted: false, filledCarry: false, completed: false };
 
   /* ---------- helpers ---------- */
   function m(color, o = {}) {
@@ -276,20 +285,35 @@ export function initScene(canvas, onHotspot, opts = {}) {
     potG.add(pos(cyl(0.42, 0.38, 0.5, 0x3d4248, { metal: 0.55, rough: 0.36 }, 28), 0, 0.35, 0));
     potG.add(pos(cyl(0.4, 0.42, 0.07, 0x4a5056, { metal: 0.55, rough: 0.36 }, 28), 0, 0.63, 0));
     potG.add(pos(sph(0.05, 0x2b2f33, { metal: 0.4 }, 10), 0, 0.69, 0));
-    potG.position.set(1.5, 1.09, 0.55);
+    potG.scale.setScalar(0.58);
+    potG.position.set(0.1, 1.02, 0.2);
+    potG.userData.stationX = 0.1;
+    cookingPot = potG;
     g.add(potG);
-    addSteam(new THREE.Vector3(1.5, 1.82, 0.55), 0.34, 9);
-    registerHotspot('menu', LABELS.specialsHotspot, potG, new THREE.Vector3(1.5, 2.05, 0.55));
+    addSteam(new THREE.Vector3(0.1, 1.43, 0.2), 0.2, 7);
+    registerHotspot('menu', LABELS.specialsHotspot, potG, new THREE.Vector3(0.1, 1.64, 0.2));
 
-    [-1.9, -0.9, 1.75].forEach((x, k) => {
+    DINER_SPECS.forEach(({ x }, k) => {
       const z = 1.0;
       const bowl = buildRamenBowl(k === 1);
       bowl.position.set(x, 1.09, z);
       bowl.rotation.y = k * 0.16 - 0.12;
+      bowl.userData.seatX = x;
+      setBowlFill(bowl, [0.34, 0.62, 0.88][k]);
+      const cup = pos(cyl(0.07, 0.055, 0.13, 0xd8c8a5, { rough: 0.86 }, 14), 0.24, 0.11, 0.01);
+      bowl.userData.counterCup = cup;
+      bowl.add(cup);
       ramenBowls.push(bowl);
       g.add(bowl);
-      addSteam(new THREE.Vector3(x, 1.37, z), 0.13, 4);
+      bowl.userData.steam = addSteam(new THREE.Vector3(x, 1.37, z), 0.13, 4);
     });
+
+    // This bowl is the physical prop the cook carries when replacing an empty
+    // one. It is intentionally not part of ramenBowls: that array is the three
+    // meals permanently assigned to the three seats.
+    serviceBowl = buildRamenBowl(false);
+    serviceBowl.visible = false;
+    scene.add(serviceBowl);
 
     const boxG = new THREE.Group();
     boxG.add(pos(box(0.34, 0.3, 0.34, 0xcbb083, { rough: 0.95 }), 0, 0.15, 0));
@@ -344,44 +368,77 @@ export function initScene(canvas, onHotspot, opts = {}) {
     bowl.userData.hero = hero;
     bowl.userData.ingredients = ['bowl', 'broth', 'noodles', 'egg', 'nori', 'chashu', 'spring-onion', 'chopsticks'];
 
-    bowl.add(new THREE.Mesh(geo.bowl, mat.ceramic));
-    bowl.add(pos(new THREE.Mesh(geo.broth, mat.broth), 0, 0.168, 0));
+    const shell = new THREE.Mesh(geo.bowl, mat.ceramic);
+    shell.name = 'bowl';
+    bowl.add(shell);
+    const broth = pos(new THREE.Mesh(geo.broth, mat.broth), 0, 0.168, 0);
+    bowl.userData.broth = broth;
+    bowl.userData.foodParts = [];
+    bowl.add(broth);
 
     const noodleCount = hero ? 4 : 3;
     for (let i = 0; i < noodleCount; i++) {
       const noodle = pos(new THREE.Mesh(geo.noodle, mat.noodle), (i - 1.5) * 0.018, 0.18 + i * 0.002, (i % 2) * 0.018 - 0.01);
       noodle.rotation.x = Math.PI / 2;
       noodle.rotation.z = i * 0.75;
+      noodle.name = 'noodles';
+      bowl.userData.foodParts.push({ mesh: noodle, threshold: 0.12 + i * 0.13 });
       bowl.add(noodle);
     }
 
     const eggWhite = pos(new THREE.Mesh(geo.eggWhite, mat.eggWhite), -0.085, 0.195, 0.035);
     eggWhite.scale.set(0.075, 0.018, 0.057);
+    eggWhite.name = 'egg';
+    bowl.userData.foodParts.push({ mesh: eggWhite, threshold: 0.38 });
     bowl.add(eggWhite);
     const yolk = pos(new THREE.Mesh(geo.yolk, mat.yolk), -0.085, 0.211, 0.035);
     yolk.scale.set(0.032, 0.014, 0.027);
+    yolk.name = 'egg-yolk';
+    bowl.userData.foodParts.push({ mesh: yolk, threshold: 0.38 });
     bowl.add(yolk);
 
     const nori = pos(new THREE.Mesh(geo.nori, mat.nori), 0.105, 0.245, -0.085);
     nori.rotation.y = -0.25;
+    nori.name = 'nori';
+    bowl.userData.foodParts.push({ mesh: nori, threshold: 0.16 });
     bowl.add(nori);
     const pork = pos(new THREE.Mesh(geo.chashu, mat.chashu), 0.06, 0.195, 0.04);
     pork.rotation.z = 0.1;
+    pork.name = 'chashu';
+    bowl.userData.foodParts.push({ mesh: pork, threshold: 0.56 });
     bowl.add(pork);
 
     const onionCount = hero ? 4 : 2;
     for (let i = 0; i < onionCount; i++) {
       const onion = pos(new THREE.Mesh(geo.onion, mat.onion), -0.01 + i * 0.023, 0.202 + i * 0.002, -0.055 + (i % 2) * 0.025);
       onion.rotation.x = Math.PI / 2;
+      onion.name = 'spring-onion';
+      bowl.userData.foodParts.push({ mesh: onion, threshold: 0.22 + i * 0.08 });
       bowl.add(onion);
     }
 
     for (const z of [-0.032, 0.012]) {
       const stick = pos(new THREE.Mesh(geo.chopstick, mat.wood), 0, 0.236, z);
       stick.rotation.y = -0.17;
+      stick.name = 'chopsticks';
+      (bowl.userData.restingChopsticks ||= []).push(stick);
       bowl.add(stick);
     }
+    setBowlFill(bowl, 1);
     return bowl;
+  }
+
+  function setBowlFill(bowl, value) {
+    if (!bowl) return;
+    const fill = Math.max(0, Math.min(1, value));
+    bowl.userData.fill = fill;
+    if (bowl.userData.broth) {
+      bowl.userData.broth.visible = fill > 0.02;
+      bowl.userData.broth.position.y = 0.13 + fill * 0.038;
+      bowl.userData.broth.scale.setScalar(0.82 + fill * 0.18);
+    }
+    for (const part of bowl.userData.foodParts || []) part.mesh.visible = fill > part.threshold;
+    if (bowl.userData.steam) bowl.userData.steam.visible = fill > 0.08;
   }
 
   function addSteam(p, spread, count) {
@@ -533,7 +590,7 @@ export function initScene(canvas, onHotspot, opts = {}) {
       elbow.add(hand);
       sh.add(elbow);
       torso.add(sh);
-      return { sh, elbow };
+      return { sh, elbow, hand };
     };
     const armL = arm(-1), armR = arm(1);
 
@@ -568,7 +625,7 @@ export function initScene(canvas, onHotspot, opts = {}) {
 
   function seatedPose() {
     return {
-      hipY: 0.64, torsoX: 0.08, torsoY: 0, torsoZ: 0,
+      hipY: 0.74, torsoX: 0.08, torsoY: 0, torsoZ: 0,
       headX: 0, headY: 0, headZ: 0,
       lShX: -0.5, lShZ: 0, lElX: 0,
       rShX: -0.7, rShZ: 0, rElX: -1.0,
@@ -608,14 +665,78 @@ export function initScene(canvas, onHotspot, opts = {}) {
 
   // mouth flap: fast, irregular, and only while a line is actually up
   const flap = (tl) => (Math.sin(tl * 17) + Math.sin(tl * 26.3) > 0.1 ? 1 : 0);
+  const ease01 = (v) => {
+    const u = Math.max(0, Math.min(1, v));
+    return u * u * (3 - 2 * u);
+  };
+  const mix = (a, b, u) => a + (b - a) * u;
+
+  // Two-link arm solver in the character's local Y/Z plane. Actions name a
+  // physical destination (bowl, mouth, pot, counter); they never invent a
+  // shoulder angle and hope the hand happens to land somewhere useful.
+  function reachArm(p, side, targetY, targetZ, shoulderZ = 0) {
+    const l1 = 0.24, l2 = 0.245;
+    const dy = targetY - 0.36;
+    const dz = targetZ;
+    const distance = Math.min(l1 + l2 - 0.002, Math.max(0.06, Math.hypot(dy, dz)));
+    const elbow = -Math.acos(Math.max(-1, Math.min(1,
+      (distance * distance - l1 * l1 - l2 * l2) / (2 * l1 * l2)
+    )));
+    const line = Math.atan2(-dz, -dy);
+    const shoulder = line - Math.atan2(l2 * Math.sin(elbow), l1 + l2 * Math.cos(elbow));
+    p[`${side}ShX`] = shoulder;
+    p[`${side}ElX`] = elbow;
+    p[`${side}ShZ`] = shoulderZ;
+  }
+
+  function updateMeal(npc, at) {
+    const ai = npc.userData.ai;
+    const bowl = npc.userData.table?.bowl;
+    ai.biting = false;
+    ai.biteT = 0;
+    if (ai.act !== 'eat' || !bowl) return;
+    if (bowl.userData.fill <= 0.01) {
+      ai.needsService = true;
+      setAct(npc, 'pause', 30);
+      return;
+    }
+    if (!ai.nextBiteAt) ai.nextBiteAt = at + rnd(0.25, 1.1);
+    if (at < ai.nextBiteAt) return;
+    const biteT = at - ai.nextBiteAt;
+    if (biteT >= 4.25) {
+      setBowlFill(bowl, bowl.userData.fill - rnd(0.14, 0.2));
+      ai.nextBiteAt = at + rnd(0.8, 2.2);
+      if (bowl.userData.fill <= 0.01) ai.needsService = true;
+      return;
+    }
+    ai.biting = true;
+    ai.biteT = biteT;
+  }
 
   // ---- seated actions ----
   const SEATED_ACTS = {
-    eat(p, tl) {
-      const s = Math.sin(tl * 2.6) * 0.5 + 0.5;
-      p.rElX = -0.7 - s * 0.7;
-      p.torsoX = 0.08 + s * 0.12;
-      p.headX = s * 0.15;
+    eat(p, tl, npc) {
+      const ai = npc.userData.ai;
+      if (!ai.biting) {
+        p.torsoX = 0.12;
+        p.headX = 0.08;
+        return;
+      }
+      const t = ai.biteT;
+      let lift = 0;
+      if (t < 0.7) lift = 0;
+      else if (t < 1.35) lift = 0;
+      else if (t < 2.15) lift = ease01((t - 1.35) / 0.8);
+      else if (t < 3.0) lift = 1;
+      else if (t < 3.8) lift = 1 - ease01((t - 3.0) / 0.8);
+
+      // Left hand steadies the bowl; right hand takes one deliberate bite.
+      reachArm(p, 'l', 0.40, 0.37, 0.08);
+      reachArm(p, 'r', mix(0.40, 0.575, lift), mix(0.37, 0.14, lift), -0.08);
+      const gathering = t < 1.35 ? ease01(t / 0.7) : 1;
+      p.torsoX = 0.2 - lift * 0.1 + (1 - gathering) * 0.05;
+      p.headX = 0.16 - lift * 0.12;
+      p.mouth = t >= 2.08 && t < 3.08 ? 1 : 0;
     },
     pause(p, tl) {
       p.rElX = -0.85;
@@ -624,12 +745,13 @@ export function initScene(canvas, onHotspot, opts = {}) {
       p.headY = Math.sin(tl * 0.5) * 0.3;
     },
     drink(p, tl) {
-      const lift = Math.sin(Math.min(Math.PI, tl * 1.1));
-      p.lShX = -0.5 - lift * 0.55;
-      p.lElX = -lift * 1.5;
-      p.rShX = -0.7 - lift * 0.3;
-      p.torsoX = 0.08 - lift * 0.06;
-      p.headX = -lift * 0.25;
+      const up = tl < 0.75 ? ease01(tl / 0.75)
+        : tl < 1.8 ? 1
+          : 1 - ease01((tl - 1.8) / 0.75);
+      reachArm(p, 'l', mix(0.37, 0.56, up), mix(0.34, 0.13, up), 0.08);
+      p.torsoX = 0.1 - up * 0.04;
+      p.headX = -up * 0.16;
+      p.mouth = up > 0.9 ? 1 : 0;
     },
     talk(p, tl, npc) {
       p.torsoY = npc.userData.ai.face * 0.5;
@@ -656,29 +778,14 @@ export function initScene(canvas, onHotspot, opts = {}) {
   // ---- cook actions ----
   const COOK_ACTS = {
     stir(p, tl) {
-      const st = tl * 1.9;
-      p.hipY = 0.8 + Math.sin(tl * 1.1) * 0.012;
-      p.torsoX = 0.07 + Math.sin(tl * 1.1) * 0.022 + Math.sin(tl * 0.85) * 0.014;
-      p.torsoY = Math.sin(tl * 0.5) * 0.1;
-      p.headX = 0.15 + Math.sin(tl * 0.9) * 0.05;
-      p.headY = Math.sin(tl * 0.37) * 0.2;
-      p.rShX = -1.0 + Math.sin(st) * 0.1;
-      p.rShZ = -0.12 + Math.cos(st) * 0.12;
-      p.rElX = -0.6 + Math.sin(st + 1.1) * 0.15;
-    },
-    plate(p, tl) {
-      p.torsoX = 0.3;
-      p.headX = 0.42;
-      p.lShX = -1.25; p.lElX = -0.5;
-      p.rShX = -1.2 + Math.sin(tl * 3.4) * 0.16;
-      p.rElX = -0.85 + Math.sin(tl * 4.1) * 0.2;
-    },
-    serve(p, tl) {
-      const push = Math.sin(Math.min(Math.PI, tl * 1.5));
-      p.torsoX = 0.1 + push * 0.22;
-      p.headX = 0.2 + push * 0.12;
-      p.lShX = -1.15 - push * 0.5; p.lElX = -0.35;
-      p.rShX = -1.15 - push * 0.5; p.rElX = -0.3;
+      // The utensil stays in the pot. Only the wrist-sized circular motion moves.
+      const circle = tl * 2.0;
+      reachArm(p, 'l', 0.43 + Math.sin(circle) * 0.018, 0.35 + Math.cos(circle) * 0.018,
+        0.18 + Math.sin(circle) * 0.06);
+      p.torsoX = 0.16;
+      p.torsoY = -0.13;
+      p.headX = 0.26;
+      p.headY = -0.14;
     },
     chat(p, tl) {
       p.torsoX = 0.02;
@@ -693,11 +800,16 @@ export function initScene(canvas, onHotspot, opts = {}) {
     },
     wipe(p, tl) {
       p.torsoX = 0.24;
-      p.torsoY = Math.sin(tl * 2.1) * 0.22;
+      p.torsoY = -0.12;
       p.headX = 0.34;
-      p.rShX = -1.3; p.rElX = -0.4;
-      p.rShZ = Math.sin(tl * 2.1) * 0.3;
-      p.lShX = -0.6; p.lElX = -0.3;
+      reachArm(p, 'r', 0.31, 0.41, Math.sin(tl * 1.7) * 0.18);
+    },
+    serve(p) {
+      // Both hands support the bowl while the body moves along the counter.
+      reachArm(p, 'l', 0.40, 0.31, 0.12);
+      reachArm(p, 'r', 0.40, 0.31, -0.12);
+      p.torsoX = 0.12;
+      p.headX = 0.18;
     },
   };
 
@@ -705,14 +817,13 @@ export function initScene(canvas, onHotspot, opts = {}) {
   // Each NPC picks its own next action on a timer. The director can lock one out
   // of self-selection while a scripted beat is using it.
   const DINER_PLAN = [
-    { act: 'eat', w: 5, dur: [4, 9] },
+    { act: 'eat', w: 5, dur: [12, 20] },
     { act: 'pause', w: 2, dur: [2.5, 4.5] },
     { act: 'drink', w: 1, dur: [2.6, 3.4] },
   ];
   const COOK_PLAN = [
     { act: 'stir', w: 5, dur: [5, 10] },
-    { act: 'plate', w: 2, dur: [3, 5] },
-    { act: 'wipe', w: 1, dur: [3.5, 5.5] },
+    { act: 'wipe', w: 2, dur: [3.5, 5.5] },
   ];
   // function declaration, not a const arrow: initAI calls this during scene
   // construction, which happens above this line.
@@ -732,13 +843,16 @@ export function initScene(canvas, onHotspot, opts = {}) {
       kind, cur: base(), tgt: base(),
       act: kind === 'cook' ? 'stir' : 'eat',
       startedAt: nowSec() - Math.random() * 3, dur: rnd(3, 7),
-      locked: false, face: 0,
+      locked: false, face: 0, needsService: false,
+      nextBiteAt: kind === 'diner' ? nowSec() + rnd(0.2, 1.2) : 0,
+      biting: false, biteT: 0,
     };
   }
   function setAct(npc, act, dur) {
     const ai = npc.userData.ai;
     if (!ai) return;
     ai.act = act; ai.startedAt = nowSec(); ai.dur = dur;
+    if (act === 'eat') ai.nextBiteAt = nowSec() + rnd(0.25, 1.2);
   }
 
   function tickNPC(npc, dt) {
@@ -747,9 +861,10 @@ export function initScene(canvas, onHotspot, opts = {}) {
     let tl = nowSec() - ai.startedAt;
     if (!ai.locked && tl >= ai.dur) {
       const plan = pickPlan(ai.kind === 'cook' ? COOK_PLAN : DINER_PLAN);
-      ai.act = plan.act; ai.startedAt = nowSec(); ai.dur = rnd(plan.dur[0], plan.dur[1]);
+      setAct(npc, ai.needsService ? 'pause' : plan.act, ai.needsService ? 30 : rnd(plan.dur[0], plan.dur[1]));
       tl = 0;
     }
+    if (ai.kind === 'diner') updateMeal(npc, nowSec());
     const base = ai.kind === 'cook' ? standingPose() : seatedPose();
     const fn = (ai.kind === 'cook' ? COOK_ACTS : SEATED_ACTS)[ai.act];
     if (fn) fn(base, tl, npc);
@@ -757,6 +872,113 @@ export function initScene(canvas, onHotspot, opts = {}) {
     // exponential smoothing, framerate independent
     easePose(ai.cur, ai.tgt, 1 - Math.exp(-dt * 7));
     applyPose(npc.userData.rig, ai.cur);
+    if (ai.kind === 'diner') {
+      const table = npc.userData.table;
+      const eating = ai.act === 'eat' && ai.biting;
+      const drinking = ai.act === 'drink';
+      if (table) {
+        table.heldChopsticks.visible = eating;
+        table.noodleLift.visible = eating && ai.biteT >= 1.35 && ai.biteT < 3.15;
+        table.heldCup.visible = drinking;
+        if (table.bowl) {
+          for (const stick of table.bowl.userData.restingChopsticks || []) stick.visible = !eating;
+          if (table.bowl.userData.counterCup) table.bowl.userData.counterCup.visible = !drinking;
+        }
+      }
+    } else if (npc.userData.tools) {
+      npc.userData.tools.ladle.visible = ai.act === 'stir';
+      npc.userData.tools.cloth.visible = ai.act === 'wipe';
+    }
+  }
+
+  function beginService(diner) {
+    if (!guideRig || !serviceBowl || service || beat) return;
+    const bowl = diner.userData.table?.bowl;
+    if (!bowl) return;
+    service = { diner, bowl, startedAt: nowSec(), homeX: 0.45, lifted: false, filled: false, placed: false };
+    serviceAudit = { started: true, lifted: false, filledCarry: false, completed: false };
+    guide.userData.ai.locked = true;
+    diner.userData.ai.locked = true;
+    setAct(guide, 'serve', 6.2);
+    setAct(diner, 'lookUp', 6.2);
+    setBowlFill(serviceBowl, 0);
+    serviceBowl.visible = false;
+  }
+
+  function tickService() {
+    if (!service) {
+      if (phase !== 'seated' || beat) return;
+      const empty = diners.find((d) => d.userData.ai?.needsService);
+      if (empty) beginService(empty);
+      return;
+    }
+    const s = service;
+    const t = nowSec() - s.startedAt;
+    const dinerX = s.diner.position.x;
+    const workX = dinerX + (dinerX < 0 ? 0.28 : -0.28);
+    const potX = cookingPot?.userData.stationX ?? 0.1;
+
+    // The three things that actually change state latch on elapsed time and run
+    // in ascending order, so one slow frame that jumps past a whole phase still
+    // performs every step. Gating them on which branch a frame lands in meant a
+    // skipped frame left the cook walking to the pot empty-handed.
+    if (t >= 1.0 && !s.lifted) {
+      s.bowl.visible = false;
+      serviceBowl.visible = true;
+      setBowlFill(serviceBowl, 0);
+      s.lifted = true;
+      serviceAudit.lifted = true;
+    }
+    if (t >= 2.85 && !s.filled) {
+      setBowlFill(serviceBowl, 1);
+      s.filled = true;
+      // The bowl the cook refills must be the one they are holding, with the
+      // seat left empty: that ordering is the thing worth asserting.
+      serviceAudit.filledCarry = s.lifted && serviceBowl.visible && !s.bowl.visible;
+    }
+    if (t >= 4.8 && !s.placed) {
+      setBowlFill(s.bowl, 1);
+      s.bowl.visible = true;
+      serviceBowl.visible = false;
+      s.placed = true;
+    }
+
+    // Position is a continuous function of t, so it self-corrects after a skip.
+    if (t < 1.0) guide.position.x = mix(s.homeX, workX, ease01(t));
+    else if (t < 1.65) guide.position.x = workX;
+    else if (t < 2.55) guide.position.x = mix(workX, potX + 0.34, ease01((t - 1.65) / 0.9));
+    else if (t < 3.25) guide.position.x = potX + 0.34;
+    else if (t < 4.15) guide.position.x = mix(potX + 0.34, workX, ease01((t - 3.25) / 0.9));
+    else if (t < 4.8) guide.position.x = workX;
+    else guide.position.x = mix(workX, s.homeX, ease01((t - 4.8) / 1.2));
+
+    if (t >= 6.0) {
+      guide.position.x = s.homeX;
+      s.diner.userData.ai.needsService = false;
+      s.diner.userData.ai.locked = false;
+      guide.userData.ai.locked = false;
+      setAct(s.diner, 'eat', rnd(12, 18));
+      setAct(guide, 'stir', rnd(6, 10));
+      serviceAudit.completed = true;
+      service = null;
+      nextBeatAt = nowSec() + rnd(8, 15);
+    }
+  }
+
+  const _handL = new THREE.Vector3(), _handR = new THREE.Vector3();
+  const _carry = new THREE.Vector3(), _seatBowl = new THREE.Vector3();
+  function syncServiceBowl() {
+    if (!service || !serviceBowl?.visible || !guideRig) return;
+    const t = nowSec() - service.startedAt;
+    guide.updateMatrixWorld(true);
+    guideRig.armL.hand.getWorldPosition(_handL);
+    guideRig.armR.hand.getWorldPosition(_handR);
+    _carry.copy(_handL).add(_handR).multiplyScalar(0.5);
+    _carry.y -= 0.035;
+    service.bowl.getWorldPosition(_seatBowl);
+    if (t < 1.65) serviceBowl.position.copy(_seatBowl).lerp(_carry, ease01((t - 1.0) / 0.65));
+    else if (t < 4.15) serviceBowl.position.copy(_carry);
+    else serviceBowl.position.copy(_carry).lerp(_seatBowl, ease01((t - 4.15) / 0.65));
   }
 
   /* ---------- speech ---------- */
@@ -819,17 +1041,16 @@ export function initScene(canvas, onHotspot, opts = {}) {
     if (!seated.length) return;
     const roll = Math.random();
 
-    // 1. the cook plates a bowl and puts it in front of someone
+    // 1. the cook works the pot and acknowledges someone at the counter.
+    // Serving is omitted until a bowl can physically travel with the gesture.
     if (cook && roll < 0.42) {
       const who = seated[(Math.random() * seated.length) | 0];
       who.userData.ai.face = who.position.x < 0 ? 0.5 : -0.5;
-      startBeat([cook, who], 9.2, [
-        { at: 0.0, go: () => setAct(cook, 'plate', 3.4) },
-        { at: 3.4, go: () => { setAct(cook, 'serve', 2.2); setAct(who, 'lookUp', 2.6); } },
-        { at: 4.4, go: () => say(cook, pickLine(CHATTER.cook), 3.2) },
-        { at: 5.8, go: () => setAct(cook, 'chat', 2.0) },
-        { at: 6.2, go: () => setAct(who, 'listen', 2.4) },
-        { at: 8.0, go: () => { setAct(cook, 'stir', 6); setAct(who, 'eat', 7); } },
+      startBeat([cook, who], 7.6, [
+        { at: 0.0, go: () => { setAct(cook, 'stir', 4.2); setAct(who, 'lookUp', 3.4); } },
+        { at: 1.0, go: () => say(cook, pickLine(CHATTER.cook), 3.0) },
+        { at: 4.2, go: () => { setAct(cook, 'wipe', 2.6); setAct(who, 'eat', 5.0); } },
+        { at: 7.0, go: () => setAct(cook, 'stir', 6) },
       ]);
       return;
     }
@@ -885,46 +1106,56 @@ export function initScene(canvas, onHotspot, opts = {}) {
   }
 
   // one person hunched over a bowl, chopsticks in hand
-  function seatedPerson(sp) {
+  function seatedPerson(sp, bowl = null, autonomous = true) {
     const d = buildPerson({
       shirt: sp.shirt, hair: sp.hair,
       scale: sp.scale ?? 0.96, build: sp.build ?? 1, headScale: sp.headScale ?? 1,
     });
-    d.position.set(sp.x, 0, 1.5);
-    d.rotation.y = Math.PI;
+    d.position.set(sp.x, 0, 1.43);
+    d.rotation.y = Math.PI + (sp.facing || 0);
     const r = d.userData.rig;
-    r.hip.position.y = 0.64;
+    r.hip.position.y = 0.74;
     r.legL.hp.rotation.x = -1.5; r.legR.hp.rotation.x = -1.5;
     r.legL.knee.rotation.x = 1.5; r.legR.knee.rotation.x = 1.5;
     r.armL.sh.rotation.x = -0.5; r.armR.sh.rotation.x = -0.7;
     r.armR.elbow.rotation.x = -1.0;
-    const stick = pos(box(0.012, 0.012, 0.16, 0x8a6a3c), 0, -0.24, 0.02);
-    stick.rotation.x = 0.5;
-    r.armR.elbow.add(stick);
-    initAI(d, 'diner', seatedPose);
-    diners.push(d);
+    const heldChopsticks = new THREE.Group();
+    for (const x of [-0.012, 0.012]) {
+      const stick = pos(box(0.009, 0.009, 0.24, 0x8a6a3c), x, -0.02, 0.12);
+      stick.rotation.x = 0.32;
+      heldChopsticks.add(stick);
+    }
+    const noodleLift = pos(cap(0.006, 0.15, 0xe8c26a, { rough: 0.8 }, 6), 0, -0.12, 0.19);
+    noodleLift.rotation.z = 0.08;
+    heldChopsticks.add(noodleLift);
+    heldChopsticks.visible = false;
+    r.armR.hand.add(heldChopsticks);
+    const heldCup = pos(cyl(0.055, 0.045, 0.11, 0xd8c8a5, { rough: 0.86 }, 14), 0, -0.03, 0.06);
+    heldCup.visible = false;
+    r.armL.hand.add(heldCup);
+    d.userData.table = { bowl, heldChopsticks, noodleLift, heldCup };
+    if (autonomous) {
+      initAI(d, 'diner', seatedPose);
+      diners.push(d);
+    }
     scene.add(d);
     return d;
   }
 
   function buildStool(x) {
-    scene.add(pos(cyl(0.17, 0.17, 0.06, 0xb0423a, { rough: 0.7 }, 18), x, 0.56, 1.52));
-    scene.add(pos(cyl(0.03, 0.05, 0.56, 0x2a2018, {}, 10), x, 0.28, 1.52));
+    scene.add(pos(cyl(0.17, 0.17, 0.06, 0xb0423a, { rough: 0.7 }, 18), x, 0.66, 1.43));
+    scene.add(pos(cyl(0.03, 0.05, 0.66, 0x2a2018, {}, 10), x, 0.33, 1.43));
     const g = new THREE.Group();
-    g.position.set(x, 0, 1.52);
+    g.position.set(x, 0, 1.43);
     addBlobShadow(g, 0.46, 0.75);
     scene.add(g);
   }
 
   function buildDiners() {
-    const spots = [
-      { x: -1.9, hair: 0x2a1c12, shirt: 0x6b4a2f, scale: 1.0, build: 1.08, headScale: 0.97 },
-      { x: -0.9, hair: 0x14100c, shirt: 0x394a5e, scale: 0.92, build: 0.94, headScale: 1.03 },
-      { x: 1.75, hair: 0x3a2a1a, shirt: 0x5a5560, scale: 0.97, build: 1.0, headScale: 1.0 },
-    ];
-    spots.forEach((sp, i) => {
+    DINER_SPECS.forEach((sp) => {
       buildStool(sp.x);
-      seatedPerson(sp);
+      const bowl = ramenBowls.find((candidate) => candidate.userData.seatX === sp.x);
+      seatedPerson(sp, bowl);
     });
   }
 
@@ -932,8 +1163,8 @@ export function initScene(canvas, onHotspot, opts = {}) {
   function buildEmptySeat() {
     const g = new THREE.Group();
     g.position.set(SEAT.x, 0, SEAT.z);
-    g.add(pos(cyl(0.17, 0.17, 0.06, 0xb0423a, { rough: 0.7 }, 18), 0, 0.56, 0));
-    g.add(pos(cyl(0.03, 0.05, 0.56, 0x2a2018, {}, 10), 0, 0.28, 0));
+    g.add(pos(cyl(0.17, 0.17, 0.06, 0xb0423a, { rough: 0.7 }, 18), 0, 0.66, 0));
+    g.add(pos(cyl(0.03, 0.05, 0.66, 0x2a2018, {}, 10), 0, 0.33, 0));
     buildYou();
     // a warm ring on the ground so the open stool reads as an invitation
     seatGlowMat = new THREE.MeshBasicMaterial({
@@ -953,7 +1184,7 @@ export function initScene(canvas, onHotspot, opts = {}) {
   function buildYou() {
     you = seatedPerson({
       x: SEAT.x, hair: 0x241a12, shirt: 0x8c4436, scale: 0.99, build: 1.02, headScale: 0.99,
-    });
+    }, null, false);
     you.visible = false;
     you.traverse((n) => {
       if (!n.material) return;
@@ -1036,17 +1267,23 @@ export function initScene(canvas, onHotspot, opts = {}) {
   /* ---------- the cook: GLB if present, stand-in otherwise ---------- */
   function useStandInCook() {
     guide = buildPerson({ shirt: 0xffffff, apron: true, toque: true, skin: 0xd7a173, hair: 0x241a12 });
-    guide.position.set(-0.3, 0, -0.5);
+    guide.position.set(0.45, 0, -0.2);
+    guide.rotation.y = -0.08;
     guideRig = guide.userData.rig;
     // a ladle in the stirring hand, so the motion reads as cooking
-    const ladle = pos(cyl(0.012, 0.012, 0.2, 0x9a8058, {}, 8), 0, -0.26, 0.02);
-    ladle.rotation.x = 0.45;
-    ladle.add(pos(sph(0.045, 0x8d939a, { metal: 0.5, rough: 0.4 }, 10), 0, -0.11, 0.01));
-    guideRig.armR.elbow.add(ladle);
+    const ladle = pos(cyl(0.012, 0.012, 0.32, 0x9a8058, {}, 8), 0, -0.07, 0.12);
+    ladle.rotation.x = 0.32;
+    ladle.add(pos(sph(0.045, 0x8d939a, { metal: 0.5, rough: 0.4 }, 10), 0, -0.18, 0.01));
+    guideRig.armL.hand.add(ladle);
+    const cloth = pos(box(0.16, 0.012, 0.12, 0xd7c9a6, { rough: 1 }), 0, -0.04, 0.08);
+    cloth.rotation.x = 0.16;
+    cloth.visible = false;
+    guideRig.armR.hand.add(cloth);
+    guide.userData.tools = { ladle, cloth };
     addBlobShadow(guide, 0.4, 0.7);
     initAI(guide, 'cook', standingPose);
     scene.add(guide);
-    registerHotspot('guide', LABELS.navigation.guide, guide, new THREE.Vector3(-0.3, 1.7, -0.5));
+    registerHotspot('guide', LABELS.navigation.guide, guide, new THREE.Vector3(0.45, 1.7, -0.2));
     buildPins();
   }
 
@@ -1061,7 +1298,8 @@ export function initScene(canvas, onHotspot, opts = {}) {
         const size = new THREE.Vector3(); bb.getSize(size);
         const s = 1.7 / (size.y || 1.7);
         guide.scale.setScalar(s);
-        guide.position.set(-0.3, 0, -0.5);
+        guide.position.set(0.55, 0, -0.5);
+        guide.rotation.y = -0.22;
         guide.traverse((n) => { if (n.isMesh) { n.castShadow = false; n.frustumCulled = false; } });
         scene.add(guide);
         if (gltf.animations && gltf.animations.length) {
@@ -1070,7 +1308,7 @@ export function initScene(canvas, onHotspot, opts = {}) {
             gltf.animations.find((a) => /idle|breath/i.test(a.name)) || gltf.animations[0];
           guideMixer.clipAction(clip).play();
         }
-        registerHotspot('guide', LABELS.navigation.guide, guide, new THREE.Vector3(-0.3, 1.9, -0.5));
+        registerHotspot('guide', LABELS.navigation.guide, guide, new THREE.Vector3(0.55, 1.9, -0.5));
         buildPins();
       },
       undefined,
@@ -1453,9 +1691,13 @@ export function initScene(canvas, onHotspot, opts = {}) {
       if (guideRig && guide.userData.ai) applyPose(guideRig, guide.userData.ai.cur);
     } else {
       // the director only performs for someone who is actually sitting down
-      if (phase === 'seated') tickDirector();
+      if (phase === 'seated') {
+        tickService();
+        if (!service) tickDirector();
+      }
       for (const d of diners) tickNPC(d, dt);
       if (guideRig && guide.userData.ai) tickNPC(guide, dt);
+      syncServiceBowl();
       updateBubbles();
     }
 
@@ -1499,6 +1741,14 @@ export function initScene(canvas, onHotspot, opts = {}) {
 
   return {
     setBookOpen(v) { bookOpen = v; hideHint(); },
+    testEmptyBowl(index = 0) {
+      const diner = diners[index];
+      const bowl = diner?.userData.table?.bowl;
+      if (!bowl) return false;
+      setBowlFill(bowl, 0);
+      diner.userData.ai.needsService = true;
+      return true;
+    },
 
     // Used by scripts/smoke.mjs. The thing worth catching here is a non-finite
     // value leaking into a rig: it renders as a vanished or mangled character
@@ -1525,15 +1775,54 @@ export function initScene(canvas, onHotspot, opts = {}) {
       return {
         phase,
         diners: diners.length,
+        visitor: !!you,
+        visitorAutonomous: !!you?.userData.ai,
         walkers: walkers.length,
         cook: !!guide,
         hotspots: hotspots.length,
         bubbles: bubbles.length,
         ramenBowls: ramenBowls.length,
-        heroBowls: ramenBowls.filter((bowl) => bowl.userData.hero).length,
-        ramenIngredients: ramenBowls.map((bowl) => bowl.userData.ingredients || []),
+        heroBowls: ramenBowls.filter((b) => b.userData.hero).length,
+        ramenIngredients: ramenBowls.map((b) => b.userData.ingredients || []),
         steamSources: steamGroups.length,
-        steamStyle: steamGroups.every((group) => group.userData.style === 'curling-ribbon'),
+        steamStyle: steamGroups.every((g) => g.userData.style === 'curling-ribbon'),
+        dinerStations: diners.map((diner) => ({
+          seatX: diner.position.x,
+          bowlX: diner.userData.table?.bowl?.position.x,
+          bowlZ: diner.userData.table?.bowl?.position.z,
+          hasHeldChopsticks: !!diner.userData.table?.heldChopsticks,
+          hasCup: !!diner.userData.table?.heldCup && !!diner.userData.table?.bowl?.userData.counterCup,
+        })),
+        dinerActions: diners.map((diner) => ({
+          action: diner.userData.ai?.act,
+          biting: !!diner.userData.ai?.biting,
+          needsService: !!diner.userData.ai?.needsService,
+          fill: diner.userData.table?.bowl?.userData.fill,
+          bowlVisible: !!diner.userData.table?.bowl?.visible,
+          heldChopsticks: !!diner.userData.table?.heldChopsticks?.visible,
+          restingChopsticks: (diner.userData.table?.bowl?.userData.restingChopsticks || [])
+            .some((stick) => stick.visible),
+          heldCup: !!diner.userData.table?.heldCup?.visible,
+          counterCup: !!diner.userData.table?.bowl?.userData.counterCup?.visible,
+        })),
+        cookStationOffset: guide && cookingPot
+          ? Math.abs(guide.position.x - cookingPot.userData.stationX)
+          : null,
+        cookHasWorkingProps: !!guide?.userData.tools?.ladle && !!guide?.userData.tools?.cloth,
+        cookAction: guide?.userData.ai?.act || null,
+        service: service && {
+          active: true,
+          filled: service.filled,
+          placed: service.placed,
+          bowlVisible: !!serviceBowl?.visible,
+          dinerX: service.diner.position.x,
+        },
+        serviceAudit,
+        pot: cookingPot && {
+          x: cookingPot.position.x,
+          y: cookingPot.position.y,
+          scale: cookingPot.scale.x,
+        },
         renderCalls: renderer.info.render.calls,
         triangles: renderer.info.render.triangles,
         nonFinite,
