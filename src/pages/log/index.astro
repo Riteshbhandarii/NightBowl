@@ -33,9 +33,9 @@ const readingTime = (body = '') => Math.max(1, Math.ceil(body.trim().split(/\s+/
               : post.data.title}
           </h2>
           <p>{post.data.excerpt}</p>
-          {post.data.tags.length > 0 && (
+          {(post.data.tags ?? []).length > 0 && (
             <ul class="entry-tags" aria-label="Tags">
-              {post.data.tags.map((tag) => <li>{tag}</li>)}
+              {(post.data.tags ?? []).map((tag) => <li>{tag}</li>)}
             </ul>
           )}
         </li>
