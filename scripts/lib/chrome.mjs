@@ -33,7 +33,12 @@ export function findChrome() {
 /** True when Chrome was asked to rasterise in software (no GPU on the runner). */
 export const softwareRenderer = () => /swiftshader/i.test(process.env.SMOKE_FLAGS || '');
 
-let nextPort = 9600;
+/* A fixed base port is a trap: a Chrome left behind by an earlier run still
+   answers on it, and the next run attaches to that stale browser instead of the
+   one it just spawned. Nothing errors — the flags silently belong to the wrong
+   process. Start from a random base per run, and verify below that the target
+   we attached to is the blank page we asked for. */
+let nextPort = 9200 + Math.floor(Math.random() * 600);
 
 /**
  * Boot Chrome, hand `run` a CDP channel, and always tear the browser down.
@@ -69,6 +74,16 @@ export async function session({ flags = [], width = 1280, height = 800 }, run) {
       const list = await (await fetch(`http://127.0.0.1:${port}/json/list`)).json();
       target = list.find((t) => t.type === 'page');
     } catch { /* not up yet */ }
+  }
+  // A leftover browser from a previous run answers on this port with a page
+  // already navigated somewhere. Refuse it rather than measure the wrong thing.
+  if (target && !/^(about:blank|chrome:\/\/new-tab-page)/.test(target.url || '')) {
+    chrome.kill('SIGKILL');
+    rmSync(profile, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
+    throw new Error(
+      `Port ${port} is already serving a different Chrome (target url ${target.url}).`
+      + ' Close stray headless Chrome processes and run again.'
+    );
   }
   if (!target) {
     chrome.kill('SIGKILL');
