@@ -65,6 +65,9 @@ export function initScene(canvas, onHotspot, opts = {}) {
 
   const hotspots = [];
   const steamGroups = [];
+  const ramenBowls = [];
+  let ramenAssetCache = null;
+  let steamTexture = null;
   const lanternMats = [];
   const norenFlaps = [];
   const diners = [];
@@ -278,11 +281,14 @@ export function initScene(canvas, onHotspot, opts = {}) {
     addSteam(new THREE.Vector3(1.5, 1.82, 0.55), 0.34, 9);
     registerHotspot('menu', LABELS.specialsHotspot, potG, new THREE.Vector3(1.5, 2.05, 0.55));
 
-    [-2.15, -1.5, -0.85].forEach((x, k) => {
-      const z = 0.5 + (k % 2) * 0.12;
-      g.add(pos(cyl(0.19, 0.11, 0.13, 0xe9ddc6, { rough: 0.5 }, 22), x, 1.16, z));
-      g.add(pos(cyl(0.165, 0.16, 0.03, 0xcf9a55, { rough: 0.3 }, 18), x, 1.21, z));
-      addSteam(new THREE.Vector3(x, 1.35, z), 0.13, 4);
+    [-1.9, -0.9, 1.75].forEach((x, k) => {
+      const z = 1.0;
+      const bowl = buildRamenBowl(k === 1);
+      bowl.position.set(x, 1.09, z);
+      bowl.rotation.y = k * 0.16 - 0.12;
+      ramenBowls.push(bowl);
+      g.add(bowl);
+      addSteam(new THREE.Vector3(x, 1.37, z), 0.13, 4);
     });
 
     const boxG = new THREE.Group();
@@ -301,19 +307,116 @@ export function initScene(canvas, onHotspot, opts = {}) {
     scene.add(g);
   }
 
+  function ramenAssets() {
+    if (ramenAssetCache) return ramenAssetCache;
+    const geo = {
+      bowl: new THREE.LatheGeometry([
+        [0.09, 0], [0.145, 0.025], [0.2, 0.13], [0.215, 0.18],
+        [0.19, 0.19], [0.17, 0.145], [0.125, 0.045], [0.09, 0.018],
+      ].map(([r, y]) => new THREE.Vector2(r, y)), 28),
+      broth: new THREE.CylinderGeometry(0.184, 0.184, 0.012, 28),
+      noodle: new THREE.TorusGeometry(0.105, 0.009, 6, 26, Math.PI * 1.7),
+      eggWhite: new THREE.SphereGeometry(1, 14, 10),
+      yolk: new THREE.SphereGeometry(1, 12, 8),
+      nori: new THREE.PlaneGeometry(0.12, 0.15),
+      chashu: new THREE.CylinderGeometry(0.065, 0.065, 0.014, 18),
+      onion: new THREE.TorusGeometry(0.018, 0.0045, 5, 12),
+      chopstick: new THREE.BoxGeometry(0.52, 0.012, 0.012),
+    };
+    const mat = {
+      ceramic: m(0xe8dfcf, { rough: 0.42 }),
+      broth: m(0xb96a2f, { rough: 0.24, emissive: 0x351407, emissiveIntensity: 0.16 }),
+      noodle: m(0xf0cf82, { rough: 0.72 }),
+      eggWhite: m(0xfff4d6, { rough: 0.56 }),
+      yolk: m(0xf2a51f, { rough: 0.38, emissive: 0x3a1600, emissiveIntensity: 0.12 }),
+      nori: m(0x173c2b, { rough: 0.9 }),
+      chashu: m(0xb86650, { rough: 0.72 }),
+      onion: m(0x62a84f, { rough: 0.8 }),
+      wood: m(0x7a4227, { rough: 0.78 }),
+    };
+    ramenAssetCache = { geo, mat };
+    return ramenAssetCache;
+  }
+
+  function buildRamenBowl(hero = false) {
+    const { geo, mat } = ramenAssets();
+    const bowl = new THREE.Group();
+    bowl.userData.hero = hero;
+    bowl.userData.ingredients = ['bowl', 'broth', 'noodles', 'egg', 'nori', 'chashu', 'spring-onion', 'chopsticks'];
+
+    bowl.add(new THREE.Mesh(geo.bowl, mat.ceramic));
+    bowl.add(pos(new THREE.Mesh(geo.broth, mat.broth), 0, 0.168, 0));
+
+    const noodleCount = hero ? 4 : 3;
+    for (let i = 0; i < noodleCount; i++) {
+      const noodle = pos(new THREE.Mesh(geo.noodle, mat.noodle), (i - 1.5) * 0.018, 0.18 + i * 0.002, (i % 2) * 0.018 - 0.01);
+      noodle.rotation.x = Math.PI / 2;
+      noodle.rotation.z = i * 0.75;
+      bowl.add(noodle);
+    }
+
+    const eggWhite = pos(new THREE.Mesh(geo.eggWhite, mat.eggWhite), -0.085, 0.195, 0.035);
+    eggWhite.scale.set(0.075, 0.018, 0.057);
+    bowl.add(eggWhite);
+    const yolk = pos(new THREE.Mesh(geo.yolk, mat.yolk), -0.085, 0.211, 0.035);
+    yolk.scale.set(0.032, 0.014, 0.027);
+    bowl.add(yolk);
+
+    const nori = pos(new THREE.Mesh(geo.nori, mat.nori), 0.105, 0.245, -0.085);
+    nori.rotation.y = -0.25;
+    bowl.add(nori);
+    const pork = pos(new THREE.Mesh(geo.chashu, mat.chashu), 0.06, 0.195, 0.04);
+    pork.rotation.z = 0.1;
+    bowl.add(pork);
+
+    const onionCount = hero ? 4 : 2;
+    for (let i = 0; i < onionCount; i++) {
+      const onion = pos(new THREE.Mesh(geo.onion, mat.onion), -0.01 + i * 0.023, 0.202 + i * 0.002, -0.055 + (i % 2) * 0.025);
+      onion.rotation.x = Math.PI / 2;
+      bowl.add(onion);
+    }
+
+    for (const z of [-0.032, 0.012]) {
+      const stick = pos(new THREE.Mesh(geo.chopstick, mat.wood), 0, 0.236, z);
+      stick.rotation.y = -0.17;
+      bowl.add(stick);
+    }
+    return bowl;
+  }
+
   function addSteam(p, spread, count) {
     const grp = new THREE.Group();
     grp.position.copy(p);
-    const tex = textTexture((c, w, h) => {
-      const rg = c.createRadialGradient(w / 2, h / 2, 0, w / 2, h / 2, w / 2);
-      rg.addColorStop(0, 'rgba(255,255,255,0.5)');
-      rg.addColorStop(1, 'rgba(255,255,255,0)');
-      c.fillStyle = rg; c.fillRect(0, 0, w, h);
-    }, 64, 64);
+    grp.userData.style = 'curling-ribbon';
+    if (!steamTexture) {
+      steamTexture = textTexture((c, w, h) => {
+        c.clearRect(0, 0, w, h);
+        c.lineCap = 'round';
+        c.lineWidth = 13;
+        c.shadowColor = 'rgba(255,245,225,0.62)';
+        c.shadowBlur = 12;
+        c.strokeStyle = 'rgba(255,248,232,0.55)';
+        c.beginPath();
+        c.moveTo(w * 0.52, h);
+        c.bezierCurveTo(w * 0.15, h * 0.72, w * 0.88, h * 0.48, w * 0.42, h * 0.2);
+        c.bezierCurveTo(w * 0.25, h * 0.1, w * 0.62, h * 0.04, w * 0.54, 0);
+        c.stroke();
+      }, 128, 256);
+    }
+    const geometry = new THREE.PlaneGeometry(spread * 1.15, spread * 3.4);
     for (let i = 0; i < count; i++) {
       const q = new THREE.Mesh(
-        new THREE.PlaneGeometry(spread * 1.8, spread * 1.8),
-        new THREE.MeshBasicMaterial({ map: tex, transparent: true, opacity: 0, depthWrite: false })
+        geometry,
+        new THREE.MeshStandardMaterial({
+          map: steamTexture,
+          transparent: true,
+          opacity: 0,
+          depthWrite: false,
+          roughness: 1,
+          color: 0xffead0,
+          emissive: 0x2a1608,
+          emissiveIntensity: 0.2,
+        })
       );
       q.userData.seed = Math.random();
       q.userData.spread = spread;
@@ -321,6 +424,7 @@ export function initScene(canvas, onHotspot, opts = {}) {
     }
     steamGroups.push(grp);
     scene.add(grp);
+    return grp;
   }
 
   /* ---------- articulated stand-in person ---------- */
@@ -1368,10 +1472,12 @@ export function initScene(canvas, onHotspot, opts = {}) {
       for (const q of grp.children) {
         const life = ((t * (REDUCED ? 0.05 : 0.4) + q.userData.seed) % 1);
         q.position.y = life * 0.95;
-        q.position.x = Math.sin((life + q.userData.seed) * 6) * q.userData.spread * 0.45;
-        q.material.opacity = Math.sin(life * Math.PI) * 0.3;
-        q.scale.setScalar(0.5 + life * 1.5);
+        q.position.x = Math.sin((life + q.userData.seed) * Math.PI * 2) * q.userData.spread * 0.42;
+        q.position.z = Math.cos((life * 1.7 + q.userData.seed) * Math.PI * 2) * q.userData.spread * 0.12;
+        q.material.opacity = Math.sin(life * Math.PI) * 0.27;
+        q.scale.set(0.62 + life * 0.65, 0.72 + life * 0.55, 1);
         q.quaternion.copy(camera.quaternion);
+        q.rotateZ(Math.sin((life + q.userData.seed) * Math.PI * 2) * 0.22);
       }
     }
 
@@ -1423,6 +1529,13 @@ export function initScene(canvas, onHotspot, opts = {}) {
         cook: !!guide,
         hotspots: hotspots.length,
         bubbles: bubbles.length,
+        ramenBowls: ramenBowls.length,
+        heroBowls: ramenBowls.filter((bowl) => bowl.userData.hero).length,
+        ramenIngredients: ramenBowls.map((bowl) => bowl.userData.ingredients || []),
+        steamSources: steamGroups.length,
+        steamStyle: steamGroups.every((group) => group.userData.style === 'curling-ribbon'),
+        renderCalls: renderer.info.render.calls,
+        triangles: renderer.info.render.triangles,
         nonFinite,
       };
     },
