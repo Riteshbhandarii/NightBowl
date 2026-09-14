@@ -1377,6 +1377,8 @@ export function initScene(canvas, onHotspot, opts = {}) {
   const cam = { az: 0.78, el: 0.28, r: 9.6, azT: 0.5, elT: 0.17, rT: 6.7 };
   const target = new THREE.Vector3(0, 1.2, 0.25);
   let dragging = false, movedFar = false, dnX = 0, dnY = 0, lX = 0, lY = 0, dnT = 0, userMoved = false;
+  const activePointers = new Map();
+  let pinchDistance = 0;
 
   function orbitPos(az, el, r) {
     return new THREE.Vector3(
@@ -1524,17 +1526,40 @@ export function initScene(canvas, onHotspot, opts = {}) {
   }
   const onDown = (e) => {
     if (phase === 'sitting') return;
+    activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
     ndc(e); // a tap may never fire pointermove, so seed the ray here too
     movedFar = false;
     dnX = lX = e.clientX; dnY = lY = e.clientY; dnT = performance.now();
     if (phase !== 'seated') return; // no orbiting while you are still standing
-    dragging = true; userMoved = true;
+    if (activePointers.size > 1) {
+      const [a, b] = [...activePointers.values()];
+      pinchDistance = Math.hypot(a.x - b.x, a.y - b.y);
+      dragging = false;
+      movedFar = true;
+    } else {
+      dragging = true;
+    }
+    userMoved = true;
     canvas.classList.add('grabbing');
     try { canvas.setPointerCapture(e.pointerId); } catch (x) {}
     hideHint();
   };
   const onMove = (e) => {
     ndc(e);
+    if (activePointers.has(e.pointerId)) {
+      activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    }
+    if (activePointers.size > 1) {
+      const [a, b] = [...activePointers.values()];
+      const distance = Math.hypot(a.x - b.x, a.y - b.y);
+      if (pinchDistance > 0) {
+        cam.rT = Math.max(4.6, Math.min(10, cam.rT - (distance - pinchDistance) * 0.012));
+      }
+      pinchDistance = distance;
+      movedFar = true;
+      userMoved = true;
+      return;
+    }
     if (!dragging) return;
     const dx = e.clientX - lX, dy = e.clientY - lY;
     lX = e.clientX; lY = e.clientY;
@@ -1542,7 +1567,9 @@ export function initScene(canvas, onHotspot, opts = {}) {
     cam.azT -= dx * 0.006;
     cam.elT = Math.max(-0.03, Math.min(0.62, cam.elT - dy * 0.004));
   };
-  const onUp = () => {
+  const onUp = (e) => {
+    activePointers.delete(e.pointerId);
+    pinchDistance = 0;
     dragging = false; canvas.classList.remove('grabbing');
     if (phase === 'sitting') return;
     if (!movedFar && performance.now() - dnT < 500) tryClick();
@@ -1556,7 +1583,12 @@ export function initScene(canvas, onHotspot, opts = {}) {
   canvas.addEventListener('pointerdown', onDown);
   canvas.addEventListener('pointermove', onMove);
   canvas.addEventListener('pointerup', onUp);
-  canvas.addEventListener('pointercancel', () => { dragging = false; canvas.classList.remove('grabbing'); });
+  canvas.addEventListener('pointercancel', (e) => {
+    activePointers.delete(e.pointerId);
+    pinchDistance = 0;
+    dragging = false;
+    canvas.classList.remove('grabbing');
+  });
   canvas.addEventListener('wheel', onWheel, { passive: false });
 
   function rootHotspot(o) {
@@ -1825,6 +1857,8 @@ export function initScene(canvas, onHotspot, opts = {}) {
         },
         renderCalls: renderer.info.render.calls,
         triangles: renderer.info.render.triangles,
+        camera: { azimuth: cam.azT, elevation: cam.elT, radius: cam.rT },
+        touchAction: getComputedStyle(canvas).touchAction,
         nonFinite,
       };
     },

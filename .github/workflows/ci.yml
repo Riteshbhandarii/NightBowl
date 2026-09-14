@@ -14,6 +14,16 @@ jobs:
   build-and-smoke:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    env:
+      # Hosted runners need Chrome's software renderer and cannot use its sandbox.
+      SMOKE_FLAGS: >-
+        --no-sandbox --disable-setuid-sandbox --disable-dev-shm-usage
+        --use-angle=swiftshader --enable-unsafe-swiftshader
+      # Fake credentials prove the built auth route is wired without contacting GitHub.
+      KEYSTATIC_GITHUB_CLIENT_ID: nightbowl-ci-client
+      KEYSTATIC_GITHUB_CLIENT_SECRET: nightbowl-ci-client-secret
+      KEYSTATIC_SECRET: nightbowl-ci-only-secret-not-for-production
+      PUBLIC_KEYSTATIC_GITHUB_APP_SLUG: nightbowl-ci-app
 
     steps:
       - uses: actions/checkout@v4
@@ -27,11 +37,14 @@ jobs:
         run: npm ci
 
       - name: Build
-        run: npm run build
+        run: npm run check && npm run build
 
-      - name: Serve the built site
+      - name: Check generated routes
+        run: npm run check:build && npm run check:perf
+
+      - name: Serve the production build
         run: |
-          npx astro preview --port 4321 &
+          PORT=4321 HOST=127.0.0.1 npm run preview &
           for i in $(seq 1 60); do
             curl -sf http://localhost:4321/ >/dev/null && exit 0
             sleep 1
@@ -44,13 +57,23 @@ jobs:
       # against: the intro is driven by wall clock precisely so that it does not
       # stretch when frames are slow.
       - name: Smoke test
-        env:
-          # no-sandbox: Chrome's sandbox does not work on the hosted runners.
-          # swiftshader: the runner has no GPU, so WebGL needs software rendering.
-          SMOKE_FLAGS: >-
-            --no-sandbox --disable-setuid-sandbox --disable-dev-shm-usage
-            --use-angle=swiftshader --enable-unsafe-swiftshader
         run: npm run smoke
+
+      - name: Production CMS smoke test
+        run: npm run smoke:cms -- --mode production
+
+      - name: Start local CMS
+        run: |
+          npm run dev -- --host 127.0.0.1 --port 4322 &
+          for i in $(seq 1 60); do
+            curl -sf http://localhost:4322/admin/ >/dev/null && exit 0
+            sleep 1
+          done
+          echo "local CMS server never came up"
+          exit 1
+
+      - name: Local editing CMS smoke test
+        run: npm run smoke:cms -- --url http://127.0.0.1:4322 --mode local
 
       - name: Upload build output on failure
         if: failure()
