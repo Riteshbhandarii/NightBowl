@@ -9,7 +9,7 @@ const projects = defineCollection({
     // which course it sits under on the menu
     course: z.enum(['mains', 'small-plates', 'off-menu']),
     tag: z.string(),
-    url: z.string().url().optional(),
+    url: z.string().url().nullable().optional(),
     order: z.number().default(99),
     draftCopy: z.boolean().default(true),
   }),

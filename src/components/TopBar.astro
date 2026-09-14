@@ -1,5 +1,5 @@
 ---
-import { SITE } from '../data/content';
+import { NAVIGATION, SITE } from '../data/content';
 ---
 
 <header class="topbar">
@@ -9,15 +9,15 @@ import { SITE } from '../data/content';
   </a>
 
   <nav class="nav" aria-label="Sections">
-    <button data-open="menu">Menu</button>
-    <button data-open="guide">The Guide</button>
-    <button data-open="log">Kitchen Log</button>
-    <button data-open="bill">The Bill</button>
+    <button data-open="menu">{NAVIGATION.menu}</button>
+    <button data-open="guide">{NAVIGATION.guide}</button>
+    <button data-open="log">{NAVIGATION.log}</button>
+    <button data-open="bill">{NAVIGATION.bill}</button>
     <span class="sep" aria-hidden="true"></span>
-    <button class="icon" id="themeBtn" aria-label="Switch colour theme" title="Switch colour theme">◐</button>
+    <button class="icon" id="themeBtn" aria-label={NAVIGATION.theme} title={NAVIGATION.theme}>◐</button>
   </nav>
 
-  <button class="menu-toggle" data-open="menu" aria-haspopup="dialog">Open menu</button>
+  <button class="menu-toggle" data-open="menu" aria-haspopup="dialog">{NAVIGATION.openMenu}</button>
 </header>
 
 <script>

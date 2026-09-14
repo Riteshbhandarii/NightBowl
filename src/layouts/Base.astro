@@ -5,11 +5,13 @@ interface Props {
   title: string;
   description?: string;
   bodyClass?: string;
+  noindex?: boolean;
 }
 const {
   title,
   description = "Ritesh Bhandari — portfolio and kitchen log, served from a late-night ramen stall.",
   bodyClass,
+  noindex = false,
 } = Astro.props;
 ---
 
@@ -22,6 +24,7 @@ const {
     <meta name="generator" content={Astro.generator} />
     <title>{title}</title>
     <meta name="description" content={description} />
+    {noindex && <meta name="robots" content="noindex, nofollow" />}
     <meta property="og:title" content={title} />
     <meta property="og:description" content={description} />
     <meta property="og:type" content="website" />

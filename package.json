@@ -8,17 +8,31 @@
   "scripts": {
     "dev": "astro dev",
     "build": "astro build",
-    "preview": "astro preview",
+    "check": "astro check",
+    "check:build": "node scripts/check-build.mjs",
+    "preview": "node ./dist/server/entry.mjs",
     "astro": "astro",
-    "smoke": "node scripts/smoke.mjs"
+    "smoke": "node scripts/smoke.mjs",
+    "smoke:cms": "node scripts/cms-smoke.mjs"
   },
   "dependencies": {
+    "@astrojs/markdoc": "^2.0.9",
     "@astrojs/mdx": "^8.0.0",
+    "@astrojs/node": "^11.1.5",
+    "@astrojs/react": "^6.0.5",
     "@astrojs/sitemap": "^3.7.4",
+    "@keystatic/astro": "^6.0.0",
+    "@keystatic/core": "^0.6.9",
     "astro": "^7.3.1",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
     "three": "^0.185.1"
   },
   "allowScripts": {
     "esbuild": true
+  },
+  "devDependencies": {
+    "@astrojs/check": "^0.9.10",
+    "typescript": "^6.0.3"
   }
 }
