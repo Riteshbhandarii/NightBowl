@@ -164,6 +164,10 @@ const lines = [
   'Regenerate after changing a pose. The measurements come from the audit, so',
   'they are the same numbers CI asserts on.',
   '',
+  'One shot per owning issue is committed here. `npm run audit:visual -- --all`',
+  'photographs every distinct defect instead, which is the one to use when',
+  'working through a single issue.',
+  '',
 ];
 for (const w of written) {
   lines.push(`## ${w.check}${w.issue ? ` — ${w.issue}` : ''}`, '');

@@ -8,6 +8,10 @@ a side view, because a limb inside the counter is invisible from the front.
 Regenerate after changing a pose. The measurements come from the audit, so
 they are the same numbers CI asserts on.
 
+One shot per owning issue is committed here. `npm run audit:visual -- --all`
+photographs every distinct defect instead, which is the one to use when
+working through a single issue.
+
 ## geometry interpenetration — #29
 
 **handL is 0.113m inside the pot**

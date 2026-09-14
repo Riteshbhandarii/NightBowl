@@ -134,7 +134,9 @@ scene. Every frame their screen position is recalculated from a point in the
 scene, so they can slide off the thing they label without anything erroring.
 
 The check measures where each pin actually is and where its object actually is,
-both in screen coordinates, at all eight viewports. It fails if a pin stops
+both in screen coordinates, at eleven viewport shapes from 280x653 to
+1920x1080, including the 1440x900 and 390x844 the performance budgets are
+written against. It fails if a pin stops
 overlapping its object, if two pins land on top of each other so one cannot be
 clicked, or if a pin hides while its anchor is plainly on screen.
 
