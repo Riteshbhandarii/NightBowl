@@ -50,6 +50,17 @@ export function initScene(canvas, onHotspot) {
   const norenFlaps = [];
   const diners = [];
   const walkers = [];
+  // the one stool that is never taken, and the ring that advertises it
+  const SEAT = { x: 0.1, z: 1.52 };
+  let seatGlowMat = null;
+  let you = null;          // the figure that takes the stool once you sit
+  let youMats = [];        // their materials, so they can fade in
+  let youReveal = 0;
+  let youPin = null;       // the small "you" tag over their head
+  // intro state: 'street' = first person on the pavement, 'sitting' = the walk-in
+  // and sit move, 'seated' = the scene exactly as it has always behaved.
+  // the walk in plays on every load; only reduced motion skips it.
+  let phase = REDUCED ? 'seated' : 'street';
   let guide = null;
   let guideMixer = null;
   let guideRig = null;
@@ -67,6 +78,9 @@ export function initScene(canvas, onHotspot) {
   const box = (w, h, d, color, o) => new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m(color, o));
   const cyl = (rt, rb, h, color, o, seg = 22) => new THREE.Mesh(new THREE.CylinderGeometry(rt, rb, h, seg), m(color, o));
   const sph = (r, color, o, s = 18) => new THREE.Mesh(new THREE.SphereGeometry(r, s, s - 4), m(color, o));
+  // total height of a capsule is len + 2r; callers pass the total they want
+  const cap = (r, total, color, o, seg = 14) =>
+    new THREE.Mesh(new THREE.CapsuleGeometry(r, Math.max(0.001, total - r * 2), 5, seg), m(color, o));
   const pos = (mesh, x, y, z) => { mesh.position.set(x, y, z); return mesh; };
 
   function textTexture(draw, w, h) {
@@ -85,11 +99,50 @@ export function initScene(canvas, onHotspot) {
   const key = new THREE.DirectionalLight(0xffd7a6, 0.3);
   key.position.set(-5, 7, 6);
   scene.add(key);
+  // rim: sits behind the subjects relative to camera, so it catches the outline of
+  // heads and shoulders. cool, to read against the warm lanterns.
+  const rim = new THREE.DirectionalLight(0x9db4ec, 0.95);
+  rim.position.set(2.5, 5, -7);
+  scene.add(rim);
+
+  let _faceShut = null, _faceOpen = null;  // read by buildPerson during construction
+  let _blobTex = null;
+  function blobTexture() {
+    if (_blobTex) return _blobTex;
+    _blobTex = textTexture((g, w, h) => {
+      const r = w / 2;
+      const grd = g.createRadialGradient(r, r, 0, r, r, r);
+      grd.addColorStop(0, 'rgba(0,0,0,0.9)');
+      grd.addColorStop(0.5, 'rgba(0,0,0,0.4)');
+      grd.addColorStop(1, 'rgba(0,0,0,0)');
+      g.clearRect(0, 0, w, h);
+      g.fillStyle = grd;
+      g.fillRect(0, 0, w, h);
+    }, 128, 128);
+    return _blobTex;
+  }
+  const _blobGeo = new THREE.PlaneGeometry(1, 1);
+  function addBlobShadow(parent, radius, opacity = 0.5, y = 0.012) {
+    const blob = new THREE.Mesh(
+      _blobGeo,
+      new THREE.MeshBasicMaterial({
+        map: blobTexture(), transparent: true, opacity,
+        depthWrite: false, color: 0xffffff,
+      })
+    );
+    blob.rotation.x = -Math.PI / 2;
+    blob.position.y = y;
+    blob.scale.set(radius * 2, radius * 2, 1);
+    blob.renderOrder = -1;
+    parent.add(blob);
+    return blob;
+  }
 
   /* ---------- stall ---------- */
   buildStall();
   buildCounterItems();
   buildDiners();
+  buildEmptySeat();
   buildStreet();
   buildGround();
   loadCook();
@@ -254,29 +307,10 @@ export function initScene(canvas, onHotspot) {
   }
 
   /* ---------- articulated stand-in person ---------- */
-  function buildPerson(opt = {}) {
-    const sc = opt.scale || 1;
-    const skin = opt.skin || 0xcf9264;
-    const shirt = opt.shirt || 0x39506b;
-    const p = new THREE.Group();
-
-    const hip = new THREE.Group();
-    hip.position.y = 0.8;
-    p.add(hip);
-    hip.add(pos(box(0.26, 0.16, 0.16, shirt, { rough: 0.9 }), 0, 0, 0));
-
-    const torso = new THREE.Group();
-    torso.position.y = 0.12;
-    hip.add(torso);
-    torso.add(pos(cyl(0.15, 0.18, 0.44, shirt, { rough: 0.9 }, 14), 0, 0.22, 0));
-    if (opt.apron) torso.add(pos(box(0.3, 0.4, 0.1, 0xe7dcc5, { rough: 1 }), 0, 0.14, 0.1));
-    torso.add(pos(cyl(0.05, 0.05, 0.08, skin, { rough: 1 }, 10), 0, 0.46, 0));
-
-    const head = new THREE.Group();
-    head.position.y = 0.56;
-    torso.add(head);
-    head.add(pos(sph(0.13, skin, { rough: 1 }, 18), 0, 0, 0));
-    const faceTex = textTexture((g, w, h) => {
+  function faceTexture(open) {
+    if (open && _faceOpen) return _faceOpen;
+    if (!open && _faceShut) return _faceShut;
+    const tex = textTexture((g, w, h) => {
       g.clearRect(0, 0, w, h);
       g.fillStyle = '#20140c';
       g.beginPath(); g.arc(w * 0.38, h * 0.46, 7, 0, 7); g.fill();
@@ -284,30 +318,98 @@ export function initScene(canvas, onHotspot) {
       g.strokeStyle = '#20140c'; g.lineWidth = 4; g.lineCap = 'round';
       g.beginPath(); g.moveTo(w * 0.33, h * 0.36); g.lineTo(w * 0.43, h * 0.34); g.stroke();
       g.beginPath(); g.moveTo(w * 0.57, h * 0.34); g.lineTo(w * 0.67, h * 0.36); g.stroke();
-      g.beginPath(); g.moveTo(w * 0.42, h * 0.62); g.quadraticCurveTo(w * 0.5, h * 0.68, w * 0.58, h * 0.62); g.stroke();
+      if (open) {
+        g.beginPath();
+        g.ellipse(w * 0.5, h * 0.645, w * 0.055, h * 0.05, 0, 0, 7);
+        g.fill();
+      } else {
+        g.beginPath();
+        g.moveTo(w * 0.42, h * 0.62);
+        g.quadraticCurveTo(w * 0.5, h * 0.68, w * 0.58, h * 0.62);
+        g.stroke();
+      }
     }, 128, 128);
-    const face = new THREE.Mesh(new THREE.PlaneGeometry(0.2, 0.2), new THREE.MeshBasicMaterial({ map: faceTex, transparent: true }));
-    face.position.set(0, 0.01, 0.122);
+    if (open) _faceOpen = tex; else _faceShut = tex;
+    return tex;
+  }
+
+  function buildPerson(opt = {}) {
+    const sc = opt.scale || 1;
+    const bw = opt.build || 1;   // shoulder / torso width
+    const hs = opt.headScale || 1;
+    const skin = opt.skin || 0xcf9264;
+    const shirt = opt.shirt || 0x39506b;
+    const p = new THREE.Group();
+
+    const hip = new THREE.Group();
+    hip.position.y = 0.8;
+    p.add(hip);
+    const pelvis = pos(sph(0.135 * bw, shirt, { rough: 0.9 }, 16), 0, 0, 0);
+    pelvis.scale.set(1, 0.66, 0.82);
+    hip.add(pelvis);
+
+    const torso = new THREE.Group();
+    torso.position.y = 0.12;
+    hip.add(torso);
+    // lathed profile: waist in, chest out, shoulders back in. a real silhouette
+    // rather than a cylinder, for the same handful of triangles.
+    const prof = [
+      [0.115, 0.00], [0.142, 0.07], [0.163, 0.16], [0.172, 0.25],
+      [0.168, 0.33], [0.150, 0.40], [0.112, 0.45], [0.055, 0.475],
+    ].map(([r, y]) => new THREE.Vector2(r * bw, y));
+    const trunk = new THREE.Mesh(new THREE.LatheGeometry(prof, 20), m(shirt, { rough: 0.9 }));
+    trunk.scale.z = 0.84;
+    torso.add(trunk);
+    const traps = pos(sph(0.155 * bw, shirt, { rough: 0.9 }, 14), 0, 0.4, 0);
+    traps.scale.set(1, 0.42, 0.8);
+    torso.add(traps);
+    if (opt.apron) {
+      // a curved panel wrapping the front of the torso. as a flat box it read as a
+      // slab bolted to his chest once the trunk stopped being a cylinder.
+      const ap = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.15 * bw, 0.182 * bw, 0.44, 18, 1, true, -1.15, 2.3),
+        m(0xe7dcc5, { rough: 1 })
+      );
+      ap.material.side = THREE.DoubleSide;
+      ap.position.set(0, 0.17, 0);
+      ap.scale.z = 0.86;
+      torso.add(ap);
+    }
+    torso.add(pos(cap(0.043, 0.13, skin, { rough: 1 }, 12), 0, 0.5, 0));
+
+    const head = new THREE.Group();
+    head.position.y = 0.585;
+    torso.add(head);
+    head.add(pos(sph(0.105 * hs, skin, { rough: 1 }, 18), 0, 0, 0));
+    const face = new THREE.Mesh(
+      new THREE.PlaneGeometry(0.163, 0.163),
+      new THREE.MeshBasicMaterial({ map: faceTexture(false), transparent: true })
+    );
+    face.position.set(0, 0.008, 0.099 * hs);
     head.add(face);
-    head.add(pos(sph(0.135, opt.hair || 0x1c1510, { rough: 1 }, 16), 0, 0.03, -0.01));
+    head.add(pos(sph(0.111 * hs, opt.hair || 0x1c1510, { rough: 1 }, 16), 0, 0.024, -0.008));
     if (opt.cap != null) {
-      head.add(pos(cyl(0.14, 0.14, 0.06, opt.cap, { rough: 1 }, 14), 0, 0.07, 0));
-      head.add(pos(box(0.24, 0.02, 0.02, opt.cap), 0, 0.05, 0));
+      head.add(pos(cyl(0.115 * hs, 0.115 * hs, 0.05, opt.cap, { rough: 1 }, 14), 0, 0.057, 0));
+      head.add(pos(box(0.196 * hs, 0.017, 0.017, opt.cap), 0, 0.04, 0));
     }
     if (opt.toque) {
-      const toque = pos(cyl(0.16, 0.15, 0.14, 0xf3efe6, { rough: 1 }, 18), 0, 0.13, 0);
-      const puff = pos(sph(0.17, 0xf3efe6, { rough: 1 }, 14), 0, 0.24, 0);
+      const toque = pos(cyl(0.131, 0.123, 0.115, 0xf3efe6, { rough: 1 }, 18), 0, 0.106, 0);
+      const puff = pos(sph(0.139, 0xf3efe6, { rough: 1 }, 14), 0, 0.196, 0);
       puff.scale.y = 0.7;
       head.add(toque); head.add(puff);
     }
 
     const arm = (side) => {
       const sh = new THREE.Group();
-      sh.position.set(side * 0.19, 0.36, 0);
-      sh.add(pos(cyl(0.045, 0.05, 0.24, shirt, { rough: 0.9 }, 8), 0, -0.12, 0));
+      sh.position.set(side * 0.185 * bw, 0.36, 0);
+      sh.add(pos(sph(0.056 * bw, shirt, { rough: 0.9 }, 14), 0, 0, 0)); // deltoid
+      sh.add(pos(cap(0.044, 0.25, shirt, { rough: 0.9 }), 0, -0.12, 0));
       const elbow = new THREE.Group(); elbow.position.y = -0.24;
-      elbow.add(pos(cyl(0.04, 0.045, 0.22, skin, { rough: 1 }, 8), 0, -0.11, 0));
-      elbow.add(pos(box(0.06, 0.07, 0.05, skin, { rough: 1 }), 0, -0.24, 0));
+      elbow.add(pos(sph(0.04, skin, { rough: 1 }, 12), 0, 0, 0)); // elbow joint
+      elbow.add(pos(cap(0.037, 0.23, skin, { rough: 1 }), 0, -0.11, 0));
+      const hand = pos(sph(0.045, skin, { rough: 1 }, 12), 0, -0.245, 0);
+      hand.scale.set(0.78, 1.25, 0.6);
+      elbow.add(hand);
       sh.add(elbow);
       torso.add(sh);
       return { sh, elbow };
@@ -317,17 +419,22 @@ export function initScene(canvas, onHotspot) {
     const leg = (side) => {
       const hp = new THREE.Group();
       hp.position.set(side * 0.09, 0, 0);
-      hp.add(pos(cyl(0.06, 0.065, 0.4, 0x2c2c34, { rough: 0.9 }, 8), 0, -0.2, 0));
+      hp.add(pos(sph(0.075, 0x2c2c34, { rough: 0.9 }, 12), 0, 0, 0)); // hip joint
+      hp.add(pos(cap(0.066, 0.42, 0x2c2c34, { rough: 0.9 }), 0, -0.2, 0));
       const knee = new THREE.Group(); knee.position.y = -0.4;
-      knee.add(pos(cyl(0.05, 0.055, 0.38, 0x2c2c34, { rough: 0.9 }, 8), 0, -0.19, 0));
-      knee.add(pos(box(0.09, 0.05, 0.18, 0x161616, { rough: 0.9 }), 0, -0.38, 0.04));
+      knee.add(pos(sph(0.056, 0x2c2c34, { rough: 0.9 }, 12), 0, 0, 0)); // knee joint
+      knee.add(pos(cap(0.052, 0.4, 0x2c2c34, { rough: 0.9 }), 0, -0.19, 0));
+      const shoe = pos(cap(0.05, 0.19, 0x161616, { rough: 0.9 }, 12), 0, -0.375, 0.03);
+      shoe.rotation.x = Math.PI / 2;
+      shoe.scale.set(0.86, 1, 0.7);
+      knee.add(shoe);
       hp.add(knee);
       hip.add(hp);
       return { hp, knee };
     };
     const legL = leg(-1), legR = leg(1);
 
-    p.userData.rig = { hip, torso, head, armL, armR, legL, legR };
+    p.userData.rig = { hip, torso, head, armL, armR, legL, legR, face };
     p.scale.setScalar(sc);
     return p;
   }
@@ -345,31 +452,104 @@ export function initScene(canvas, onHotspot) {
     rig.torso.rotation.z = Math.sin(phase) * 0.03 * amt;
   }
 
+  // one person hunched over a bowl, chopsticks in hand
+  function seatedPerson(sp, phaseOffset) {
+    const d = buildPerson({
+      shirt: sp.shirt, hair: sp.hair,
+      scale: sp.scale ?? 0.96, build: sp.build ?? 1, headScale: sp.headScale ?? 1,
+    });
+    d.position.set(sp.x, 0, 1.5);
+    d.rotation.y = Math.PI;
+    const r = d.userData.rig;
+    r.hip.position.y = 0.64;
+    r.legL.hp.rotation.x = -1.5; r.legR.hp.rotation.x = -1.5;
+    r.legL.knee.rotation.x = 1.5; r.legR.knee.rotation.x = 1.5;
+    r.armL.sh.rotation.x = -0.5; r.armR.sh.rotation.x = -0.7;
+    r.armR.elbow.rotation.x = -1.0;
+    const stick = pos(box(0.012, 0.012, 0.16, 0x8a6a3c), 0, -0.24, 0.02);
+    stick.rotation.x = 0.5;
+    r.armR.elbow.add(stick);
+    d.userData.phase = phaseOffset;
+    diners.push(d);
+    scene.add(d);
+    return d;
+  }
+
+  function buildStool(x) {
+    scene.add(pos(cyl(0.17, 0.17, 0.06, 0xb0423a, { rough: 0.7 }, 18), x, 0.56, 1.52));
+    scene.add(pos(cyl(0.03, 0.05, 0.56, 0x2a2018, {}, 10), x, 0.28, 1.52));
+    const g = new THREE.Group();
+    g.position.set(x, 0, 1.52);
+    addBlobShadow(g, 0.46, 0.75);
+    scene.add(g);
+  }
+
   function buildDiners() {
     const spots = [
-      { x: -1.9, hair: 0x2a1c12, shirt: 0x6b4a2f },
-      { x: -0.9, hair: 0x14100c, shirt: 0x394a5e },
-      { x: 1.75, hair: 0x3a2a1a, shirt: 0x5a5560 },
+      { x: -1.9, hair: 0x2a1c12, shirt: 0x6b4a2f, scale: 1.0, build: 1.08, headScale: 0.97 },
+      { x: -0.9, hair: 0x14100c, shirt: 0x394a5e, scale: 0.92, build: 0.94, headScale: 1.03 },
+      { x: 1.75, hair: 0x3a2a1a, shirt: 0x5a5560, scale: 0.97, build: 1.0, headScale: 1.0 },
     ];
     spots.forEach((sp, i) => {
-      scene.add(pos(cyl(0.17, 0.17, 0.06, 0xb0423a, { rough: 0.7 }, 18), sp.x, 0.56, 1.52));
-      scene.add(pos(cyl(0.03, 0.05, 0.56, 0x2a2018, {}, 10), sp.x, 0.28, 1.52));
-      const d = buildPerson({ shirt: sp.shirt, hair: sp.hair, scale: 0.96 });
-      d.position.set(sp.x, 0, 1.5);
-      d.rotation.y = Math.PI;
-      const r = d.userData.rig;
-      r.hip.position.y = 0.64;
-      r.legL.hp.rotation.x = -1.5; r.legR.hp.rotation.x = -1.5;
-      r.legL.knee.rotation.x = 1.5; r.legR.knee.rotation.x = 1.5;
-      r.armL.sh.rotation.x = -0.5; r.armR.sh.rotation.x = -0.7;
-      r.armR.elbow.rotation.x = -1.0;
-      const stick = pos(box(0.012, 0.012, 0.16, 0x8a6a3c), 0, -0.24, 0.02);
-      stick.rotation.x = 0.5;
-      r.armR.elbow.add(stick);
-      d.userData.phase = i * 2.1;
-      diners.push(d);
-      scene.add(d);
+      buildStool(sp.x);
+      seatedPerson(sp, i * 2.1);
     });
+  }
+
+  /* ---------- the free stool: the one seat that is always open ---------- */
+  function buildEmptySeat() {
+    const g = new THREE.Group();
+    g.position.set(SEAT.x, 0, SEAT.z);
+    g.add(pos(cyl(0.17, 0.17, 0.06, 0xb0423a, { rough: 0.7 }, 18), 0, 0.56, 0));
+    g.add(pos(cyl(0.03, 0.05, 0.56, 0x2a2018, {}, 10), 0, 0.28, 0));
+    buildYou();
+    // a warm ring on the ground so the open stool reads as an invitation
+    seatGlowMat = new THREE.MeshBasicMaterial({
+      color: 0xffc46b, transparent: true, opacity: 0.22, depthWrite: false, side: THREE.DoubleSide,
+    });
+    seatGlowMat.visible = phase !== 'seated'; // skipped intro: never show the ring
+    const ring = new THREE.Mesh(new THREE.RingGeometry(0.23, 0.36, 32), seatGlowMat);
+    ring.rotation.x = -Math.PI / 2;
+    ring.position.y = 0.016;
+    g.add(ring);
+    scene.add(g);
+    registerHotspot('seat', 'Take a seat', g, new THREE.Vector3(SEAT.x, 1.0, SEAT.z));
+  }
+
+  // you, on the stool. built up front but hidden until the camera leaves you,
+  // so the empty seat is not still empty once you are supposedly sitting in it.
+  function buildYou() {
+    you = seatedPerson(
+      { x: SEAT.x, hair: 0x241a12, shirt: 0x8c4436, scale: 0.99, build: 1.02, headScale: 0.99 },
+      4.4
+    );
+    you.visible = false;
+    you.traverse((n) => {
+      if (!n.material) return;
+      const list = Array.isArray(n.material) ? n.material : [n.material];
+      for (const mat of list) youMats.push({ mat, wasTransparent: mat.transparent, base: mat.opacity });
+    });
+    // a small warm light just off your shoulder. not a spotlight on a stage, more
+    // like the lantern happens to fall on you.
+    setYouReveal(0);
+  }
+
+  // fade in by opacity alone. depthWrite is deliberately never touched: switching it
+  // off for the fade and failing to switch it back leaves the figure with no
+  // self-occlusion, so their far arm shows straight through their chest.
+  function setYouReveal(v) {
+    youReveal = v;
+    if (!you) return;
+    you.visible = v > 0.001;
+    const solid = v >= 0.995;
+    for (const e of youMats) {
+      const wantTransparent = solid ? e.wasTransparent : true;
+      if (e.mat.transparent !== wantTransparent) {
+        e.mat.transparent = wantTransparent;
+        e.mat.needsUpdate = true;
+      }
+      e.mat.opacity = solid ? e.base : e.base * v;
+    }
   }
 
   function buildStreet() {
@@ -390,11 +570,13 @@ export function initScene(canvas, onHotspot) {
     const bld2 = bld.clone(); bld2.position.set(12, 6, -16); bld2.scale.set(0.7, 0.8, 1);
     scene.add(bld2);
 
-    const w1 = buildPerson({ shirt: 0x22202a, hair: 0x101010, scale: 1.02 });
+    const w1 = buildPerson({ shirt: 0x22202a, hair: 0x101010, scale: 1.04, build: 1.07, headScale: 0.96 });
+    addBlobShadow(w1, 0.36, 0.6);
     w1.position.set(-8, 0, 3.4); w1.rotation.y = Math.PI / 2;
     w1.userData.speed = 0.9; w1.userData.range = 8;
     walkers.push(w1); scene.add(w1);
-    const w2 = buildPerson({ shirt: 0x2b2530, hair: 0x1a1a1a, scale: 0.98 });
+    const w2 = buildPerson({ shirt: 0x2b2530, hair: 0x1a1a1a, scale: 0.95, build: 0.92, headScale: 1.02 });
+    addBlobShadow(w2, 0.34, 0.6);
     w2.position.set(7, 0, 4.1); w2.rotation.y = -Math.PI / 2;
     w2.userData.speed = -0.65; w2.userData.range = 7;
     walkers.push(w2); scene.add(w2);
@@ -425,6 +607,7 @@ export function initScene(canvas, onHotspot) {
     guide = buildPerson({ shirt: 0xffffff, apron: true, toque: true, skin: 0xd7a173, hair: 0x241a12 });
     guide.position.set(-0.3, 0, -0.5);
     guideRig = guide.userData.rig;
+    addBlobShadow(guide, 0.4, 0.7);
     scene.add(guide);
     registerHotspot('guide', 'The Guide', guide, new THREE.Vector3(-0.3, 1.7, -0.5));
     buildPins();
@@ -472,7 +655,7 @@ export function initScene(canvas, onHotspot) {
     if (pinsBuilt) return;
     pinsBuilt = true;
     const seen = new Set();
-    [...hotspots].sort((a, b) => (ORDER[a.key] || 9) - (ORDER[b.key] || 9)).forEach((hs) => {
+    [...hotspots].filter((h) => h.key !== 'seat').sort((a, b) => (ORDER[a.key] || 9) - (ORDER[b.key] || 9)).forEach((hs) => {
       if (seen.has(hs.key)) return; // one pin per section (the pot + board both open "menu")
       seen.add(hs.key);
       const el = document.createElement('button');
@@ -516,7 +699,145 @@ export function initScene(canvas, onHotspot) {
   const cam = { az: 0.78, el: 0.28, r: 9.6, azT: 0.5, elT: 0.17, rT: 6.7 };
   const target = new THREE.Vector3(0, 1.2, 0.25);
   let dragging = false, movedFar = false, dnX = 0, dnY = 0, lX = 0, lY = 0, dnT = 0, userMoved = false;
-  if (REDUCED) { cam.az = cam.azT; cam.el = cam.elT; cam.r = cam.rT; }
+
+  function orbitPos(az, el, r) {
+    return new THREE.Vector3(
+      target.x + r * Math.cos(el) * Math.sin(az),
+      target.y + r * Math.sin(el) + 0.5,
+      target.z + r * Math.cos(el) * Math.cos(az)
+    );
+  }
+
+  /* ---------- the intro: stand in the street, take the seat, then hand
+       the camera back to the normal outside view ---------- */
+  // 'street' = first person on the pavement, waiting for the click
+  // 'sitting' = the short walk-in-and-sit move
+  // 'seated'  = everything from here is the scene exactly as it always was
+  let sitStart = 0;
+  let seatPin = null;
+  const _look = new THREE.Vector3();
+
+  // the walk in, in four beats. each one is timed rather than keyframed so the
+  // velocity stays continuous instead of stopping dead at every waypoint.
+  const BEAT = { walk: 2.7, sit: 1.3, hold: 0.4, pull: 1.6 };
+  const SIT_END = BEAT.walk + BEAT.sit + BEAT.hold + BEAT.pull;
+
+  const STAND_Y = 1.60;    // eye height on your feet
+  const APPROACH_Z = 2.30; // where you stop, just behind the stool
+  const SEAT_Y = 1.14;     // eye height once you are down
+  const SEAT_Z = 1.60;
+  const LOOK_STREET = [SEAT.x, 1.88, 0.55];
+  const LOOK_STAND = [SEAT.x, 1.62, 0.45];
+  const LOOK_SEAT = [SEAT.x, 1.30, 0.25];
+
+  let introZ = 6.4;   // where the walk started, captured on click
+  let restPos = null; // the orbit rest pose, captured on click
+
+  if (phase === 'seated') {
+    cam.az = cam.azT; cam.el = cam.elT; cam.r = cam.rT;
+    setYouReveal(1); // reduced motion: you are simply already sitting there
+    buildYouPin();
+  } else if (pinWrap) {
+    pinWrap.style.display = 'none';
+  }
+
+  // a narrow (portrait) window sees far less width, so stand further back or the
+  // stall sign gets cropped. the walk in then just starts from further out.
+  function streetZ() {
+    const a = window.innerWidth / window.innerHeight;
+    return a >= 1 ? 6.4 : Math.min(9.2, 6.4 + (1 - a) * 5.2);
+  }
+
+  const lerp = (a, b, u) => a + (b - a) * u;
+  const easeInOutSine = (u) => -(Math.cos(Math.PI * u) - 1) / 2;
+  const smoothstep = (u) => u * u * (3 - 2 * u);
+  // lowering yourself onto a stool: weight leaves your legs from a standstill, the
+  // seat takes it a fraction past level, then it comes back up. starting and ending
+  // at zero speed is what keeps it from snapping the moment you stop walking.
+  const OVERSHOOT = 1.04;
+  function sitCurve(u) {
+    if (u < 0.74) return OVERSHOOT * smoothstep(u / 0.74);
+    const b = (u - 0.74) / 0.26;
+    return OVERSHOOT + (1 - OVERSHOOT) * smoothstep(b);
+  }
+
+  function sampleIntro(tt) {
+    let px, py, pz, lx, ly, lz;
+
+    if (tt < BEAT.walk) {
+      // walking up. easeInOutSine means you start from rest and slow to a stop,
+      // and sin(pi*u) is exactly that ease's velocity, so the footfalls and the
+      // body sway fade in and out with your actual pace.
+      const u = tt / BEAT.walk;
+      const e = easeInOutSine(u);
+      const pace = Math.sin(u * Math.PI);
+      px = SEAT.x + Math.sin(u * 8.5) * 0.018 * pace;
+      py = STAND_Y + Math.sin(u * 17) * 0.021 * pace;
+      pz = lerp(introZ, APPROACH_Z, e);
+      lx = SEAT.x;
+      ly = lerp(LOOK_STREET[1], LOOK_STAND[1], e);
+      lz = lerp(LOOK_STREET[2], LOOK_STAND[2], e);
+    } else if (tt < BEAT.walk + BEAT.sit) {
+      // sitting. the drop carries weight and dips just past the seat before
+      // settling; the glide forward onto the stool is smooth and separate.
+      const u = (tt - BEAT.walk) / BEAT.sit;
+      const drop = sitCurve(u);
+      const glide = easeInOutSine(u);
+      px = SEAT.x;
+      py = lerp(STAND_Y, SEAT_Y, drop);
+      pz = lerp(APPROACH_Z, SEAT_Z, glide);
+      lx = SEAT.x;
+      ly = lerp(LOOK_STAND[1], LOOK_SEAT[1], drop);
+      lz = lerp(LOOK_STAND[2], LOOK_SEAT[2], glide);
+    } else if (tt < BEAT.walk + BEAT.sit + BEAT.hold) {
+      // a beat, sitting there breathing, before the camera lets go of you
+      const b = tt - BEAT.walk - BEAT.sit;
+      px = SEAT.x;
+      // the breath fades out across the beat so the pull-out starts from exactly
+      // SEAT_Y rather than a few millimetres above it
+      py = SEAT_Y + Math.sin(b * 2.1) * 0.006 * (1 - b / BEAT.hold);
+      pz = SEAT_Z;
+      lx = LOOK_SEAT[0]; ly = LOOK_SEAT[1]; lz = LOOK_SEAT[2];
+    } else {
+      // the camera detaches and pulls out to the view the site has always had
+      const u = Math.min(1, (tt - BEAT.walk - BEAT.sit - BEAT.hold) / BEAT.pull);
+      const e = easeInOutSine(u);
+      px = lerp(SEAT.x, restPos.x, e);
+      py = lerp(SEAT_Y, restPos.y, e);
+      pz = lerp(SEAT_Z, restPos.z, e);
+      lx = lerp(LOOK_SEAT[0], target.x, e);
+      ly = lerp(LOOK_SEAT[1], target.y, e);
+      lz = lerp(LOOK_SEAT[2], target.z, e);
+    }
+
+    camera.position.set(px, py, pz);
+    _look.set(lx, ly, lz);
+    camera.lookAt(_look);
+  }
+
+  function takeSeat() {
+    if (phase !== 'street') return;
+    phase = 'sitting';
+    // wall clock, not accumulated dt: dt is capped at 0.05 so on anything under
+    // 20fps the intro would stretch out well past its 6s instead of just dropping
+    // frames. a timed move should take the same time on every machine.
+    sitStart = performance.now();
+    introZ = streetZ();
+    restPos = orbitPos(cam.azT, cam.elT, cam.rT);
+    seatPin?.classList.add('gone');
+  }
+
+  function seated() {
+    phase = 'seated';
+    cam.az = cam.azT; cam.el = cam.elT; cam.r = cam.rT;
+    if (seatGlowMat) seatGlowMat.visible = false;
+    setYouReveal(1);
+    if (pinWrap) pinWrap.style.display = '';
+    buildYouPin();
+    if (hintEl) { hintEl.classList.remove('gone'); hintTimer = setTimeout(hideHint, 7000); }
+    seatPin?.remove();
+    seatPin = null;
+  }
 
   function ndc(e) {
     const r = canvas.getBoundingClientRect();
@@ -524,8 +845,12 @@ export function initScene(canvas, onHotspot) {
     pointer.y = -((e.clientY - r.top) / r.height) * 2 + 1;
   }
   const onDown = (e) => {
-    dragging = true; movedFar = false; userMoved = true;
+    if (phase === 'sitting') return;
+    ndc(e); // a tap may never fire pointermove, so seed the ray here too
+    movedFar = false;
     dnX = lX = e.clientX; dnY = lY = e.clientY; dnT = performance.now();
+    if (phase !== 'seated') return; // no orbiting while you are still standing
+    dragging = true; userMoved = true;
     canvas.classList.add('grabbing');
     try { canvas.setPointerCapture(e.pointerId); } catch (x) {}
     hideHint();
@@ -541,10 +866,13 @@ export function initScene(canvas, onHotspot) {
   };
   const onUp = () => {
     dragging = false; canvas.classList.remove('grabbing');
+    if (phase === 'sitting') return;
     if (!movedFar && performance.now() - dnT < 500) tryClick();
   };
   const onWheel = (e) => {
-    e.preventDefault(); userMoved = true;
+    e.preventDefault();
+    if (phase !== 'seated') return;
+    userMoved = true;
     cam.rT = Math.max(4.6, Math.min(10, cam.rT + e.deltaY * 0.002));
   };
   canvas.addEventListener('pointerdown', onDown);
@@ -559,21 +887,65 @@ export function initScene(canvas, onHotspot) {
     return null;
   }
   function tryClick() {
-    if (bookOpen) return;
+    if (bookOpen || phase === 'sitting') return;
     raycaster.setFromCamera(pointer, camera);
     const hit = raycaster.intersectObjects(hotspots.map((h) => h.obj), true)[0];
-    if (hit) { const k = rootHotspot(hit.object); if (k) onHotspot(k); }
+    if (!hit) return;
+    const k = rootHotspot(hit.object);
+    if (!k) return;
+    if (k === 'seat') { takeSeat(); return; }
+    if (phase === 'seated') onHotspot(k); // the stall is only clickable once you sit
   }
   function updateHover() {
-    if (bookOpen) { canvas.classList.remove('pointing'); return; }
+    if (bookOpen || phase === 'sitting') { canvas.classList.remove('pointing'); return; }
     raycaster.setFromCamera(pointer, camera);
     const hit = raycaster.intersectObjects(hotspots.map((h) => h.obj), true)[0];
-    canvas.classList.toggle('pointing', !!(hit && rootHotspot(hit.object)));
+    const k = hit && rootHotspot(hit.object);
+    canvas.classList.toggle('pointing', phase === 'street' ? k === 'seat' : !!k);
+  }
+
+  /* ---------- seat prompt ---------- */
+  const _sv = new THREE.Vector3();
+  if (phase === 'street') {
+    seatPin = document.createElement('button');
+    seatPin.className = 'seat-pin';
+    seatPin.innerHTML = '<span class="dot" aria-hidden="true"></span>take a seat';
+    seatPin.setAttribute('aria-label', 'Take the empty seat at the counter');
+    seatPin.addEventListener('click', takeSeat);
+    document.body.appendChild(seatPin);
+  }
+  function buildYouPin() {
+    if (youPin) return;
+    youPin = document.createElement('div');
+    youPin.className = 'you-pin';
+    youPin.textContent = 'you';
+    document.body.appendChild(youPin);
+  }
+  function updateYouPin() {
+    if (!youPin || !you) return;
+    _sv.set(SEAT.x, 1.62, 1.5).project(camera);
+    const off = _sv.z > 1;
+    youPin.style.display = off ? 'none' : '';
+    if (off) return;
+    youPin.style.left = (_sv.x * 0.5 + 0.5) * window.innerWidth + 'px';
+    youPin.style.top = (-_sv.y * 0.5 + 0.5) * window.innerHeight + 'px';
+    youPin.style.opacity = String(youReveal);
+  }
+
+  function updateSeatPin(t) {
+    if (seatGlowMat) {
+      seatGlowMat.opacity = phase === 'street' ? 0.16 + Math.sin(t * 2.4) * 0.1 : 0;
+    }
+    if (!seatPin) return;
+    _sv.set(SEAT.x, 1.02, SEAT.z).project(camera);
+    seatPin.style.left = (_sv.x * 0.5 + 0.5) * window.innerWidth + 'px';
+    seatPin.style.top = (-_sv.y * 0.5 + 0.5) * window.innerHeight + 'px';
   }
 
   /* ---------- hint ---------- */
   const hintEl = document.getElementById('hint');
-  let hintTimer = setTimeout(hideHint, 7000);
+  let hintTimer = phase === 'seated' ? setTimeout(hideHint, 7000) : 0;
+  if (phase !== 'seated' && hintEl) hintEl.classList.add('gone');
   function hideHint() { if (hintEl) hintEl.classList.add('gone'); clearTimeout(hintTimer); }
 
   /* ---------- resize ---------- */
@@ -597,21 +969,39 @@ export function initScene(canvas, onHotspot) {
     const intro = REDUCED ? 1 : Math.min(1, (t - startT) / 2.6);
     const ease = 1 - Math.pow(1 - intro, 3);
 
-    if (!userMoved) {
-      cam.az += ((cam.azT + Math.sin(t * 0.11) * 0.05) - cam.az) * (0.02 + 0.04 * ease);
-      cam.el += (cam.elT - cam.el) * 0.03;
-      cam.r += (cam.rT - cam.r) * 0.03;
+    if (phase === 'street') {
+      // first person, standing on the pavement. a little idle sway, nothing else.
+      camera.position.set(
+        SEAT.x + Math.sin(t * 0.5) * 0.04,
+        STAND_Y + Math.sin(t * 0.85) * 0.012,
+        streetZ()
+      );
+      camera.lookAt(LOOK_STREET[0], LOOK_STREET[1], LOOK_STREET[2]);
+    } else if (phase === 'sitting') {
+      const sitT = (performance.now() - sitStart) / 1000;
+      sampleIntro(Math.min(sitT, SIT_END));
+      // you appear once the camera has actually left the seat, part way through
+      // the pull-out, so you never materialise inside the lens
+      const pu = (sitT - (BEAT.walk + BEAT.sit + BEAT.hold)) / BEAT.pull;
+      setYouReveal(Math.max(0, Math.min(1, (pu - 0.28) / 0.42)));
+      if (sitT >= SIT_END) seated();
     } else {
-      cam.az += (cam.azT - cam.az) * 0.08;
-      cam.el += (cam.elT - cam.el) * 0.08;
-      cam.r += (cam.rT - cam.r) * 0.08;
+      if (!userMoved) {
+        cam.az += ((cam.azT + Math.sin(t * 0.11) * 0.05) - cam.az) * (0.02 + 0.04 * ease);
+        cam.el += (cam.elT - cam.el) * 0.03;
+        cam.r += (cam.rT - cam.r) * 0.03;
+      } else {
+        cam.az += (cam.azT - cam.az) * 0.08;
+        cam.el += (cam.elT - cam.el) * 0.08;
+        cam.r += (cam.rT - cam.r) * 0.08;
+      }
+      camera.position.set(
+        target.x + cam.r * Math.cos(cam.el) * Math.sin(cam.az),
+        target.y + cam.r * Math.sin(cam.el) + 0.5,
+        target.z + cam.r * Math.cos(cam.el) * Math.cos(cam.az)
+      );
+      camera.lookAt(target);
     }
-    camera.position.set(
-      target.x + cam.r * Math.cos(cam.el) * Math.sin(cam.az),
-      target.y + cam.r * Math.sin(cam.el) + 0.5,
-      target.z + cam.r * Math.cos(cam.el) * Math.cos(cam.az)
-    );
-    camera.lookAt(target);
 
     if (guideMixer) guideMixer.update(dt);
 
@@ -629,7 +1019,7 @@ export function initScene(canvas, onHotspot) {
       wk.position.x += wd.speed * dt;
       if (wk.position.x > wd.range) wk.position.x = -wd.range;
       if (wk.position.x < -wd.range) wk.position.x = wd.range;
-      walkRig(wk.userData.rig, t * 3.0 + i, 1);
+      walkRig(wk.userData.rig, t * (2.75 + i * 0.55) + i * 1.9, 1);
     }
 
     for (const grp of steamGroups) {
@@ -653,7 +1043,8 @@ export function initScene(canvas, onHotspot) {
     }
 
     updateHover();
-    updatePins();
+    if (phase === 'seated') { updatePins(); updateYouPin(); }
+    else { updateSeatPin(t); updateYouPin(); }
     renderer.render(scene, camera);
   }
   frame();
