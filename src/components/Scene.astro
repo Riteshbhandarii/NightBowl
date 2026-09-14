@@ -44,7 +44,9 @@ const sceneContent = {
       if (loading) {
         loading.textContent = (loading as HTMLElement).dataset.error || 'Scene unavailable';
         (loading as HTMLElement).style.letterSpacing = '0.08em';
+        loading.classList.add('failed');
       }
+      canvas.hidden = true;
       return;
     }
     // only reachable when explicitly asked for, so normal loads stay clean
