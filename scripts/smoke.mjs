@@ -32,6 +32,80 @@ const URL_ = arg('--url', 'http://localhost:4321');
 let nextPort = 9300 + Math.floor(Math.random() * 600);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+// Navigation pins that do not currently sit on the object they label. Listing
+// them keeps the check honest about what is broken instead of loosening it for
+// everyone: anything not named here has to be on target at every viewport.
+const PIN_DRIFT = {
+  // Anchored ~0.2 world units above the tip box, so the label floats 3-35px
+  // clear of it depending on viewport.
+  bill: 'issue #45',
+};
+const fmtRect = (r) => `${Math.round(r.left)},${Math.round(r.top)}-${Math.round(r.right)},${Math.round(r.bottom)}`;
+
+/* The navigation pins are DOM buttons re-positioned every frame from a point in
+   the 3D scene. They can slide off the object they name, or land on top of each
+   other so one is unclickable, and neither shows up as an error. Called from
+   both viewport passes; the book must be closed, because the scene hides every
+   pin while it is open. */
+async function checkPins({ evaluate }, where) {
+  let pinState = null;
+  for (let i = 0; i < 24 && !pinState?.pins?.length; i++) {
+    pinState = await evaluate('window.__nightbowl.auditPins()');
+    if (!pinState?.pins?.length) await sleep(250);
+  }
+  const shownPins = (pinState?.pins || []).filter((pin) => pin.shown);
+  check(`${where}: navigation pins are built`, (pinState?.pins || []).length > 0);
+  check(`${where}: at least one pin is on screen`, shownPins.length > 0,
+    `shown=${shownPins.map((pin) => pin.key).join(',') || 'none'}`);
+
+  // A pin is anchored when its rect overlaps the screen-space box of the object
+  // it labels. PIN_DRIFT lists the pins that do not manage that today, so the
+  // ones that do cannot quietly join them.
+  for (const pin of shownPins) {
+    const known = PIN_DRIFT[pin.key];
+    if (known) {
+      // Failing when a listed pin comes back on target is deliberate: the entry
+      // is now lying about the scene and has to go, or that pin is unprotected
+      // forever. The message says exactly that rather than reporting a drift
+      // that is no longer there.
+      check(`${where}: ${pin.key} pin drift is unchanged`, !pin.onTarget,
+        pin.onTarget
+          ? `now on target — ${known} looks fixed, delete the ${pin.key} entry from PIN_DRIFT`
+          : `still drifting, tracked by ${known}`);
+    } else {
+      check(`${where}: ${pin.key} pin sits on what it labels`, pin.onTarget,
+        `pin=${fmtRect(pin.rect)} object=${pin.target ? fmtRect(pin.target) : 'off screen'}`);
+    }
+  }
+
+  // Two pins on top of each other means one of them cannot be clicked.
+  const collisions = [];
+  for (let i = 0; i < shownPins.length; i++) {
+    for (let j = i + 1; j < shownPins.length; j++) {
+      const a = shownPins[i].rect, b = shownPins[j].rect;
+      const overlapX = Math.min(a.right, b.right) - Math.max(a.left, b.left);
+      const overlapY = Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top);
+      if (overlapX > 0 && overlapY > 0) {
+        collisions.push(`${shownPins[i].key}/${shownPins[j].key}`
+          + ` ${Math.round(overlapX)}x${Math.round(overlapY)}px`);
+      }
+    }
+  }
+  check(`${where}: pins do not overlap each other`, collisions.length === 0, collisions.join(', '));
+
+  // A hidden pin is only acceptable if its anchor really is outside the band the
+  // scene draws pins in. Hiding one that is plainly on screen would mean a
+  // section became unreachable from the 3D view.
+  const wronglyHidden = (pinState?.pins || []).filter((pin) => {
+    if (pin.shown) return false;
+    const { x, y, behind } = pin.anchor;
+    const w = pinState.viewport.width, h = pinState.viewport.height;
+    return !(behind || x < 40 || x > w - 40 || y < 74 || y > h - 40);
+  });
+  check(`${where}: hidden pins are hidden because they are off screen`, wronglyHidden.length === 0,
+    wronglyHidden.map((pin) => `${pin.key}@${Math.round(pin.anchor.x)},${Math.round(pin.anchor.y)}`).join(', '));
+}
+
 const CANDIDATES = [
   process.env.CHROME_PATH,
   '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
@@ -309,6 +383,9 @@ await session(['--force-prefers-reduced-motion'], async (ctx) => {
     check(`${viewport.name}: scene initialises`, booted);
     if (!booted) continue;
 
+    // Before the book opens: the scene hides every pin while it is open.
+    await checkPins(ctx, viewport.name);
+
     await evaluate(`document.dispatchEvent(new CustomEvent('nb:open', { detail: 'menu' }))`);
     await sleep(100);
     const layout = await evaluate(`(() => {
@@ -506,6 +583,8 @@ await session(['--force-prefers-reduced-motion'], async (ctx) => {
     if (device.touch) {
       check(`${device.name}: canvas owns touch gestures`, shell.touchAction === 'none', shell.touchAction);
     }
+
+    await checkPins(ctx, device.name);
 
     await evaluate(`document.dispatchEvent(new CustomEvent('nb:open', { detail: 'menu' }))`);
     await sleep(30);

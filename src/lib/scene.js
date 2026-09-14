@@ -73,6 +73,30 @@ export function initScene(canvas, onHotspot, opts = {}) {
   const camera = new THREE.PerspectiveCamera(46, window.innerWidth / window.innerHeight, 0.1, 100);
   const raycaster = new THREE.Raycaster();
   const pointer = new THREE.Vector2();
+  // pin audit scratch objects; kept out of the render path
+  const _pinV = new THREE.Vector3();
+  const _pinCorner = new THREE.Vector3();
+  const _pinBox = new THREE.Box3();
+  const _visBox = new THREE.Box3();
+  // World-space bounds of what is actually drawn under `root`. THREE's
+  // Box3.setFromObject includes children with visible === false, which for a
+  // character means whatever they are not currently holding.
+  function visibleBox(root, out) {
+    out.makeEmpty();
+    if (!root || root.visible === false) return out;
+    root.updateWorldMatrix(true, true);
+    const walk = (n) => {
+      if (n.visible === false) return;
+      if (n.isMesh && n.geometry) {
+        if (!n.geometry.boundingBox) n.geometry.computeBoundingBox();
+        _visBox.copy(n.geometry.boundingBox).applyMatrix4(n.matrixWorld);
+        out.union(_visBox);
+      }
+      for (const c of n.children) walk(c);
+    };
+    walk(root);
+    return out;
+  }
   const clock = new THREE.Clock();
 
   const hotspots = [];
@@ -1978,6 +2002,72 @@ export function initScene(canvas, onHotspot, opts = {}) {
         }
       }
       return out;
+    },
+
+    /* Used by scripts/smoke.mjs. A navigation pin is a DOM button positioned
+       every frame from a 3D anchor, so it can drift off the thing it labels
+       without anything throwing. Two failures matter and neither is caught by
+       a "does the element exist" check: the pin stops sitting over its own
+       object, and two pins land on top of each other so one is unclickable.
+
+       "Sits over its own object" is measured as screen-space overlap between
+       the pin rect and the projected bounding box of the object, not as a
+       raycast. A raycast reports the nearest hotspot, so a correctly placed
+       pin whose object is occluded by nearer scenery reads as a miss. */
+    auditPins() {
+      if (!pinWrap) return { available: false, pins: [] };
+      const w = window.innerWidth, h = window.innerHeight;
+      const hidden = pinWrap.style.display === 'none';
+      const toScreen = (v) => {
+        _pinV.copy(v).project(camera);
+        return { x: (_pinV.x * 0.5 + 0.5) * w, y: (-_pinV.y * 0.5 + 0.5) * h, behind: _pinV.z > 1 };
+      };
+      const seen = new Set();
+      const pins = [];
+      for (const hs of hotspots) {
+        if (!hs.el || seen.has(hs.el)) continue;
+        seen.add(hs.el);
+        const r = hs.el.getBoundingClientRect();
+
+        // Every object registered under this key: the menu pin covers both the
+        // board and the pot, and either one counts as the thing it labels.
+        let sx0 = Infinity, sy0 = Infinity, sx1 = -Infinity, sy1 = -Infinity;
+        for (const other of hotspots) {
+          if (other.key !== hs.key) continue;
+          // Not setFromObject: it walks hidden children too, so the cook's
+          // stowed ladle and cloth would inflate the guide hotspot's box and
+          // make the pin look better placed than it is.
+          visibleBox(other.obj, _pinBox);
+          if (_pinBox.isEmpty()) continue;
+          for (let c = 0; c < 8; c++) {
+            _pinCorner.set(
+              c & 1 ? _pinBox.max.x : _pinBox.min.x,
+              c & 2 ? _pinBox.max.y : _pinBox.min.y,
+              c & 4 ? _pinBox.max.z : _pinBox.min.z,
+            );
+            const p = toScreen(_pinCorner);
+            if (p.behind) continue;
+            sx0 = Math.min(sx0, p.x); sy0 = Math.min(sy0, p.y);
+            sx1 = Math.max(sx1, p.x); sy1 = Math.max(sy1, p.y);
+          }
+        }
+        const target = sx1 > sx0 ? { left: sx0, top: sy0, right: sx1, bottom: sy1 } : null;
+        const anchor = toScreen(hs.anchor);
+
+        pins.push({
+          key: hs.key,
+          label: hs.label,
+          shown: !hidden && hs.el.style.display !== 'none',
+          // Where the anchor projects to, reported even while the pin is
+          // hidden, so "hidden" can be shown to be off-screen on purpose.
+          anchor,
+          rect: { left: r.left, top: r.top, right: r.right, bottom: r.bottom },
+          target,
+          onTarget: !!target && r.right > target.left && r.left < target.right
+            && r.bottom > target.top && r.top < target.bottom,
+        });
+      }
+      return { available: true, phase, viewport: { width: w, height: h }, pins };
     },
 
     // Used by scripts/smoke.mjs. The thing worth catching here is a non-finite
