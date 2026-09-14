@@ -147,9 +147,9 @@ const anyDraft =
                   : post.data.title}
               </h3>
               <p>{post.data.excerpt}</p>
-              {post.data.tags.length > 0 && (
+              {(post.data.tags ?? []).length > 0 && (
                 <ul class="log-tags" aria-label="Tags">
-                  {post.data.tags.map((tag) => <li>{tag}</li>)}
+                  {(post.data.tags ?? []).map((tag) => <li>{tag}</li>)}
                 </ul>
               )}
             </article>
