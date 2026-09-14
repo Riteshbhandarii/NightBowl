@@ -747,6 +747,88 @@ await session(['--force-prefers-reduced-motion'], async (ctx) => {
   check('4G: no uncaught exceptions', errors.length === 0, errors.slice(0, 2).join(' | '));
 });
 
+// ---- pass 8: the walk-in must take the same wall-clock time on a slow machine ----
+//
+// The intro is driven by performance.now(), not by accumulated frame deltas,
+// precisely so a slow machine drops frames instead of stretching the animation.
+// dt is capped at 0.05s, so a dt-driven version of the same move would take
+// 6.0 / (fps * 0.05) seconds: about 17s at the 7.2fps measured below.
+//
+// CPU throttling alone does not prove this: the intro is cheap enough that 6x
+// throttling barely moves the frame rate on a machine with a GPU (measured
+// 30.0fps at 1x, 30.1fps at 6x). So each frame is also deliberately starved by
+// burning 80ms on the main thread, which does drive it down. Measured across
+// GPU and software rendering, frame times varied by more than ten times
+// (worst frame 48ms to 587ms) and the duration by 3%.
+// docs/ci.md carries the full table.
+console.log('\nwalk-in intro is wall-clock driven');
+
+const INTRO_NOMINAL_MS = 6000; // BEAT.walk + BEAT.sit + BEAT.hold + BEAT.pull in src/lib/scene.js
+const INTRO_TOLERANCE = 0.15;  // measured worst case was 3.5% over; 15% still rules out any stretch
+
+for (const trial of [
+  { name: 'unthrottled', rate: 1, hogMs: 0 },
+  { name: '6x CPU throttle', rate: 6, hogMs: 0 },
+  { name: '6x CPU throttle with starved frames', rate: 6, hogMs: 80 },
+]) {
+  await session([], async (ctx) => {
+    const { send, evaluate } = ctx;
+    await send('Emulation.setDeviceMetricsOverride', {
+      width: 1440, height: 900, deviceScaleFactor: 1, mobile: false,
+    });
+    const booted = await load(ctx);
+    check(`intro ${trial.name}: scene initialises`, booted);
+    if (!booted) return;
+    await send('Emulation.setCPUThrottlingRate', { rate: trial.rate });
+    await sleep(600);
+
+    const run = await evaluate(`(async () => {
+      const api = window.__nightbowl;
+      const hog = ${trial.hogMs};
+      const seatPin = document.querySelector('.seat-pin');
+      if (!seatPin) return { error: 'no seat prompt to click' };
+      let frames = 0, worst = 0, last = performance.now();
+      let running = true;
+      const tick = () => {
+        const now = performance.now();
+        worst = Math.max(worst, now - last);
+        last = now;
+        frames++;
+        if (hog) { const end = performance.now() + hog; while (performance.now() < end); }
+        if (running) requestAnimationFrame(tick);
+      };
+      requestAnimationFrame(tick);
+      const t0 = performance.now();
+      seatPin.click();
+      await new Promise((done) => {
+        const poll = () => {
+          if (api.selfCheck().phase === 'seated') return done();
+          if (performance.now() - t0 > 30000) return done();
+          setTimeout(poll, 16);
+        };
+        poll();
+      });
+      const ms = performance.now() - t0;
+      running = false;
+      return { ms, fps: frames / (ms / 1000), worst, phase: api.selfCheck().phase };
+    })()`);
+
+    if (run.error) { check(`intro ${trial.name}: can be started`, false, run.error); return; }
+    const drift = Math.abs(run.ms - INTRO_NOMINAL_MS) / INTRO_NOMINAL_MS;
+    const detail = `${Math.round(run.ms)}ms vs ${INTRO_NOMINAL_MS}ms nominal`
+      + ` (${(drift * 100).toFixed(1)}% off) at ${run.fps.toFixed(1)}fps,`
+      + ` worst frame ${Math.round(run.worst)}ms`;
+    check(`intro ${trial.name}: completes`, run.phase === 'seated', `phase=${run.phase} ${detail}`);
+    check(`intro ${trial.name}: takes its wall-clock duration`, drift <= INTRO_TOLERANCE, detail);
+    if (trial.hogMs) {
+      // Without this the previous check proves nothing: it has to be shown that
+      // the frame rate really did collapse during the run being measured.
+      check('intro starvation actually slowed the frames down', run.worst >= 60,
+        `worst frame ${Math.round(run.worst)}ms at ${run.fps.toFixed(1)}fps`);
+    }
+  });
+}
+
 console.log('');
 if (failures.length) {
   console.error(`${failures.length} check(s) failed:`);
