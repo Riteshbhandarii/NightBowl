@@ -91,6 +91,15 @@ export function initScene(canvas, onHotspot, opts = {}) {
   ];
   // the one stool that is never taken, and the ring that advertises it
   const SEAT = { x: 0.1, z: 1.52 };
+  // Top face of a stool seat. buildStool and the seated pose both read this, so
+  // the two cannot drift apart.
+  const SEAT_TOP_Y = 0.69;
+  // Where an idle seated hand goes: on the counter in front of the diner, in
+  // the arm solver's local frame. Tuned against scripts/npc-audit.mjs.
+  const REST_ON_COUNTER = { y: 0.45, z: 0.30 };
+  // Where the cook's hand goes when it should be above the counter rather than
+  // in it, in his arm solver's local frame.
+  const COOK_OVER_COUNTER = { y: 0.42, z: 0.40 };
   let seatGlowMat = null;
   let you = null;          // the figure that takes the stool once you sit
   let youMats = [];        // their materials, so they can fade in
@@ -642,21 +651,32 @@ export function initScene(canvas, onHotspot, opts = {}) {
      with no explicit crossfade code and no snapping.
      ============================================== */
 
-  function seatedPose() {
-    return {
-      hipY: 0.74, torsoX: 0.08, torsoY: 0, torsoZ: 0,
+  // Stool height is fixed but bodies are not, so the hip height that puts a
+  // pelvis on the seat is per person. Without this the smaller diners sit
+  // through the stool: see SEAT_TOP_Y below.
+  function seatedPose(npc) {
+    const p = {
+      hipY: npc?.userData?.seatHipY ?? 0.74, torsoX: 0.08, torsoY: 0, torsoZ: 0,
       headX: 0, headY: 0, headZ: 0,
       lShX: -0.5, lShZ: 0, lElX: 0,
       rShX: -0.7, rShZ: 0, rElX: -1.0,
       mouth: 0,
     };
+    // The idle right arm used to be a pair of fixed joint angles that happened
+    // to put the hand inside the counter. Aim it at the counter surface instead.
+    reachArm(p, 'r', REST_ON_COUNTER.y, REST_ON_COUNTER.z, -0.06);
+    reachArm(p, 'l', REST_ON_COUNTER.y, REST_ON_COUNTER.z, 0.06);
+    return p;
   }
   function standingPose() {
     return {
       hipY: 0.8, torsoX: 0.07, torsoY: 0, torsoZ: 0,
       headX: 0.15, headY: 0, headZ: 0,
-      lShX: -0.95, lShZ: 0.1, lElX: -0.75,
-      rShX: -1.0, rShZ: -0.12, rElX: -0.6,
+      // Reaching forward from behind the counter put the forearms inside it.
+      // At rest the arms hang by his sides, which is also what a cook does
+      // between jobs.
+      lShX: -0.30, lShZ: 0.10, lElX: -0.35,
+      rShX: -0.34, rShZ: -0.12, rElX: -0.30,
       mouth: 0,
     };
   }
@@ -750,15 +770,14 @@ export function initScene(canvas, onHotspot, opts = {}) {
       else if (t < 3.8) lift = 1 - ease01((t - 3.0) / 0.8);
 
       // Left hand steadies the bowl; right hand takes one deliberate bite.
-      reachArm(p, 'l', 0.40, 0.37, 0.08);
-      reachArm(p, 'r', mix(0.40, 0.575, lift), mix(0.37, 0.14, lift), -0.08);
+      reachArm(p, 'l', 0.52, 0.33, 0.08);
+      reachArm(p, 'r', mix(0.47, 0.60, lift), mix(0.37, 0.14, lift), -0.08 - lift * 0.18);
       const gathering = t < 1.35 ? ease01(t / 0.7) : 1;
       p.torsoX = 0.2 - lift * 0.1 + (1 - gathering) * 0.05;
       p.headX = 0.16 - lift * 0.12;
       p.mouth = t >= 2.08 && t < 3.08 ? 1 : 0;
     },
     pause(p, tl) {
-      p.rElX = -0.85;
       p.torsoX = 0.06 + Math.sin(tl * 0.9) * 0.02;
       p.headX = 0.05;
       p.headY = Math.sin(tl * 0.5) * 0.3;
@@ -776,8 +795,8 @@ export function initScene(canvas, onHotspot, opts = {}) {
       p.torsoY = npc.userData.ai.face * 0.5;
       p.headY = npc.userData.ai.face * 0.7;
       p.headX = Math.sin(tl * 3.1) * 0.06;
-      p.rShX = -0.55 + Math.sin(tl * 2.2) * 0.18;
-      p.rElX = -0.75 + Math.sin(tl * 2.9) * 0.25;
+      reachArm(p, 'r', REST_ON_COUNTER.y + 0.06 + Math.sin(tl * 2.2) * 0.05,
+        REST_ON_COUNTER.z - 0.02 + Math.sin(tl * 2.9) * 0.03, -0.06);
       p.mouth = flap(tl);
     },
     listen(p, tl, npc) {
@@ -785,12 +804,10 @@ export function initScene(canvas, onHotspot, opts = {}) {
       p.headY = npc.userData.ai.face * 0.65;
       // a nod every couple of seconds
       p.headX = Math.max(0, Math.sin(tl * 1.4)) * 0.16;
-      p.rElX = -0.9;
     },
     lookUp(p, tl) {
       p.headX = -0.16;
       p.torsoX = 0.02;
-      p.rElX = -0.9;
     },
   };
 
@@ -799,7 +816,7 @@ export function initScene(canvas, onHotspot, opts = {}) {
     stir(p, tl) {
       // The utensil stays in the pot. Only the wrist-sized circular motion moves.
       const circle = tl * 2.0;
-      reachArm(p, 'l', 0.43 + Math.sin(circle) * 0.018, 0.35 + Math.cos(circle) * 0.018,
+      reachArm(p, 'l', 0.55 + Math.sin(circle) * 0.018, 0.35 + Math.cos(circle) * 0.018,
         0.18 + Math.sin(circle) * 0.06);
       p.torsoX = 0.16;
       p.torsoY = -0.13;
@@ -811,10 +828,8 @@ export function initScene(canvas, onHotspot, opts = {}) {
       p.torsoY = Math.sin(tl * 0.7) * 0.12;
       p.headX = -0.05 + Math.sin(tl * 2.6) * 0.05;
       p.headY = Math.sin(tl * 0.9) * 0.16;
-      p.lShX = -0.7; p.lElX = -0.5;
-      p.rShX = -0.85 + Math.sin(tl * 2.4) * 0.22;
-      p.rShZ = -0.2 + Math.cos(tl * 1.7) * 0.16;
-      p.rElX = -0.9 + Math.sin(tl * 3.1) * 0.3;
+      reachArm(p, 'r', COOK_OVER_COUNTER.y + Math.sin(tl * 2.4) * 0.05,
+        COOK_OVER_COUNTER.z + Math.sin(tl * 3.1) * 0.04, -0.2 + Math.cos(tl * 1.7) * 0.16);
       p.mouth = flap(tl);
     },
     wipe(p, tl) {
@@ -825,8 +840,8 @@ export function initScene(canvas, onHotspot, opts = {}) {
     },
     serve(p) {
       // Both hands support the bowl while the body moves along the counter.
-      reachArm(p, 'l', 0.40, 0.31, 0.12);
-      reachArm(p, 'r', 0.40, 0.31, -0.12);
+      reachArm(p, 'l', 0.60, 0.31, 0.12);
+      reachArm(p, 'r', 0.60, 0.31, -0.12);
       p.torsoX = 0.12;
       p.headX = 0.18;
     },
@@ -884,7 +899,7 @@ export function initScene(canvas, onHotspot, opts = {}) {
       tl = 0;
     }
     if (ai.kind === 'diner') updateMeal(npc, nowSec());
-    const base = ai.kind === 'cook' ? standingPose() : seatedPose();
+    const base = ai.kind === 'cook' ? standingPose() : seatedPose(npc);
     const fn = (ai.kind === 'cook' ? COOK_ACTS : SEATED_ACTS)[ai.act];
     if (fn) fn(base, tl, npc);
     ai.tgt = base;
@@ -1133,7 +1148,14 @@ export function initScene(canvas, onHotspot, opts = {}) {
     d.position.set(sp.x, 0, 1.43);
     d.rotation.y = Math.PI + (sp.facing || 0);
     const r = d.userData.rig;
-    r.hip.position.y = 0.74;
+    // Sit the pelvis on the seat instead of through it. The pelvis is a sphere
+    // of radius 0.135*build squashed to 0.66 in y, and the whole person is
+    // scaled, so the hip height that lands its underside on the seat differs
+    // per character.
+    const sc = sp.scale ?? 0.96;
+    const pelvisHalf = 0.135 * (sp.build ?? 1) * 0.66;
+    d.userData.seatHipY = SEAT_TOP_Y / sc + pelvisHalf;
+    r.hip.position.y = d.userData.seatHipY;
     r.legL.hp.rotation.x = -1.5; r.legR.hp.rotation.x = -1.5;
     r.legL.knee.rotation.x = 1.5; r.legR.knee.rotation.x = 1.5;
     r.armL.sh.rotation.x = -0.5; r.armR.sh.rotation.x = -0.7;
@@ -1162,11 +1184,11 @@ export function initScene(canvas, onHotspot, opts = {}) {
   }
 
   function buildStool(x) {
-    const seat = pos(cyl(0.17, 0.17, 0.06, 0xb0423a, { rough: 0.7 }, 18), x, 0.66, 1.43);
+    const seat = pos(cyl(0.17, 0.17, 0.06, 0xb0423a, { rough: 0.7 }, 18), x, SEAT_TOP_Y - 0.03, 1.43);
     seat.userData.seatX = x;
     stoolSeats.push(seat);
     scene.add(seat);
-    scene.add(pos(cyl(0.03, 0.05, 0.66, 0x2a2018, {}, 10), x, 0.33, 1.43));
+    scene.add(pos(cyl(0.03, 0.05, SEAT_TOP_Y - 0.03, 0x2a2018, {}, 10), x, (SEAT_TOP_Y - 0.03) / 2, 1.43));
     const g = new THREE.Group();
     g.position.set(x, 0, 1.43);
     addBlobShadow(g, 0.46, 0.75);
@@ -1185,8 +1207,8 @@ export function initScene(canvas, onHotspot, opts = {}) {
   function buildEmptySeat() {
     const g = new THREE.Group();
     g.position.set(SEAT.x, 0, SEAT.z);
-    g.add(pos(cyl(0.17, 0.17, 0.06, 0xb0423a, { rough: 0.7 }, 18), 0, 0.66, 0));
-    g.add(pos(cyl(0.03, 0.05, 0.66, 0x2a2018, {}, 10), 0, 0.33, 0));
+    g.add(pos(cyl(0.17, 0.17, 0.06, 0xb0423a, { rough: 0.7 }, 18), 0, SEAT_TOP_Y - 0.03, 0));
+    g.add(pos(cyl(0.03, 0.05, SEAT_TOP_Y - 0.03, 0x2a2018, {}, 10), 0, (SEAT_TOP_Y - 0.03) / 2, 0));
     buildYou();
     // a warm ring on the ground so the open stool reads as an invitation
     seatGlowMat = new THREE.MeshBasicMaterial({
@@ -1293,9 +1315,9 @@ export function initScene(canvas, onHotspot, opts = {}) {
     guide.rotation.y = -0.08;
     guideRig = guide.userData.rig;
     // a ladle in the stirring hand, so the motion reads as cooking
-    const ladle = pos(cyl(0.012, 0.012, 0.32, 0x9a8058, {}, 8), 0, -0.07, 0.12);
+    const ladle = pos(cyl(0.012, 0.012, 0.46, 0x9a8058, {}, 8), 0, -0.14, 0.12);
     ladle.rotation.x = 0.32;
-    ladle.add(pos(sph(0.045, 0x8d939a, { metal: 0.5, rough: 0.4 }, 10), 0, -0.18, 0.01));
+    ladle.add(pos(sph(0.045, 0x8d939a, { metal: 0.5, rough: 0.4 }, 10), 0, -0.25, 0.01));
     guideRig.armL.hand.add(ladle);
     const cloth = pos(box(0.16, 0.012, 0.12, 0xd7c9a6, { rough: 1 }), 0, -0.04, 0.08);
     cloth.rotation.x = 0.16;
@@ -1861,7 +1883,7 @@ export function initScene(canvas, onHotspot, opts = {}) {
       // sweep has to move that clock to see the whole reach-hold-return arc.
       if (act === 'eat') { ai.biting = true; ai.biteT = tl; }
 
-      const pose = kind === 'cook' ? standingPose() : seatedPose();
+      const pose = kind === 'cook' ? standingPose() : seatedPose(npc);
       fn(pose, tl, npc);
       applyPose(rig, pose);
 
@@ -1880,10 +1902,28 @@ export function initScene(canvas, onHotspot, opts = {}) {
       scene.updateMatrixWorld(true);
       const v = new THREE.Vector3();
       const w = (o) => (o ? (o.getWorldPosition(v), { x: v.x, y: v.y, z: v.z }) : null);
-      const b = (o) => {
+      // Box3.setFromObject walks hidden children too, so a stowed ladle would
+      // count as part of the arm holding it. Walk only what is actually drawn,
+      // and allow a subtree to be left out so a limb can be measured without
+      // the prop in its hand.
+      const _bb = new THREE.Box3();
+      const b = (o, skip = null) => {
         if (!o || o.visible === false) return null;
-        const box = new THREE.Box3().setFromObject(o);
-        if (box.isEmpty() || !Number.isFinite(box.min.x)) return null;
+        o.updateWorldMatrix(true, true);
+        const box = new THREE.Box3();
+        let found = false;
+        const walk = (n) => {
+          if (n === skip || n.visible === false) return;
+          if (n.isMesh && n.geometry) {
+            if (!n.geometry.boundingBox) n.geometry.computeBoundingBox();
+            _bb.copy(n.geometry.boundingBox).applyMatrix4(n.matrixWorld);
+            box.union(_bb);
+            found = true;
+          }
+          for (const c of n.children) walk(c);
+        };
+        walk(o);
+        if (!found || box.isEmpty() || !Number.isFinite(box.min.x)) return null;
         return {
           min: { x: box.min.x, y: box.min.y, z: box.min.z },
           max: { x: box.max.x, y: box.max.y, z: box.max.z },
@@ -1909,7 +1949,8 @@ export function initScene(canvas, onHotspot, opts = {}) {
         boxes: {
           body: b(npc),
           handL: b(rig.armL.hand), handR: b(rig.armR.hand),
-          forearmL: b(rig.armL.elbow), forearmR: b(rig.armR.elbow),
+          forearmL: b(rig.armL.elbow, rig.armL.hand),
+          forearmR: b(rig.armR.elbow, rig.armR.hand),
           pelvis: b(rig.pelvis),
           heldChopsticks: table ? b(table.heldChopsticks) : null,
           heldCup: table ? b(table.heldCup) : null,
@@ -2014,6 +2055,9 @@ export function initScene(canvas, onHotspot, opts = {}) {
         },
         renderCalls: renderer.info.render.calls,
         triangles: renderer.info.render.triangles,
+        // Counts, not bytes: WebGL exposes no query for texture memory.
+        textures: renderer.info.memory.textures,
+        geometries: renderer.info.memory.geometries,
         camera: { azimuth: cam.azT, elevation: cam.elT, radius: cam.rT },
         touchAction: getComputedStyle(canvas).touchAction,
         nonFinite,
