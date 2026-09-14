@@ -77,6 +77,7 @@ export function initScene(canvas, onHotspot, opts = {}) {
   const _pinV = new THREE.Vector3();
   const _pinCorner = new THREE.Vector3();
   const _pinBox = new THREE.Box3();
+  const _frameTarget = new THREE.Vector3();
   const _visBox = new THREE.Box3();
   // World-space bounds of what is actually drawn under `root`. THREE's
   // Box3.setFromObject includes children with visible === false, which for a
@@ -1857,6 +1858,23 @@ export function initScene(canvas, onHotspot, opts = {}) {
        copied out of this file, so moving a stool moves the test with it. */
     auditBegin() { cancelAnimationFrame(raf); raf = 0; return true; },
     auditEnd() { if (!raf) raf = requestAnimationFrame(frame); return true; },
+
+    /* Point the camera at a world position and draw one frame, so a pose the
+       audit flagged can be photographed. scripts/pose-shots.mjs uses this
+       between auditBegin() and auditEnd(); nothing in the running site calls
+       it. Numbers read as a measurement are worth far less to whoever has to
+       fix the pose than a picture of it. */
+    auditFrame({ target, azimuth = 0.9, elevation = 0.22, radius = 2.0 }) {
+      const c = _frameTarget.set(target.x, target.y, target.z);
+      camera.position.set(
+        c.x + Math.cos(elevation) * Math.sin(azimuth) * radius,
+        c.y + Math.sin(elevation) * radius,
+        c.z + Math.cos(elevation) * Math.cos(azimuth) * radius,
+      );
+      camera.lookAt(c);
+      renderer.render(scene, camera);
+      return true;
+    },
 
     auditActs() {
       return { seated: Object.keys(SEATED_ACTS), cook: Object.keys(COOK_ACTS) };

@@ -16,7 +16,8 @@
     "smoke": "node scripts/smoke.mjs",
     "smoke:cms": "node scripts/cms-smoke.mjs",
     "audit:npc": "node scripts/npc-audit.mjs",
-    "baseline": "node scripts/perf-baseline.mjs"
+    "baseline": "node scripts/perf-baseline.mjs",
+    "audit:visual": "node scripts/pose-shots.mjs"
   },
   "dependencies": {
     "@astrojs/markdoc": "^2.0.9",
