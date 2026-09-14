@@ -31,6 +31,18 @@ export function initScene(canvas, onHotspot, opts = {}) {
   };
   const MENU_ITEMS = Array.isArray(opts.menuItems) ? opts.menuItems.slice(0, 8) : [];
   const REDUCED = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  // Under ?nbtest=1 every draw from the scene's own generator comes from a fixed
+  // sequence, so a pose sampled on one machine is the pose sampled on another.
+  // Ordinary visits keep real randomness: this is only about making the audit
+  // and the CI assertions reproducible.
+  const TESTING = /[?&]nbtest=1/.test(window.location.search);
+  let auditSeed = 0x2f6e2b1 >>> 0;
+  function random() {
+    if (!TESTING) return Math.random();
+    auditSeed = (Math.imul(auditSeed, 1664525) + 1013904223) >>> 0;
+    return auditSeed / 0x100000000;
+  }
   let bookOpen = false;
   let raf = 0;
 
@@ -51,8 +63,8 @@ export function initScene(canvas, onHotspot, opts = {}) {
     g.fillStyle = grd; g.fillRect(0, 0, w, h);
     g.fillStyle = 'rgba(255,240,220,0.5)';
     for (let i = 0; i < 46; i++) {
-      g.globalAlpha = 0.15 + Math.random() * 0.5;
-      g.fillRect(Math.random() * w, Math.random() * h * 0.46, 1.5, 1.5);
+      g.globalAlpha = 0.15 + random() * 0.5;
+      g.fillRect(random() * w, random() * h * 0.46, 1.5, 1.5);
     }
     g.globalAlpha = 1;
   }, 16, 512);
@@ -92,6 +104,10 @@ export function initScene(canvas, onHotspot, opts = {}) {
   let guideMixer = null;
   let guideRig = null;
   let cookingPot = null;
+  // Kept so the audit can measure against the furniture that is actually in the
+  // scene rather than against numbers copied out of this file.
+  let counterTop = null, counterFront = null, counterShelf = null;
+  const stoolSeats = [];
   let service = null;
   let serviceBowl = null;
   let serviceAudit = { started: false, lifted: false, filledCarry: false, completed: false };
@@ -277,9 +293,12 @@ export function initScene(canvas, onHotspot, opts = {}) {
 
   function buildCounterItems() {
     const g = new THREE.Group();
-    g.add(pos(box(6.4, 0.14, 1.05, 0x7a5334, { rough: 0.66 }), 0, 1.02, 0.6));
-    g.add(pos(box(6.4, 0.95, 0.12, 0x5c3d26, { rough: 0.86 }), 0, 0.52, 1.08));
-    g.add(pos(box(6.1, 0.08, 0.9, 0x452f1f, { rough: 0.9 }), 0, 0.55, 0.2));
+    counterTop = pos(box(6.4, 0.14, 1.05, 0x7a5334, { rough: 0.66 }), 0, 1.02, 0.6);
+    counterFront = pos(box(6.4, 0.95, 0.12, 0x5c3d26, { rough: 0.86 }), 0, 0.52, 1.08);
+    counterShelf = pos(box(6.1, 0.08, 0.9, 0x452f1f, { rough: 0.9 }), 0, 0.55, 0.2);
+    g.add(counterTop);
+    g.add(counterFront);
+    g.add(counterShelf);
 
     const potG = new THREE.Group();
     potG.add(pos(cyl(0.42, 0.38, 0.5, 0x3d4248, { metal: 0.55, rough: 0.36 }, 28), 0, 0.35, 0));
@@ -475,7 +494,7 @@ export function initScene(canvas, onHotspot, opts = {}) {
           emissiveIntensity: 0.2,
         })
       );
-      q.userData.seed = Math.random();
+      q.userData.seed = random();
       q.userData.spread = spread;
       grp.add(q);
     }
@@ -608,11 +627,11 @@ export function initScene(canvas, onHotspot, opts = {}) {
       knee.add(shoe);
       hp.add(knee);
       hip.add(hp);
-      return { hp, knee };
+      return { hp, knee, shoe };
     };
     const legL = leg(-1), legR = leg(1);
 
-    p.userData.rig = { hip, torso, head, armL, armR, legL, legR, face };
+    p.userData.rig = { hip, torso, head, armL, armR, legL, legR, face, pelvis };
     p.scale.setScalar(sc);
     return p;
   }
@@ -827,13 +846,13 @@ export function initScene(canvas, onHotspot, opts = {}) {
   ];
   // function declaration, not a const arrow: initAI calls this during scene
   // construction, which happens above this line.
-  function rnd(a, b) { return a + Math.random() * (b - a); }
+  function rnd(a, b) { return a + random() * (b - a); }
   // wall clock in seconds, for anything that schedules rather than eases
   function nowSec() { return performance.now() / 1000; }
   function pickPlan(plan) {
     let total = 0;
     for (const e of plan) total += e.w;
-    let r = Math.random() * total;
+    let r = random() * total;
     for (const e of plan) { r -= e.w; if (r <= 0) return e; }
     return plan[0];
   }
@@ -842,7 +861,7 @@ export function initScene(canvas, onHotspot, opts = {}) {
     npc.userData.ai = {
       kind, cur: base(), tgt: base(),
       act: kind === 'cook' ? 'stir' : 'eat',
-      startedAt: nowSec() - Math.random() * 3, dur: rnd(3, 7),
+      startedAt: nowSec() - random() * 3, dur: rnd(3, 7),
       locked: false, face: 0, needsService: false,
       nextBiteAt: kind === 'diner' ? nowSec() + rnd(0.2, 1.2) : 0,
       biting: false, biteT: 0,
@@ -1008,7 +1027,7 @@ export function initScene(canvas, onHotspot, opts = {}) {
       b.el.style.opacity = String(Math.max(0, Math.min(1, Math.min(t, b.dur - t) / 0.35)));
     }
   }
-  const pickLine = (arr) => (arr && arr.length ? arr[(Math.random() * arr.length) | 0] : '');
+  const pickLine = (arr) => (arr && arr.length ? arr[(random() * arr.length) | 0] : '');
 
   /* ---------- the director ----------
      Independent loops read as machinery. Two characters acknowledging each other
@@ -1039,12 +1058,12 @@ export function initScene(canvas, onHotspot, opts = {}) {
     const cook = guideRig ? guide : null;
     const seated = diners.filter((d) => d.userData.ai);
     if (!seated.length) return;
-    const roll = Math.random();
+    const roll = random();
 
     // 1. the cook works the pot and acknowledges someone at the counter.
     // Serving is omitted until a bowl can physically travel with the gesture.
     if (cook && roll < 0.42) {
-      const who = seated[(Math.random() * seated.length) | 0];
+      const who = seated[(random() * seated.length) | 0];
       who.userData.ai.face = who.position.x < 0 ? 0.5 : -0.5;
       startBeat([cook, who], 7.6, [
         { at: 0.0, go: () => { setAct(cook, 'stir', 4.2); setAct(who, 'lookUp', 3.4); } },
@@ -1057,7 +1076,7 @@ export function initScene(canvas, onHotspot, opts = {}) {
 
     // 2. the cook says something across the counter
     if (cook && roll < 0.68) {
-      const who = seated[(Math.random() * seated.length) | 0];
+      const who = seated[(random() * seated.length) | 0];
       who.userData.ai.face = who.position.x < 0 ? 0.5 : -0.5;
       startBeat([cook, who], 7.4, [
         { at: 0.0, go: () => { setAct(cook, 'chat', 4.2); setAct(who, 'listen', 4.6); } },
@@ -1072,7 +1091,7 @@ export function initScene(canvas, onHotspot, opts = {}) {
     // 3. two people at the counter talk to each other
     if (seated.length >= 2) {
       const sorted = [...seated].sort((a, b) => a.position.x - b.position.x);
-      const i = (Math.random() * (sorted.length - 1)) | 0;
+      const i = (random() * (sorted.length - 1)) | 0;
       const a = sorted[i], b = sorted[i + 1];
       a.userData.ai.face = -0.55; b.userData.ai.face = 0.55;
       startBeat([a, b], 8.6, [
@@ -1143,7 +1162,10 @@ export function initScene(canvas, onHotspot, opts = {}) {
   }
 
   function buildStool(x) {
-    scene.add(pos(cyl(0.17, 0.17, 0.06, 0xb0423a, { rough: 0.7 }, 18), x, 0.66, 1.43));
+    const seat = pos(cyl(0.17, 0.17, 0.06, 0xb0423a, { rough: 0.7 }, 18), x, 0.66, 1.43);
+    seat.userData.seatX = x;
+    stoolSeats.push(seat);
+    scene.add(seat);
     scene.add(pos(cyl(0.03, 0.05, 0.66, 0x2a2018, {}, 10), x, 0.33, 1.43));
     const g = new THREE.Group();
     g.position.set(x, 0, 1.43);
@@ -1219,8 +1241,8 @@ export function initScene(canvas, onHotspot, opts = {}) {
       g.fillStyle = '#0c0a16'; g.fillRect(0, 0, w, h);
       for (let y = 20; y < h - 20; y += 46) {
         for (let x = 16; x < w - 16; x += 40) {
-          if (Math.random() < 0.5) {
-            g.fillStyle = Math.random() < 0.7 ? 'rgba(255,196,120,0.85)' : 'rgba(150,180,255,0.7)';
+          if (random() < 0.5) {
+            g.fillStyle = random() < 0.7 ? 'rgba(255,196,120,0.85)' : 'rgba(150,180,255,0.7)';
             g.fillRect(x, y, 22, 30);
           }
         }
@@ -1248,8 +1270,8 @@ export function initScene(canvas, onHotspot, opts = {}) {
     const gt = textTexture((g, w, h) => {
       g.fillStyle = '#13161c'; g.fillRect(0, 0, w, h);
       for (let i = 0; i < 800; i++) {
-        g.fillStyle = 'rgba(255,255,255,' + (Math.random() * 0.028) + ')';
-        g.fillRect(Math.random() * w, Math.random() * h, 2, 2);
+        g.fillStyle = 'rgba(255,255,255,' + (random() * 0.028) + ')';
+        g.fillRect(random() * w, random() * h, 2, 2);
       }
       g.strokeStyle = 'rgba(0,0,0,0.4)'; g.lineWidth = 3;
       for (let k = 0; k < 6; k++) { g.beginPath(); g.moveTo(0, k * h / 6); g.lineTo(w, k * h / 6); g.stroke(); }
@@ -1760,7 +1782,7 @@ export function initScene(canvas, onHotspot, opts = {}) {
     }
     if (!REDUCED) {
       for (let i = 0; i < lanternMats.length; i++) {
-        lanternMats[i].emissiveIntensity = 1.2 + Math.sin(t * (6 + i * 2.1)) * 0.12 + Math.random() * 0.04;
+        lanternMats[i].emissiveIntensity = 1.2 + Math.sin(t * (6 + i * 2.1)) * 0.12 + random() * 0.04;
       }
     }
 
@@ -1780,6 +1802,141 @@ export function initScene(canvas, onHotspot, opts = {}) {
       setBowlFill(bowl, 0);
       diner.userData.ai.needsService = true;
       return true;
+    },
+
+    /* ---------- deterministic pose audit (scripts/npc-audit.mjs) ----------
+       Stops the render loop, forces one action on one character at one point in
+       its timeline, and reports where the joints and props actually ended up in
+       world space. Bounds come from the objects in the scene, never from numbers
+       copied out of this file, so moving a stool moves the test with it. */
+    auditBegin() { cancelAnimationFrame(raf); raf = 0; return true; },
+    auditEnd() { if (!raf) raf = requestAnimationFrame(frame); return true; },
+
+    auditActs() {
+      return { seated: Object.keys(SEATED_ACTS), cook: Object.keys(COOK_ACTS) };
+    },
+
+    auditSubjects() {
+      const list = diners.map((d, i) => ({
+        kind: 'diner', index: i, x: d.position.x, z: d.position.z, scale: d.scale.x,
+      }));
+      if (guide) list.push({ kind: 'cook', index: 0, x: guide.position.x, z: guide.position.z, scale: guide.scale.x });
+      return list;
+    },
+
+    auditFurniture() {
+      const b = (o) => {
+        if (!o) return null;
+        const box = new THREE.Box3().setFromObject(o);
+        if (!Number.isFinite(box.min.x) || box.isEmpty()) return null;
+        return {
+          min: { x: box.min.x, y: box.min.y, z: box.min.z },
+          max: { x: box.max.x, y: box.max.y, z: box.max.z },
+        };
+      };
+      return {
+        counterTop: b(counterTop),
+        counterFront: b(counterFront),
+        counterShelf: b(counterShelf),
+        pot: b(cookingPot),
+        ground: { y: 0 },
+        stools: stoolSeats.map((s) => ({ seatX: s.userData.seatX, box: b(s) })),
+        bowls: ramenBowls.map((bowl) => ({ seatX: bowl.userData.seatX, box: b(bowl) })),
+      };
+    },
+
+    auditPose(kind, index, act, tl) {
+      const npc = kind === 'cook' ? guide : diners[index];
+      if (!npc) return null;
+      const acts = kind === 'cook' ? COOK_ACTS : SEATED_ACTS;
+      const fn = acts[act];
+      if (!fn) return null;
+      const rig = npc.userData.rig;
+      const ai = npc.userData.ai || (npc.userData.ai = {});
+      const table = npc.userData.table;
+      const keep = { act: ai.act, biting: ai.biting, biteT: ai.biteT, face: ai.face };
+      ai.act = act;
+      if (typeof ai.face !== 'number') ai.face = 0.5;
+      // `eat` is driven by the bite clock rather than the action timeline, so the
+      // sweep has to move that clock to see the whole reach-hold-return arc.
+      if (act === 'eat') { ai.biting = true; ai.biteT = tl; }
+
+      const pose = kind === 'cook' ? standingPose() : seatedPose();
+      fn(pose, tl, npc);
+      applyPose(rig, pose);
+
+      // Props follow the action exactly as the live tick switches them, so the
+      // audit sees what a visitor sees.
+      if (table) {
+        table.heldChopsticks.visible = act === 'eat';
+        if (table.noodleLift) table.noodleLift.visible = act === 'eat' && tl >= 1.35 && tl < 3.15;
+        table.heldCup.visible = act === 'drink';
+      }
+      if (npc.userData.tools) {
+        npc.userData.tools.ladle.visible = act === 'stir';
+        npc.userData.tools.cloth.visible = act === 'wipe';
+      }
+
+      scene.updateMatrixWorld(true);
+      const v = new THREE.Vector3();
+      const w = (o) => (o ? (o.getWorldPosition(v), { x: v.x, y: v.y, z: v.z }) : null);
+      const b = (o) => {
+        if (!o || o.visible === false) return null;
+        const box = new THREE.Box3().setFromObject(o);
+        if (box.isEmpty() || !Number.isFinite(box.min.x)) return null;
+        return {
+          min: { x: box.min.x, y: box.min.y, z: box.min.z },
+          max: { x: box.max.x, y: box.max.y, z: box.max.z },
+        };
+      };
+
+      const sample = {
+        kind, index, act, tl,
+        angles: {
+          hipY: pose.hipY,
+          torsoX: pose.torsoX, torsoY: pose.torsoY, torsoZ: pose.torsoZ,
+          headX: pose.headX, headY: pose.headY, headZ: pose.headZ,
+          lShX: pose.lShX, lShZ: pose.lShZ, lElX: pose.lElX,
+          rShX: pose.rShX, rShZ: pose.rShZ, rElX: pose.rElX,
+        },
+        joints: {
+          head: w(rig.head), hip: w(rig.hip),
+          shoulderL: w(rig.armL.sh), shoulderR: w(rig.armR.sh),
+          elbowL: w(rig.armL.elbow), elbowR: w(rig.armR.elbow),
+          handL: w(rig.armL.hand), handR: w(rig.armR.hand),
+          footL: w(rig.legL.shoe), footR: w(rig.legR.shoe),
+        },
+        boxes: {
+          body: b(npc),
+          handL: b(rig.armL.hand), handR: b(rig.armR.hand),
+          forearmL: b(rig.armL.elbow), forearmR: b(rig.armR.elbow),
+          pelvis: b(rig.pelvis),
+          heldChopsticks: table ? b(table.heldChopsticks) : null,
+          heldCup: table ? b(table.heldCup) : null,
+          ladle: npc.userData.tools ? b(npc.userData.tools.ladle) : null,
+          cloth: npc.userData.tools ? b(npc.userData.tools.cloth) : null,
+          ownBowl: table && table.bowl ? b(table.bowl) : null,
+        },
+      };
+      Object.assign(ai, keep);
+      return sample;
+    },
+
+    /* Run the whole sweep inside the page and return it in one go. Sampling one
+       pose per round trip was the slowest thing in CI by a wide margin. */
+    auditSweep(plan) {
+      const api = window.__nightbowl;
+      const out = [];
+      for (const sub of api.auditSubjects()) {
+        const list = sub.kind === 'cook' ? api.auditActs().cook : api.auditActs().seated;
+        for (const act of list) {
+          for (const tl of (plan[act] || plan.default)) {
+            const s = api.auditPose(sub.kind, sub.index, act, tl);
+            if (s) { s.subjectX = sub.x; s.subjectScale = sub.scale; out.push(s); }
+          }
+        }
+      }
+      return out;
     },
 
     // Used by scripts/smoke.mjs. The thing worth catching here is a non-finite

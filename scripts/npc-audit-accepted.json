@@ -1,0 +1,4 @@
+{
+  "note": "Defects the audit has seen and that are owned by an open issue. Anything not listed fails the run. Remove an entry when its issue lands.",
+  "accepted": []
+}

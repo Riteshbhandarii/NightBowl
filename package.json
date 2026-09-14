@@ -14,7 +14,8 @@
     "preview": "node ./scripts/serve.mjs",
     "astro": "astro",
     "smoke": "node scripts/smoke.mjs",
-    "smoke:cms": "node scripts/cms-smoke.mjs"
+    "smoke:cms": "node scripts/cms-smoke.mjs",
+    "audit:npc": "node scripts/npc-audit.mjs"
   },
   "dependencies": {
     "@astrojs/markdoc": "^2.0.9",
