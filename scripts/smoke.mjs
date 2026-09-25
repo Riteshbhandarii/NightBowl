@@ -25,8 +25,86 @@ const arg = (name, fallback) => {
   return i > -1 ? process.argv[i + 1] : fallback;
 };
 const URL_ = arg('--url', 'http://localhost:4321');
-let nextPort = 9333;
+// Not a fixed port: a Chrome left behind by an earlier run still answers on it,
+// and the next run attaches to that stale browser instead of the one it just
+// spawned. Nothing errors, the flags just belong to the wrong process. The
+// about:blank assertion below is the backstop.
+let nextPort = 9300 + Math.floor(Math.random() * 600);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// Navigation pins that do not currently sit on the object they label. Listing
+// them keeps the check honest about what is broken instead of loosening it for
+// everyone: anything not named here has to be on target at every viewport.
+const PIN_DRIFT = {
+  // Anchored ~0.2 world units above the tip box, so the label floats 3-35px
+  // clear of it depending on viewport.
+  bill: 'issue #45',
+};
+const fmtRect = (r) => `${Math.round(r.left)},${Math.round(r.top)}-${Math.round(r.right)},${Math.round(r.bottom)}`;
+
+/* The navigation pins are DOM buttons re-positioned every frame from a point in
+   the 3D scene. They can slide off the object they name, or land on top of each
+   other so one is unclickable, and neither shows up as an error. Called from
+   both viewport passes; the book must be closed, because the scene hides every
+   pin while it is open. */
+async function checkPins({ evaluate }, where) {
+  let pinState = null;
+  for (let i = 0; i < 24 && !pinState?.pins?.length; i++) {
+    pinState = await evaluate('window.__nightbowl.auditPins()');
+    if (!pinState?.pins?.length) await sleep(250);
+  }
+  const shownPins = (pinState?.pins || []).filter((pin) => pin.shown);
+  check(`${where}: navigation pins are built`, (pinState?.pins || []).length > 0);
+  check(`${where}: at least one pin is on screen`, shownPins.length > 0,
+    `shown=${shownPins.map((pin) => pin.key).join(',') || 'none'}`);
+
+  // A pin is anchored when its rect overlaps the screen-space box of the object
+  // it labels. PIN_DRIFT lists the pins that do not manage that today, so the
+  // ones that do cannot quietly join them.
+  for (const pin of shownPins) {
+    const known = PIN_DRIFT[pin.key];
+    if (known) {
+      // Failing when a listed pin comes back on target is deliberate: the entry
+      // is now lying about the scene and has to go, or that pin is unprotected
+      // forever. The message says exactly that rather than reporting a drift
+      // that is no longer there.
+      check(`${where}: ${pin.key} pin drift is unchanged`, !pin.onTarget,
+        pin.onTarget
+          ? `now on target — ${known} looks fixed, delete the ${pin.key} entry from PIN_DRIFT`
+          : `still drifting, tracked by ${known}`);
+    } else {
+      check(`${where}: ${pin.key} pin sits on what it labels`, pin.onTarget,
+        `pin=${fmtRect(pin.rect)} object=${pin.target ? fmtRect(pin.target) : 'off screen'}`);
+    }
+  }
+
+  // Two pins on top of each other means one of them cannot be clicked.
+  const collisions = [];
+  for (let i = 0; i < shownPins.length; i++) {
+    for (let j = i + 1; j < shownPins.length; j++) {
+      const a = shownPins[i].rect, b = shownPins[j].rect;
+      const overlapX = Math.min(a.right, b.right) - Math.max(a.left, b.left);
+      const overlapY = Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top);
+      if (overlapX > 0 && overlapY > 0) {
+        collisions.push(`${shownPins[i].key}/${shownPins[j].key}`
+          + ` ${Math.round(overlapX)}x${Math.round(overlapY)}px`);
+      }
+    }
+  }
+  check(`${where}: pins do not overlap each other`, collisions.length === 0, collisions.join(', '));
+
+  // A hidden pin is only acceptable if its anchor really is outside the band the
+  // scene draws pins in. Hiding one that is plainly on screen would mean a
+  // section became unreachable from the 3D view.
+  const wronglyHidden = (pinState?.pins || []).filter((pin) => {
+    if (pin.shown) return false;
+    const { x, y, behind } = pin.anchor;
+    const w = pinState.viewport.width, h = pinState.viewport.height;
+    return !(behind || x < 40 || x > w - 40 || y < 74 || y > h - 40);
+  });
+  check(`${where}: hidden pins are hidden because they are off screen`, wronglyHidden.length === 0,
+    wronglyHidden.map((pin) => `${pin.key}@${Math.round(pin.anchor.x)},${Math.round(pin.anchor.y)}`).join(', '));
+}
 
 const CANDIDATES = [
   process.env.CHROME_PATH,
@@ -80,6 +158,14 @@ async function session(flags, run) {
       const list = await (await fetch(`http://127.0.0.1:${port}/json/list`)).json();
       target = list.find((t) => t.type === 'page');
     } catch { /* not up yet */ }
+  }
+  // A leftover browser from a previous run answers with a page already
+  // navigated somewhere. Refuse it rather than measure the wrong thing.
+  if (target && !/^(about:blank|chrome:\/\/new-tab-page)/.test(target.url || '')) {
+    chrome.kill('SIGKILL');
+    rmSync(profile, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
+    throw new Error(`Port ${port} is already serving a different Chrome (target url ${target.url}).`
+      + ' Close stray headless Chrome processes and run again.');
   }
   if (!target) {
     chrome.kill('SIGKILL');
@@ -297,6 +383,9 @@ await session(['--force-prefers-reduced-motion'], async (ctx) => {
     check(`${viewport.name}: scene initialises`, booted);
     if (!booted) continue;
 
+    // Before the book opens: the scene hides every pin while it is open.
+    await checkPins(ctx, viewport.name);
+
     await evaluate(`document.dispatchEvent(new CustomEvent('nb:open', { detail: 'menu' }))`);
     await sleep(100);
     const layout = await evaluate(`(() => {
@@ -495,6 +584,8 @@ await session(['--force-prefers-reduced-motion'], async (ctx) => {
       check(`${device.name}: canvas owns touch gestures`, shell.touchAction === 'none', shell.touchAction);
     }
 
+    await checkPins(ctx, device.name);
+
     await evaluate(`document.dispatchEvent(new CustomEvent('nb:open', { detail: 'menu' }))`);
     await sleep(30);
     const bookUi = await evaluate(`(() => {
@@ -655,6 +746,103 @@ await session(['--force-prefers-reduced-motion'], async (ctx) => {
     `transfer=${(measurement?.sameOriginBytes / 1024 || 0).toFixed(1)} KiB`);
   check('4G: no uncaught exceptions', errors.length === 0, errors.slice(0, 2).join(' | '));
 });
+
+// ---- pass 8: the walk-in must take the same wall-clock time on a slow machine ----
+//
+// The intro is driven by performance.now(), not by accumulated frame deltas,
+// precisely so a slow machine drops frames instead of stretching the animation.
+// dt is capped at 0.05s, so a frame-counted version of the same move would take
+// 6.0 / (fps * 0.05) seconds — 150 seconds at the 0.8fps the CI runner manages.
+//
+// CPU throttling alone does not prove this: the intro is cheap enough that 6x
+// throttling barely moves the frame rate on a machine with a GPU (measured
+// 30.0fps at 1x, 30.1fps at 6x). So each frame is also deliberately starved by
+// burning 80ms on the main thread, and there is a separate check that the
+// starvation really bit, so this cannot pass by failing to load the machine.
+//
+// Frame rates measured for this check span 0.8fps to 30fps and worst frames
+// 48ms to 5110ms. docs/ci.md carries the full table.
+console.log('\nwalk-in intro is wall-clock driven');
+
+const INTRO_NOMINAL_MS = 6000; // BEAT.walk + BEAT.sit + BEAT.hold + BEAT.pull in src/lib/scene.js
+
+// A wall-clock animation finishes on the first frame at or after its deadline,
+// so it can only ever overshoot by about one frame. That, not a percentage, is
+// the right bound: the CI runner draws this intro at 0.8fps with single frames
+// over four seconds long, where any fixed percentage is either meaningless or
+// permanently red. The extra 750ms covers the poll interval and, in the starved
+// trial, the 80ms this test itself burns after each frame.
+const INTRO_POLL_SLACK_MS = 750;
+
+for (const trial of [
+  { name: 'unthrottled', rate: 1, hogMs: 0 },
+  { name: '6x CPU throttle', rate: 6, hogMs: 0 },
+  { name: '6x CPU throttle with starved frames', rate: 6, hogMs: 80 },
+]) {
+  await session([], async (ctx) => {
+    const { send, evaluate } = ctx;
+    await send('Emulation.setDeviceMetricsOverride', {
+      width: 1440, height: 900, deviceScaleFactor: 1, mobile: false,
+    });
+    const booted = await load(ctx);
+    check(`intro ${trial.name}: scene initialises`, booted);
+    if (!booted) return;
+    await send('Emulation.setCPUThrottlingRate', { rate: trial.rate });
+    await sleep(600);
+
+    const run = await evaluate(`(async () => {
+      const api = window.__nightbowl;
+      const hog = ${trial.hogMs};
+      const seatPin = document.querySelector('.seat-pin');
+      if (!seatPin) return { error: 'no seat prompt to click' };
+      let frames = 0, worst = 0, last = performance.now();
+      let running = true;
+      const tick = () => {
+        const now = performance.now();
+        worst = Math.max(worst, now - last);
+        last = now;
+        frames++;
+        if (hog) { const end = performance.now() + hog; while (performance.now() < end); }
+        if (running) requestAnimationFrame(tick);
+      };
+      requestAnimationFrame(tick);
+      const t0 = performance.now();
+      seatPin.click();
+      await new Promise((done) => {
+        const poll = () => {
+          if (api.selfCheck().phase === 'seated') return done();
+          if (performance.now() - t0 > 30000) return done();
+          setTimeout(poll, 16);
+        };
+        poll();
+      });
+      const ms = performance.now() - t0;
+      running = false;
+      return { ms, fps: frames / (ms / 1000), worst, phase: api.selfCheck().phase };
+    })()`);
+
+    if (run.error) { check(`intro ${trial.name}: can be started`, false, run.error); return; }
+    const overshoot = run.ms - INTRO_NOMINAL_MS;
+    const allowed = run.worst + INTRO_POLL_SLACK_MS;
+    // What the same move would have taken driven by accumulated frame deltas
+    // instead, given dt is capped at 0.05s. This is the number the measurement
+    // has to be nowhere near.
+    const ifFrameCounted = INTRO_NOMINAL_MS / Math.max(run.fps * 0.05, 1e-6);
+    const detail = `${Math.round(run.ms)}ms vs ${INTRO_NOMINAL_MS}ms nominal`
+      + ` at ${run.fps.toFixed(1)}fps, worst frame ${Math.round(run.worst)}ms`
+      + ` — overshoot ${Math.round(overshoot)}ms, one frame allows ${Math.round(allowed)}ms,`
+      + ` frame-counted would be ${Math.round(ifFrameCounted)}ms`;
+    check(`intro ${trial.name}: completes`, run.phase === 'seated', `phase=${run.phase} ${detail}`);
+    check(`intro ${trial.name}: overshoots by at most one frame`,
+      overshoot <= allowed && overshoot >= -allowed, detail);
+    if (trial.hogMs) {
+      // Without this the previous check proves nothing: it has to be shown that
+      // the frame rate really did collapse during the run being measured.
+      check('intro starvation actually slowed the frames down', run.worst >= 60,
+        `worst frame ${Math.round(run.worst)}ms at ${run.fps.toFixed(1)}fps`);
+    }
+  });
+}
 
 console.log('');
 if (failures.length) {
