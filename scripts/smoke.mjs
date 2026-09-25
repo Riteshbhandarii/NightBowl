@@ -35,11 +35,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 // Navigation pins that do not currently sit on the object they label. Listing
 // them keeps the check honest about what is broken instead of loosening it for
 // everyone: anything not named here has to be on target at every viewport.
-const PIN_DRIFT = {
-  // Anchored ~0.2 world units above the tip box, so the label floats 3-35px
-  // clear of it depending on viewport.
-  bill: 'issue #45',
-};
+const PIN_DRIFT = {};
 const fmtRect = (r) => `${Math.round(r.left)},${Math.round(r.top)}-${Math.round(r.right)},${Math.round(r.bottom)}`;
 
 /* The navigation pins are DOM buttons re-positioned every frame from a point in

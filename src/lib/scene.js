@@ -121,10 +121,10 @@ export function initScene(canvas, onHotspot, opts = {}) {
   const SEAT_TOP_Y = 0.69;
   // Where an idle seated hand goes: on the counter in front of the diner, in
   // the arm solver's local frame. Tuned against scripts/npc-audit.mjs.
-  const REST_ON_COUNTER = { y: 0.45, z: 0.30 };
+  const REST_ON_COUNTER = { y: 0.57, z: 0.30 };
   // Where the cook's hand goes when it should be above the counter rather than
   // in it, in his arm solver's local frame.
-  const COOK_OVER_COUNTER = { y: 0.42, z: 0.40 };
+  const COOK_OVER_COUNTER = { y: 0.54, z: 0.40 };
   let seatGlowMat = null;
   let you = null;          // the figure that takes the stool once you sit
   let youMats = [];        // their materials, so they can fade in
@@ -375,7 +375,7 @@ export function initScene(canvas, onHotspot, opts = {}) {
     boxG.add(fa); boxG.add(fb);
     boxG.position.set(2.55, 1.09, 0.6); boxG.rotation.y = 0.4;
     g.add(boxG);
-    registerHotspot('bill', LABELS.navigation.bill, boxG, new THREE.Vector3(2.55, 1.72, 0.6));
+    registerHotspot('bill', LABELS.navigation.bill, boxG, new THREE.Vector3(2.55, 1.36, 0.6));
 
     [-2.7, -2.4, 2.75].forEach((x) => {
       g.add(pos(cyl(0.05, 0.07, 0.34, 0x2f6f5e, { rough: 0.4, metal: 0.1 }, 12), x, 0.72, 0.15));
@@ -641,9 +641,14 @@ export function initScene(canvas, onHotspot, opts = {}) {
       const hand = pos(sph(0.045, skin, { rough: 1 }, 12), 0, -0.245, 0);
       hand.scale.set(0.78, 1.25, 0.6);
       elbow.add(hand);
+      // Props need one joint beyond the forearm. Without it, a cup, pair of
+      // chopsticks, cloth or ladle inherits the forearm angle and cannot stay
+      // aligned with the object it is meant to touch.
+      const wrist = new THREE.Group();
+      hand.add(wrist);
       sh.add(elbow);
       torso.add(sh);
-      return { sh, elbow, hand };
+      return { sh, elbow, hand, wrist };
     };
     const armL = arm(-1), armR = arm(1);
 
@@ -685,6 +690,8 @@ export function initScene(canvas, onHotspot, opts = {}) {
       headX: 0, headY: 0, headZ: 0,
       lShX: -0.5, lShZ: 0, lElX: 0,
       rShX: -0.7, rShZ: 0, rElX: -1.0,
+      lWrX: 0, lWrY: 0, lWrZ: 0,
+      rWrX: 0, rWrY: 0, rWrZ: 0,
       mouth: 0,
     };
     // The idle right arm used to be a pair of fixed joint angles that happened
@@ -700,8 +707,10 @@ export function initScene(canvas, onHotspot, opts = {}) {
       // Reaching forward from behind the counter put the forearms inside it.
       // At rest the arms hang by his sides, which is also what a cook does
       // between jobs.
-      lShX: -0.30, lShZ: 0.10, lElX: -0.35,
+      lShX: -0.30, lShZ: 0.85, lElX: -0.35,
       rShX: -0.34, rShZ: -0.12, rElX: -0.30,
+      lWrX: 0, lWrY: 0, lWrZ: 0,
+      rWrX: 0, rWrY: 0, rWrZ: 0,
       mouth: 0,
     };
   }
@@ -716,8 +725,10 @@ export function initScene(canvas, onHotspot, opts = {}) {
     rig.head.rotation.set(c.headX, c.headY, c.headZ);
     rig.armL.sh.rotation.x = c.lShX; rig.armL.sh.rotation.z = c.lShZ;
     rig.armL.elbow.rotation.x = c.lElX;
+    rig.armL.wrist.rotation.set(c.lWrX, c.lWrY, c.lWrZ);
     rig.armR.sh.rotation.x = c.rShX; rig.armR.sh.rotation.z = c.rShZ;
     rig.armR.elbow.rotation.x = c.rElX;
+    rig.armR.wrist.rotation.set(c.rWrX, c.rWrY, c.rWrZ);
     const open = c.mouth > 0.5;
     const f = rig.face;
     if (f && f.userData.open !== open) {
@@ -795,8 +806,9 @@ export function initScene(canvas, onHotspot, opts = {}) {
       else if (t < 3.8) lift = 1 - ease01((t - 3.0) / 0.8);
 
       // Left hand steadies the bowl; right hand takes one deliberate bite.
-      reachArm(p, 'l', 0.52, 0.33, 0.08);
-      reachArm(p, 'r', mix(0.47, 0.60, lift), mix(0.37, 0.14, lift), -0.08 - lift * 0.18);
+      reachArm(p, 'l', 0.60, 0.33, 0.08);
+      reachArm(p, 'r', mix(0.58, 0.68, lift), mix(0.37, 0.14, lift), -0.08 - lift * 0.18);
+      p.rWrX = lift * 0.55;
       const gathering = t < 1.35 ? ease01(t / 0.7) : 1;
       p.torsoX = 0.2 - lift * 0.1 + (1 - gathering) * 0.05;
       p.headX = 0.16 - lift * 0.12;
@@ -811,7 +823,8 @@ export function initScene(canvas, onHotspot, opts = {}) {
       const up = tl < 0.75 ? ease01(tl / 0.75)
         : tl < 1.8 ? 1
           : 1 - ease01((tl - 1.8) / 0.75);
-      reachArm(p, 'l', mix(0.37, 0.56, up), mix(0.34, 0.13, up), 0.08);
+      reachArm(p, 'l', mix(0.56, 0.66, up), mix(0.34, 0.13, up), 0.08);
+      p.lWrX = up * 0.45;
       p.torsoX = 0.1 - up * 0.04;
       p.headX = -up * 0.16;
       p.mouth = up > 0.9 ? 1 : 0;
@@ -841,8 +854,10 @@ export function initScene(canvas, onHotspot, opts = {}) {
     stir(p, tl) {
       // The utensil stays in the pot. Only the wrist-sized circular motion moves.
       const circle = tl * 2.0;
-      reachArm(p, 'l', 0.55 + Math.sin(circle) * 0.018, 0.35 + Math.cos(circle) * 0.018,
-        0.18 + Math.sin(circle) * 0.06);
+      reachArm(p, 'l', 0.72 + Math.sin(circle) * 0.018, 0.35 + Math.cos(circle) * 0.018,
+        0.85 + Math.sin(circle) * 0.06);
+      p.lWrX = 2.25;
+      p.lWrZ = -0.12;
       p.torsoX = 0.16;
       p.torsoY = -0.13;
       p.headX = 0.26;
@@ -861,12 +876,13 @@ export function initScene(canvas, onHotspot, opts = {}) {
       p.torsoX = 0.24;
       p.torsoY = -0.12;
       p.headX = 0.34;
-      reachArm(p, 'r', 0.31, 0.41, Math.sin(tl * 1.7) * 0.18);
+      reachArm(p, 'r', 0.50, 0.41, Math.sin(tl * 1.7) * 0.18);
+      p.rWrX = 1.95;
     },
     serve(p) {
       // Both hands support the bowl while the body moves along the counter.
-      reachArm(p, 'l', 0.60, 0.31, 0.12);
-      reachArm(p, 'r', 0.60, 0.31, -0.12);
+      reachArm(p, 'l', 0.70, 0.31, 0.85);
+      reachArm(p, 'r', 0.70, 0.31, -0.28);
       p.torsoX = 0.12;
       p.headX = 0.18;
     },
@@ -1195,10 +1211,10 @@ export function initScene(canvas, onHotspot, opts = {}) {
     noodleLift.rotation.z = 0.08;
     heldChopsticks.add(noodleLift);
     heldChopsticks.visible = false;
-    r.armR.hand.add(heldChopsticks);
+    r.armR.wrist.add(heldChopsticks);
     const heldCup = pos(cyl(0.055, 0.045, 0.11, 0xd8c8a5, { rough: 0.86 }, 14), 0, -0.03, 0.06);
     heldCup.visible = false;
-    r.armL.hand.add(heldCup);
+    r.armL.wrist.add(heldCup);
     d.userData.table = { bowl, heldChopsticks, noodleLift, heldCup };
     if (autonomous) {
       initAI(d, 'diner', seatedPose);
@@ -1343,11 +1359,11 @@ export function initScene(canvas, onHotspot, opts = {}) {
     const ladle = pos(cyl(0.012, 0.012, 0.46, 0x9a8058, {}, 8), 0, -0.14, 0.12);
     ladle.rotation.x = 0.32;
     ladle.add(pos(sph(0.045, 0x8d939a, { metal: 0.5, rough: 0.4 }, 10), 0, -0.25, 0.01));
-    guideRig.armL.hand.add(ladle);
-    const cloth = pos(box(0.16, 0.012, 0.12, 0xd7c9a6, { rough: 1 }), 0, -0.04, 0.08);
+    guideRig.armL.wrist.add(ladle);
+    const cloth = pos(box(0.16, 0.012, 0.12, 0xd7c9a6, { rough: 1 }), 0, -0.30, 0.08);
     cloth.rotation.x = 0.16;
     cloth.visible = false;
-    guideRig.armR.hand.add(cloth);
+    guideRig.armR.wrist.add(cloth);
     guide.userData.tools = { ladle, cloth };
     addBlobShadow(guide, 0.4, 0.7);
     initAI(guide, 'cook', standingPose);
@@ -1980,6 +1996,8 @@ export function initScene(canvas, onHotspot, opts = {}) {
           headX: pose.headX, headY: pose.headY, headZ: pose.headZ,
           lShX: pose.lShX, lShZ: pose.lShZ, lElX: pose.lElX,
           rShX: pose.rShX, rShZ: pose.rShZ, rElX: pose.rElX,
+          lWrX: pose.lWrX, lWrY: pose.lWrY, lWrZ: pose.lWrZ,
+          rWrX: pose.rWrX, rWrY: pose.rWrY, rWrZ: pose.rWrZ,
         },
         joints: {
           head: w(rig.head), hip: w(rig.hip),
@@ -1990,7 +2008,7 @@ export function initScene(canvas, onHotspot, opts = {}) {
         },
         boxes: {
           body: b(npc),
-          handL: b(rig.armL.hand), handR: b(rig.armR.hand),
+          handL: b(rig.armL.hand, rig.armL.wrist), handR: b(rig.armR.hand, rig.armR.wrist),
           forearmL: b(rig.armL.elbow, rig.armL.hand),
           forearmR: b(rig.armR.elbow, rig.armR.hand),
           pelvis: b(rig.pelvis),
