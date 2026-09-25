@@ -10,7 +10,8 @@
     "build": "astro build",
     "check": "astro check",
     "check:build": "node scripts/check-build.mjs",
-    "preview": "node ./dist/server/entry.mjs",
+    "check:perf": "node scripts/perf-budget.mjs",
+    "preview": "node ./scripts/serve.mjs",
     "astro": "astro",
     "smoke": "node scripts/smoke.mjs",
     "smoke:cms": "node scripts/cms-smoke.mjs"
@@ -24,6 +25,7 @@
     "@keystatic/astro": "^6.0.0",
     "@keystatic/core": "^0.6.9",
     "astro": "^7.3.1",
+    "compression": "^1.8.2",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
     "three": "^0.185.1"

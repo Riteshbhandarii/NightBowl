@@ -85,10 +85,21 @@ img { max-width: 100%; }
   font-size: 12px;
   letter-spacing: 0.24em;
   text-transform: uppercase;
-  z-index: 60;
+  /* Keep the real site navigation usable while the optional 3D scene loads. */
+  z-index: 19;
+  pointer-events: none;
   transition: opacity 0.6s ease;
 }
 .loading.gone { opacity: 0; pointer-events: none; }
+.loading.failed {
+  padding: 96px 24px 24px;
+  text-align: center;
+  line-height: 1.7;
+  pointer-events: none;
+}
+.loading.failed ~ .pins,
+.loading.failed ~ .hint,
+.loading.failed ~ .credit { display: none; }
 
 /* ---------------- topbar ---------------- */
 .topbar {
@@ -99,7 +110,11 @@ img { max-width: 100%; }
   align-items: flex-start;
   justify-content: space-between;
   gap: 16px;
-  padding: 20px clamp(16px, 4vw, 40px);
+  padding:
+    max(20px, env(safe-area-inset-top))
+    max(clamp(16px, 4vw, 40px), env(safe-area-inset-right))
+    20px
+    max(clamp(16px, 4vw, 40px), env(safe-area-inset-left));
   pointer-events: none;
 }
 .topbar > * { pointer-events: auto; }
@@ -285,7 +300,7 @@ img { max-width: 100%; }
 .hint {
   position: fixed;
   left: 50%;
-  bottom: 22px;
+  bottom: max(22px, env(safe-area-inset-bottom));
   transform: translateX(-50%);
   z-index: 12;
   font-family: 'Space Mono', monospace;
@@ -301,8 +316,8 @@ img { max-width: 100%; }
 
 .credit {
   position: fixed;
-  right: clamp(16px, 4vw, 40px);
-  bottom: 18px;
+  right: max(clamp(16px, 4vw, 40px), env(safe-area-inset-right));
+  bottom: max(18px, env(safe-area-inset-bottom));
   z-index: 12;
   font-family: 'Space Mono', monospace;
   font-size: 9.5px;
