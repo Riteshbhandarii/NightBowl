@@ -1,0 +1,159 @@
+{
+  "site": {
+    "name": "NightBowl",
+    "tagline": "ritesh bhandari  portfolio & kitchen log",
+    "github": "https://github.com/Riteshbhandarii",
+    "linkedin": "https://www.linkedin.com/in/ritesh-bhandari-0371b5294/",
+    "establishedYear": "2026",
+    "coverLine": "open late",
+    "coverPrompt": "tap to open",
+    "homeDescription": "Ritesh Bhandari — portfolio and kitchen log, served from a late-night ramen stall.",
+    "draftStamp": "Draft copy, written by the assistant. Ritesh replaces it in his own voice."
+  },
+  "navigation": {
+    "menu": "Menu",
+    "guide": "The Guide",
+    "log": "Kitchen Log",
+    "bill": "The Bill",
+    "openMenu": "Open menu",
+    "theme": "Switch colour theme"
+  },
+  "menu": {
+    "title": "The Menu",
+    "subtitle": "Everything here was built by the cook. Ask the guide about any of it.",
+    "intro": "The big builds first, then the small sharp tools, then the ventures and the research.",
+    "mainsTitle": "Mains",
+    "mainsNote": "the builds I most like explaining",
+    "smallPlatesTitle": "Small plates",
+    "smallPlatesNote": "focused tools and experiments",
+    "offMenuTitle": "Off the menu",
+    "offMenuNote": "ventures and research",
+    "closing": "More detail, and the parts that aren’t on GitHub, coming with the full site.",
+    "projectLinkLabel": "open ↗"
+  },
+  "guide": {
+    "eyebrow": "your host for the evening",
+    "title": "The Guide",
+    "intro": "Not the cook. The one who tells you what the cook has been up to.",
+    "body": [
+      "Pull up a stool. The cook here is Ritesh, final year Data & AI Engineering at Turku University of Applied Sciences, and a student assistant at a research group called Core Cognitive Tech.",
+      "He likes the unglamorous half of machine learning. Not the demo: the part where a model or a data pipeline has to run in production without waking anyone at three in the morning.",
+      "Ten years of football, one recent first half marathon, English and Finnish, learning Swedish. Everything on the menu he built himself, so ask about any of it."
+    ],
+    "portraitPlaceholder": "the cook, in person, once there's an illustration",
+    "githubLabel": "github.com/Riteshbhandarii ↗",
+    "draftCopy": true
+  },
+  "specials": {
+    "title": "Today’s specials",
+    "items": [
+      {
+        "name": "Final-year thesis",
+        "note": "simmering",
+        "line": "Machine-learning study of used spare-part pricing. In review and defence."
+      },
+      {
+        "name": "Core Cognitive Tech",
+        "note": "on the pass",
+        "line": "Student assistant: agent internals and developer-experience work."
+      },
+      {
+        "name": "Fundamentals, deep track",
+        "note": "slow braise",
+        "line": "A deliberate ground-up rebuild of the maths and stats under all of it."
+      }
+    ],
+    "draftCopy": true
+  },
+  "bill": {
+    "eyebrow": "settle up",
+    "title": "The Bill",
+    "intro": "The short version. Take it with you.",
+    "rows": [
+      {
+        "label": "Order",
+        "value": "Data & AI Engineering student, final year — Turku UAS"
+      },
+      {
+        "label": "Now",
+        "value": "Student assistant, Core Cognitive Tech"
+      },
+      {
+        "label": "Focus",
+        "value": "Deep learning, data pipelines, backend / MLOps"
+      },
+      {
+        "label": "Kitchen",
+        "value": "Python, PyTorch, Airflow, FastAPI, Django, PostgreSQL, Redis, Docker, Linux"
+      },
+      {
+        "label": "Spoken",
+        "value": "English, Finnish; learning Swedish"
+      }
+    ],
+    "cvNote": "Full CV as a PDF arrives once the copy is final. Drop it at /public/cv.pdf and flip cvReady to true.",
+    "emptyCvMessage": "The full CV as a PDF arrives once the copy is final. Until then the links are the source of truth.",
+    "cvUrl": "/cv.pdf",
+    "cvLinkLabel": "download PDF",
+    "githubLabel": "github.com/Riteshbhandarii",
+    "linkedinLabel": "ritesh-bhandari",
+    "total": "Total: one hire. — service not included",
+    "cvReady": false,
+    "draftCopy": true
+  },
+  "log": {
+    "eyebrow": "from the kitchen",
+    "title": "Kitchen Log",
+    "menuSubtitle": "Short notes on what got built and what broke.",
+    "menuIntro": "Working notes, technical breakdowns and the decisions behind the projects.",
+    "indexLinkLabel": "Open the complete log →",
+    "indexKicker": "Notes from the counter",
+    "indexDeck": "The work behind the work: decisions, mistakes and technical notes from projects in progress.",
+    "indexDescription": "Notes on building, breaking and learning from Ritesh Bhandari's projects.",
+    "backToStall": "Back to the stall",
+    "allEntries": "← All entries",
+    "draftDateLabel": "Coming soon",
+    "readingSuffix": "min read"
+  },
+  "scene": {
+    "canvasLabel": "Interactive 3D ramen stall. Use the Open menu button for a text version of everything.",
+    "loading": "lighting the lanterns…",
+    "hint": "drag to look around · tap a sign to open the menu",
+    "credit": "built from scratch · placeholder cook until the real model drops in",
+    "error": "scene error — use the Open menu button",
+    "mainSignLine": "OPEN LATE  ·  RAMEN  ·  EST. 2026",
+    "menuSignTitle": "MENU",
+    "menuSignFooter": "tap to open the menu",
+    "logSignTitle": "KITCHEN LOG",
+    "logSignItems": [
+      "— why a ramen stall",
+      "— a chess engine, my games",
+      "— a boring Airflow DAG",
+      "— what the model learned"
+    ],
+    "logSignFooter": "fresh batches inside",
+    "specialsHotspot": "Specials",
+    "seatHotspot": "Take a seat",
+    "seatPrompt": "take a seat",
+    "seatAria": "Take the empty seat at the counter",
+    "youLabel": "you"
+  },
+  "chatter": {
+    "cook": [
+      "Broth’s been on since four.",
+      "Careful, that bowl is hot.",
+      "Chess engine? He trained it on his own games.",
+      "Ask him about the pipeline one. He likes that one.",
+      "Two minutes on the noodles. No more.",
+      "Thesis is nearly done. He’ll tell you it isn’t."
+    ],
+    "diner": [
+      "This is the good one.",
+      "Long day?",
+      "Same again next week.",
+      "Told you it was worth the walk.",
+      "Still open at this hour. Every night."
+    ],
+    "draftCopy": true
+  }
+}
