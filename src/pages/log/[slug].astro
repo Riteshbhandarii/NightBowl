@@ -1,0 +1,53 @@
+---
+import { getCollection, render, type CollectionEntry } from 'astro:content';
+import LogLayout from '../../layouts/LogLayout.astro';
+import { LOG } from '../../data/content';
+
+export async function getStaticPaths() {
+  const posts = await getCollection('posts', ({ data }) => data.status === 'published');
+  return posts.map((post) => ({
+    params: { slug: post.id.replace(/\.(md|mdx)$/, '') },
+    props: { post },
+  }));
+}
+
+interface Props {
+  post: CollectionEntry<'posts'>;
+}
+
+const { post } = Astro.props;
+const { Content, headings } = await render(post);
+const fmtDate = (date: Date) =>
+  date.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+const words = post.body?.trim().split(/\s+/).filter(Boolean).length ?? 0;
+const minutes = Math.max(1, Math.ceil(words / 200));
+---
+
+<LogLayout title={post.data.title} description={post.data.excerpt}>
+  <main class="log-main">
+    <article class="log-article">
+      <a class="back-link" href="/log/">{LOG.allEntries}</a>
+      <header>
+        <div class="entry-meta">
+          <time datetime={post.data.date.toISOString()}>{fmtDate(post.data.date)}</time>
+          <span>{minutes} {LOG.readingSuffix}</span>
+        </div>
+        <h1>{post.data.title}</h1>
+        <p class="log-deck">{post.data.excerpt}</p>
+        {post.data.tags.length > 0 && (
+          <ul class="entry-tags" aria-label="Tags">
+            {post.data.tags.map((tag) => <li>{tag}</li>)}
+          </ul>
+        )}
+      </header>
+      <div class="article-rule"></div>
+      <div class="article-body"><Content /></div>
+      {headings.length > 3 && (
+        <nav class="article-contents" aria-label="On this page">
+          <strong>On this page</strong>
+          <ul>{headings.filter((h) => h.depth <= 3).map((h) => <li><a href={`#${h.slug}`}>{h.text}</a></li>)}</ul>
+        </nav>
+      )}
+    </article>
+  </main>
+</LogLayout>
