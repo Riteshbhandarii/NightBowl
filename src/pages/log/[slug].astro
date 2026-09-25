@@ -34,9 +34,9 @@ const minutes = Math.max(1, Math.ceil(words / 200));
         </div>
         <h1>{post.data.title}</h1>
         <p class="log-deck">{post.data.excerpt}</p>
-        {post.data.tags.length > 0 && (
+        {(post.data.tags ?? []).length > 0 && (
           <ul class="entry-tags" aria-label="Tags">
-            {post.data.tags.map((tag) => <li>{tag}</li>)}
+            {(post.data.tags ?? []).map((tag) => <li>{tag}</li>)}
           </ul>
         )}
       </header>
