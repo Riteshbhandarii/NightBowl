@@ -580,6 +580,16 @@ await session(['--force-prefers-reduced-motion'], async (ctx) => {
       check(`${device.name}: canvas owns touch gestures`, shell.touchAction === 'none', shell.touchAction);
     }
 
+    if (device.name === 'phone landscape') {
+      const sceneCost = await evaluate(`(() => {
+        const state = window.__nightbowl.selfCheck();
+        return { calls: state.renderCalls, triangles: state.triangles };
+      })()`);
+      check(`${device.name}: visible geometry stays inside the 50,000 triangle budget`,
+        sceneCost.triangles <= 50000,
+        `calls=${sceneCost.calls} triangles=${sceneCost.triangles}`);
+    }
+
     await checkPins(ctx, device.name);
 
     await evaluate(`document.dispatchEvent(new CustomEvent('nb:open', { detail: 'menu' }))`);
