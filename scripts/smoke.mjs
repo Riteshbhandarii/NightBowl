@@ -246,7 +246,7 @@ console.log(`\nnightbowl smoke test → ${URL_}\n`);
 // ---- pass 1: the normal path ----
 console.log('normal load');
 await session([], async (ctx) => {
-  const { evaluate, errors } = ctx;
+  const { send, evaluate, errors } = ctx;
   const booted = await load(ctx);
   check('scene initialises', booted, booted ? '' : 'scene error panel or no handle');
   if (!booted) return;
@@ -288,11 +288,22 @@ await session([], async (ctx) => {
   check('starts in first person', before.phase === 'street', `phase=${before.phase}`);
   check('nav pins hidden before sitting',
     (await evaluate(`document.getElementById('pins').style.display`)) === 'none');
-  check('seat prompt is offered', await evaluate(`!!document.querySelector('.seat-pin')`));
+  const seatTarget = await evaluate(`(() => {
+    const el = document.querySelector('.seat-pin');
+    if (!el) return null;
+    const r = el.getBoundingClientRect();
+    return { width: r.width, height: r.height, text: el.textContent.trim(), aria: el.getAttribute('aria-label'),
+      x: r.left + r.width / 2, y: r.top + r.height / 2 };
+  })()`);
+  check('the glowing chair has a wordless finger-sized seat target',
+    seatTarget && seatTarget.width >= 112 && seatTarget.height >= 132
+      && seatTarget.text === '' && !!seatTarget.aria,
+    JSON.stringify(seatTarget));
   check('top bar nav is live before sitting',
     (await evaluate(`document.querySelectorAll('.topbar [data-open]').length`)) > 0);
 
-  await evaluate(`document.querySelector('.seat-pin').click()`);
+  await send('Input.dispatchMouseEvent', { type: 'mousePressed', x: seatTarget.x, y: seatTarget.y, button: 'left', clickCount: 1 });
+  await send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: seatTarget.x, y: seatTarget.y, button: 'left', clickCount: 1 });
   let seated = false;
   for (let i = 0; i < 40 && !seated; i++) {
     await sleep(500);
@@ -304,7 +315,7 @@ await session([], async (ctx) => {
   check('no non-finite values after the intro', after.nonFinite === 0, `count=${after.nonFinite}`);
   check('nav pins appear once seated',
     (await evaluate(`document.getElementById('pins').style.display`)) === '');
-  check('seat prompt is gone', !(await evaluate(`!!document.querySelector('.seat-pin')`)));
+  check('seat target is gone', !(await evaluate(`!!document.querySelector('.seat-pin')`)));
   check('you are shown at the counter', await evaluate(`!!document.querySelector('.you-pin')`));
 
   // Force one bowl empty and observe the entire causal loop. This catches the
@@ -312,6 +323,7 @@ await session([], async (ctx) => {
   // never changed.
   check('test can empty a diner bowl', await evaluate('window.__nightbowl.testEmptyBowl(0)'));
   let sawService = false, sawLift = false, sawFilledCarry = false, serviceDone = false;
+  let sawSafeCarryPose = false, unsafeCarryPose = null;
   for (let i = 0; i < 40 && !serviceDone; i++) {
     await sleep(250);
     const state = await evaluate('window.__nightbowl.selfCheck()');
@@ -320,6 +332,12 @@ await session([], async (ctx) => {
     sawService ||= state.serviceAudit?.started || (!!state.service?.active && state.cookAction === 'serve');
     sawLift ||= !!state.serviceAudit?.lifted;
     sawFilledCarry ||= !!state.serviceAudit?.filledCarry;
+    const carryPose = state.service?.carryPose;
+    if (carryPose?.carrying) {
+      const safe = carryPose.handSeparation >= 0.25 && carryPose.faceClearance >= 0.07;
+      sawSafeCarryPose ||= safe;
+      if (!safe) unsafeCarryPose = carryPose;
+    }
     serviceDone = !state.service
       && state.dinerActions[0].fill > 0.95
       && !state.dinerActions[0].needsService
@@ -328,6 +346,8 @@ await session([], async (ctx) => {
   check('cook reacts to an empty bowl', sawService);
   check('cook takes the empty bowl off the counter', sawLift);
   check('the bowl refilled is the one in the cook\'s hands, seat left empty', sawFilledCarry);
+  check('cook carries the bowl below his face with uncrossed hands',
+    sawSafeCarryPose && !unsafeCarryPose, JSON.stringify(unsafeCarryPose));
   check('cook returns a full bowl and diner resumes', serviceDone,
     JSON.stringify((await evaluate('window.__nightbowl.selfCheck()')).dinerActions[0]));
 

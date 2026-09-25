@@ -126,6 +126,7 @@ export function initScene(canvas, onHotspot, opts = {}) {
   // in it, in his arm solver's local frame.
   const COOK_OVER_COUNTER = { y: 0.54, z: 0.40 };
   let seatGlowMat = null;
+  let seatHitArea = null;
   let you = null;          // the figure that takes the stool once you sit
   let youMats = [];        // their materials, so they can fade in
   let youReveal = 0;
@@ -880,9 +881,11 @@ export function initScene(canvas, onHotspot, opts = {}) {
       p.rWrX = 1.95;
     },
     serve(p) {
-      // Both hands support the bowl while the body moves along the counter.
-      reachArm(p, 'l', 0.70, 0.31, 0.85);
-      reachArm(p, 'r', 0.70, 0.31, -0.28);
+      // Keep each hand on its own side of the bowl and below the face. The old
+      // pose crossed both arms onto the same point and lifted the bowl over
+      // the cook's eyes.
+      reachArm(p, 'l', 0.50, 0.31, 0.90);
+      reachArm(p, 'r', 0.50, 0.31, 0.70);
       p.torsoX = 0.12;
       p.headX = 0.18;
     },
@@ -1042,6 +1045,8 @@ export function initScene(canvas, onHotspot, opts = {}) {
 
   const _handL = new THREE.Vector3(), _handR = new THREE.Vector3();
   const _carry = new THREE.Vector3(), _seatBowl = new THREE.Vector3();
+  const _carryHead = new THREE.Vector3(), _carryBowlBox = new THREE.Box3();
+  const SERVICE_BOWL_DROP = 0.33;
   function syncServiceBowl() {
     if (!service || !serviceBowl?.visible || !guideRig) return;
     const t = nowSec() - service.startedAt;
@@ -1049,7 +1054,9 @@ export function initScene(canvas, onHotspot, opts = {}) {
     guideRig.armL.hand.getWorldPosition(_handL);
     guideRig.armR.hand.getWorldPosition(_handR);
     _carry.copy(_handL).add(_handR).multiplyScalar(0.5);
-    _carry.y -= 0.035;
+    // The bowl origin sits at its base, while the hands meet it near the rim.
+    // Keeping the old 3.5 cm offset put the entire bowl over the cook's face.
+    _carry.y -= SERVICE_BOWL_DROP;
     service.bowl.getWorldPosition(_seatBowl);
     if (t < 1.65) serviceBowl.position.copy(_seatBowl).lerp(_carry, ease01((t - 1.0) / 0.65));
     else if (t < 4.15) serviceBowl.position.copy(_carry);
@@ -1260,6 +1267,14 @@ export function initScene(canvas, onHotspot, opts = {}) {
     ring.rotation.x = -Math.PI / 2;
     ring.position.y = 0.016;
     g.add(ring);
+    // A transparent volume makes the entire stool, not a tiny label or one
+    // narrow cylinder, a reliable mouse/touch target in the 3D canvas.
+    seatHitArea = pos(box(0.9, 1.18, 0.9, 0xffffff), 0, 0.59, 0);
+    seatHitArea.material.transparent = true;
+    seatHitArea.material.opacity = 0;
+    seatHitArea.material.depthWrite = false;
+    seatHitArea.material.colorWrite = false;
+    g.add(seatHitArea);
     scene.add(g);
     registerHotspot('seat', LABELS.seatHotspot, g, new THREE.Vector3(SEAT.x, 1.0, SEAT.z));
   }
@@ -1589,6 +1604,7 @@ export function initScene(canvas, onHotspot, opts = {}) {
     sitStart = performance.now();
     introZ = streetZ();
     restPos = orbitPos(cam.azT, cam.elT, cam.rT);
+    if (seatHitArea) seatHitArea.visible = false;
     seatPin?.classList.add('gone');
   }
 
@@ -1704,11 +1720,8 @@ export function initScene(canvas, onHotspot, opts = {}) {
   if (phase === 'street') {
     seatPin = document.createElement('button');
     seatPin.className = 'seat-pin';
-    const dot = document.createElement('span');
-    dot.className = 'dot';
-    dot.setAttribute('aria-hidden', 'true');
-    seatPin.append(dot, document.createTextNode(LABELS.seatPrompt));
     seatPin.setAttribute('aria-label', LABELS.seatAria);
+    seatPin.title = LABELS.seatAria;
     seatPin.addEventListener('click', takeSeat);
     document.body.appendChild(seatPin);
   }
@@ -1735,7 +1748,9 @@ export function initScene(canvas, onHotspot, opts = {}) {
       seatGlowMat.opacity = phase === 'street' ? 0.16 + Math.sin(t * 2.4) * 0.1 : 0;
     }
     if (!seatPin) return;
-    _sv.set(SEAT.x, 1.02, SEAT.z).project(camera);
+    // The wordless DOM target sits over the stool body. It stays generous on
+    // touch screens while the pulsing ring supplies the visual invitation.
+    _sv.set(SEAT.x, 0.56, SEAT.z).project(camera);
     seatPin.style.left = (_sv.x * 0.5 + 0.5) * window.innerWidth + 'px';
     seatPin.style.top = (-_sv.y * 0.5 + 0.5) * window.innerHeight + 'px';
   }
@@ -2128,6 +2143,22 @@ export function initScene(canvas, onHotspot, opts = {}) {
       for (const w of walkers) scan(w);
       scan(guide);
       scan(camera);
+      let serviceCarryPose = null;
+      if (service && serviceBowl?.visible && guideRig) {
+        guide.updateMatrixWorld(true);
+        guideRig.armL.hand.getWorldPosition(_handL);
+        guideRig.armR.hand.getWorldPosition(_handR);
+        guideRig.head.getWorldPosition(_carryHead);
+        visibleBox(serviceBowl, _carryBowlBox);
+        const serviceTime = nowSec() - service.startedAt;
+        serviceCarryPose = {
+          carrying: serviceTime >= 1.65 && serviceTime < 4.15,
+          handSeparation: _handR.x - _handL.x,
+          bowlTop: _carryBowlBox.max.y,
+          headY: _carryHead.y,
+          faceClearance: _carryHead.y - _carryBowlBox.max.y,
+        };
+      }
       return {
         phase,
         diners: diners.length,
@@ -2172,6 +2203,7 @@ export function initScene(canvas, onHotspot, opts = {}) {
           placed: service.placed,
           bowlVisible: !!serviceBowl?.visible,
           dinerX: service.diner.position.x,
+          carryPose: serviceCarryPose,
         },
         serviceAudit,
         pot: cookingPot && {

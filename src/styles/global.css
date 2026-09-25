@@ -260,42 +260,21 @@ img { max-width: 100%; }
   position: fixed;
   transform: translate(-50%, -50%);
   z-index: 13;
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 9px 17px 9px 12px;
-  background: rgba(178, 58, 36, 0.9);
-  border: 1px solid rgba(247, 240, 226, 0.5);
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
-  border-radius: 999px;
-  color: #fbf4e6;
-  font-family: inherit;
-  font-size: 13px;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-  white-space: nowrap;
+  width: clamp(112px, 12vw, 168px);
+  height: clamp(132px, 20vh, 210px);
+  padding: 0;
+  background: transparent;
+  border: 0;
+  border-radius: 42%;
   cursor: pointer;
   pointer-events: auto;
-  box-shadow: 0 6px 26px rgba(0, 0, 0, 0.45);
-  animation: seat-breathe 2.4s ease-in-out infinite;
   transition: opacity 0.4s ease, transform 0.4s ease;
 }
-.seat-pin:hover { background: rgba(206, 74, 44, 0.96); }
-.seat-pin .dot {
-  width: 8px; height: 8px; border-radius: 50%;
-  background: var(--focus);
-  box-shadow: 0 0 0 5px rgba(240, 180, 90, 0.26);
-  flex: none;
+.seat-pin:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 4px;
 }
 .seat-pin.gone { opacity: 0; pointer-events: none; transform: translate(-50%, -50%) scale(0.9); }
-@keyframes seat-breathe {
-  0%, 100% { box-shadow: 0 6px 26px rgba(0, 0, 0, 0.45), 0 0 0 0 rgba(240, 180, 90, 0.34); }
-  50%      { box-shadow: 0 6px 26px rgba(0, 0, 0, 0.45), 0 0 0 12px rgba(240, 180, 90, 0); }
-}
-@media (prefers-reduced-motion: reduce) {
-  .seat-pin { animation: none; }
-}
 
 .hint {
   position: fixed;
@@ -357,13 +336,15 @@ img { max-width: 100%; }
   position: relative;
   width: min(1180px, 100%);
   height: min(780px, 90dvh);
-  pointer-events: auto;
+  /* The closed book still fills the screen even at opacity: 0. It must not
+     steal taps from the chair/canvas until it is actually open. */
+  pointer-events: none;
   transform: scale(0.86) translateY(14px);
   opacity: 0;
   transition: transform 0.44s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.32s ease;
   perspective: 2000px;
 }
-.book.open { transform: scale(1) translateY(0); opacity: 1; }
+.book.open { transform: scale(1) translateY(0); opacity: 1; pointer-events: auto; }
 
 .book-inner {
   position: absolute;
