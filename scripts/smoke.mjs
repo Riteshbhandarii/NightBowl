@@ -155,6 +155,14 @@ await session([], async (ctx) => {
   check('cook, diners and walkers exist',
     before.cook && before.diners >= 4 && before.walkers >= 2,
     `cook=${before.cook} diners=${before.diners} walkers=${before.walkers}`);
+  check('three detailed ramen bowls exist',
+    before.ramenBowls === 3 && before.heroBowls === 1
+      && before.ramenIngredients.every((parts) => parts.length === 8),
+    `bowls=${before.ramenBowls} hero=${before.heroBowls}`);
+  check('steam uses curling ribbons', before.steamSources === 4 && before.steamStyle,
+    `sources=${before.steamSources} ribbons=${before.steamStyle}`);
+  check('ramen detail stays inside the scene budget', before.renderCalls <= 250 && before.triangles <= 50000,
+    `calls=${before.renderCalls} triangles=${before.triangles}`);
   check('no non-finite values in any rig', before.nonFinite === 0, `count=${before.nonFinite}`);
   check('starts in first person', before.phase === 'street', `phase=${before.phase}`);
   check('nav pins hidden before sitting',
