@@ -1921,7 +1921,12 @@ export function initScene(canvas, onHotspot, opts = {}) {
     // getDelta() first: getElapsedTime() calls it internally and consumes the
     // delta, so asking for elapsed first leaves dt at ~0 forever (which froze the
     // street walkers and the animation mixer). elapsedTime is safe to read direct.
-    const dt = Math.min(clock.getDelta(), 0.05);
+    const poseDt = Math.min(clock.getDelta(), 0.5);
+    // Locomotion stays capped so one stalled frame cannot teleport a walker.
+    // Pose easing uses the real elapsed interval; otherwise a 1 FPS software
+    // renderer advances wall-clock actions while leaving the limbs seconds
+    // behind the object they are supposed to hold.
+    const dt = Math.min(poseDt, 0.05);
     const t = clock.elapsedTime;
     if (!startT) startT = t;
     const intro = REDUCED ? 1 : Math.min(1, (t - startT) / 2.6);
@@ -1972,8 +1977,8 @@ export function initScene(canvas, onHotspot, opts = {}) {
         tickService();
         if (!service) tickDirector();
       }
-      for (const d of diners) tickNPC(d, dt);
-      if (guideRig && guide.userData.ai) tickNPC(guide, dt);
+      for (const d of diners) tickNPC(d, poseDt);
+      if (guideRig && guide.userData.ai) tickNPC(guide, poseDt);
       syncServiceBowl();
       updateBubbles();
     }
