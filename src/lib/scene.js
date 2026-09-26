@@ -740,7 +740,9 @@ export function initScene(canvas, onHotspot, opts = {}) {
   }
 
   // mouth flap: fast, irregular, and only while a line is actually up
-  const flap = (tl) => (Math.sin(tl * 17) + Math.sin(tl * 26.3) > 0.1 ? 1 : 0);
+  const flap = (tl, phase) => (
+    Math.sin(tl * 17 + phase) + Math.sin(tl * 26.3 + phase * 1.37) > 0.1 ? 1 : 0
+  );
   const ease01 = (v) => {
     const u = Math.max(0, Math.min(1, v));
     return u * u * (3 - 2 * u);
@@ -840,7 +842,7 @@ export function initScene(canvas, onHotspot, opts = {}) {
       p.headX = Math.sin(tl * 3.1) * 0.06;
       reachArm(p, 'r', REST_ON_COUNTER.y + 0.06 + Math.sin(tl * 2.2) * 0.05,
         REST_ON_COUNTER.z - 0.02 + Math.sin(tl * 2.9) * 0.03, -0.06);
-      p.mouth = flap(tl);
+      p.mouth = flap(tl, npc.userData.ai.mouthPhase);
     },
     listen(p, tl, npc) {
       p.torsoY = npc.userData.ai.face * 0.4;
@@ -868,14 +870,14 @@ export function initScene(canvas, onHotspot, opts = {}) {
       p.headX = 0.26;
       p.headY = -0.14;
     },
-    chat(p, tl) {
+    chat(p, tl, npc) {
       p.torsoX = 0.02;
       p.torsoY = Math.sin(tl * 0.7) * 0.12;
       p.headX = -0.05 + Math.sin(tl * 2.6) * 0.05;
       p.headY = Math.sin(tl * 0.9) * 0.16;
       reachArm(p, 'r', COOK_OVER_COUNTER.y + Math.sin(tl * 2.4) * 0.05,
         COOK_OVER_COUNTER.z + Math.sin(tl * 3.1) * 0.04, -0.2 + Math.cos(tl * 1.7) * 0.16);
-      p.mouth = flap(tl);
+      p.mouth = flap(tl, npc.userData.ai.mouthPhase);
     },
     wipe(p, tl) {
       p.torsoX = 0.24;
@@ -926,6 +928,7 @@ export function initScene(canvas, onHotspot, opts = {}) {
       act: kind === 'cook' ? 'stir' : 'eat',
       startedAt: nowSec() - random() * 3, dur: rnd(3, 7),
       locked: false, face: 0, needsService: false,
+      mouthPhase: random() * Math.PI * 2,
       nextBiteAt: kind === 'diner' ? nowSec() + rnd(0.2, 1.2) : 0,
       biting: false, biteT: 0,
     };
@@ -2218,6 +2221,8 @@ export function initScene(canvas, onHotspot, opts = {}) {
           : null,
         cookHasWorkingProps: !!guide?.userData.tools?.ladle && !!guide?.userData.tools?.cloth,
         cookAction: guide?.userData.ai?.act || null,
+        mouthPhases: diners.map((diner) => diner.userData.ai?.mouthPhase)
+          .concat(guide?.userData.ai?.mouthPhase ?? []),
         service: service && {
           active: true,
           filled: service.filled,
