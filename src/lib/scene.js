@@ -168,6 +168,21 @@ export function initScene(canvas, onHotspot, opts = {}) {
   const box = (w, h, d, color, o) => new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m(color, o));
   const cyl = (rt, rb, h, color, o, seg = 22) => new THREE.Mesh(new THREE.CylinderGeometry(rt, rb, h, seg), m(color, o));
   const sph = (r, color, o, s = 18) => new THREE.Mesh(new THREE.SphereGeometry(r, s, s - 4), m(color, o));
+  const mug = (rt, rb, h, color) => {
+    const g = new THREE.Group();
+    g.add(cyl(rt, rb, h, color, { rough: 0.86 }, 14));
+    const drink = cyl(rt * 0.78, rt * 0.78, 0.004, 0x39251a, { rough: 0.72 }, 14);
+    drink.position.y = h * 0.5 + 0.003;
+    g.add(drink);
+    const handle = new THREE.Mesh(
+      new THREE.TorusGeometry(h * 0.27, 0.008, 6, 14),
+      m(color, { rough: 0.86 })
+    );
+    handle.rotation.y = Math.PI / 2;
+    handle.position.x = rt + h * 0.16;
+    g.add(handle);
+    return g;
+  };
   // total height of a capsule is len + 2r; callers pass the total they want
   const cap = (r, total, color, o, seg = 14) =>
     new THREE.Mesh(new THREE.CapsuleGeometry(r, Math.max(0.001, total - r * 2), 5, seg), m(color, o));
@@ -367,7 +382,7 @@ export function initScene(canvas, onHotspot, opts = {}) {
       bowl.rotation.y = rnd(-0.22, 0.22);
       bowl.userData.seatX = x;
       setBowlFill(bowl, [0.34, 0.62, 0.88][k]);
-      const cup = pos(cyl(0.07, 0.055, 0.13, 0xd8c8a5, { rough: 0.86 }, 14), 0.24, 0.11, 0.01);
+      const cup = pos(mug(0.07, 0.055, 0.13, 0xd8c8a5), 0.24, 0.11, 0.01);
       bowl.userData.counterCup = cup;
       bowl.add(cup);
       ramenBowls.push(bowl);
@@ -782,6 +797,10 @@ export function initScene(canvas, onHotspot, opts = {}) {
     p[`${side}ShZ`] = shoulderZ;
   }
 
+  function restArmInLap(p, side) {
+    reachArm(p, side, 0.12, 0.08, side === 'l' ? 0.14 : -0.14);
+  }
+
   function updateMeal(npc, at) {
     const ai = npc.userData.ai;
     const bowl = npc.userData.table?.bowl;
@@ -814,22 +833,27 @@ export function initScene(canvas, onHotspot, opts = {}) {
       if (!ai.biting) {
         p.torsoX = 0.12;
         p.headX = 0.08;
+        restArmInLap(p, 'l');
+        restArmInLap(p, 'r');
         return;
       }
       const t = ai.biteT;
+      if (t < 0.4 || t >= 3.5) {
+        p.torsoX = 0.12;
+        p.headX = 0.08;
+        restArmInLap(p, 'l');
+        restArmInLap(p, 'r');
+        return;
+      }
       let lift = 0;
-      if (t < 0.7) lift = 0;
-      else if (t < 1.35) lift = 0;
-      else if (t < 2.15) lift = ease01((t - 1.35) / 0.8);
+      if (t < 1.35) lift = ease01((t - 0.4) / 0.95);
       else if (t < 3.0) lift = 1;
-      else if (t < 3.8) lift = 1 - ease01((t - 3.0) / 0.8);
+      else lift = 1 - ease01((t - 3.0) / 0.5);
 
       // The free hand rests in the diner's lap. The chopstick hand starts below
       // the rim and approaches the mouth from below; lifting it past the face
       // made the diner look as though they were eating over their own head.
-      p.lShX = 0.05;
-      p.lShZ = 0.22;
-      p.lElX = -0.72;
+      restArmInLap(p, 'l');
       // Animate the chopstick tips between the bowl and mouth, then send the
       // hand to the grip end. Keeping the prop under the torso instead of the
       // wrist prevents a bent forearm from turning the sticks through the
@@ -839,35 +863,59 @@ export function initScene(canvas, onHotspot, opts = {}) {
       // pair pointed from the bowl farther across the counter, forcing the arm
       // to full extension and through the worktop before every bite.
       const stickAngle = mix(-0.60, 0.20, lift);
-      const tipY = mix(0.47, 0.59, lift);
+      const tipY = mix(0.47, 0.54, lift);
       const tipZ = mix(0.30, 0.14, lift);
       if (held) {
         held.position.set(0, tipY, tipZ);
         held.rotation.x = stickAngle;
       }
-      const gripY = tipY - Math.sin(stickAngle) * 0.14;
-      const gripZ = tipZ + Math.cos(stickAngle) * 0.14;
+      const gripY = tipY - Math.sin(stickAngle) * 0.1;
+      const gripZ = tipZ - Math.cos(stickAngle) * 0.1;
       reachArm(p, 'r', gripY, gripZ, mix(-0.04, -0.16, lift));
       p.rWrX = 0;
-      const gathering = t < 1.35 ? ease01(t / 0.7) : 1;
-      p.torsoX = 0.2 - lift * 0.1 + (1 - gathering) * 0.05;
+      p.torsoX = 0.2 - lift * 0.1;
       p.headX = 0.16 - lift * 0.12;
-      p.mouth = t >= 2.08 && t < 3.08 ? 1 : 0;
+      p.mouth = t >= 1.2 && t < 2.8 ? 1 : 0;
     },
     pause(p, tl) {
       p.torsoX = 0.06 + Math.sin(tl * 0.9) * 0.02;
       p.headX = 0.05;
       p.headY = Math.sin(tl * 0.5) * 0.3;
     },
-    drink(p, tl) {
-      const up = tl < 0.75 ? ease01(tl / 0.75)
-        : tl < 1.8 ? 1
-          : 1 - ease01((tl - 1.8) / 0.75);
-      reachArm(p, 'l', mix(0.56, 0.66, up), mix(0.34, 0.13, up), 0.08);
-      p.lWrX = up * 0.45;
-      p.torsoX = 0.1 - up * 0.04;
-      p.headX = -up * 0.16;
-      p.mouth = up > 0.9 ? 1 : 0;
+    drink(p, tl, npc) {
+      restArmInLap(p, 'r');
+      if (tl <= 0.4) {
+        restArmInLap(p, 'l');
+        p.torsoX = 0.1;
+        return;
+      }
+      const up = tl < 1.2 ? ease01((tl - 0.4) / 0.8)
+        : tl < 1.85 ? 1
+          : 1 - ease01((tl - 1.85) / 0.85);
+      const cup = npc.userData.table?.heldCup;
+      if (tl >= 2.7) {
+        if (cup) {
+          cup.position.set(-0.24, 0.45, 0.29);
+          cup.rotation.set(0, 0, 0);
+        }
+        restArmInLap(p, 'l');
+        p.torsoX = 0.1;
+        return;
+      }
+      // Lift over the counter lip on both the outward and return strokes.
+      const cupY = mix(0.45, 0.535, up) + Math.sin(Math.PI * up) * 0.07;
+      const cupZ = mix(0.29, 0.08, up);
+      if (cup) {
+        cup.position.set(mix(-0.24, -0.15, up), cupY, cupZ);
+        cup.rotation.set(mix(0, 0.5, up), 0, 0);
+      }
+      // The cup is stable in torso space. The hand follows its lower back edge,
+      // keeping the wrist below the face while the rim—not the fist—meets the mouth.
+      reachArm(p, 'l', cupY - 0.015, cupZ + 0.1, mix(0.08, 0.2, up));
+      p.lWrX = 0;
+      p.torsoX = 0.1 - up * 0.03;
+      p.headX = -up * 0.05;
+      p.mouth = 0;
     },
     talk(p, tl, npc) {
       p.torsoY = npc.userData.ai.face * 0.5;
@@ -996,11 +1044,11 @@ export function initScene(canvas, onHotspot, opts = {}) {
     applyPose(npc.userData.rig, ai.cur);
     if (ai.kind === 'diner') {
       const table = npc.userData.table;
-      const eating = ai.act === 'eat' && ai.biting;
+      const eating = ai.act === 'eat' && ai.biting && ai.biteT >= 0.4 && ai.biteT < 3.5;
       const drinking = ai.act === 'drink';
       if (table) {
         table.heldChopsticks.visible = eating;
-        table.noodleLift.visible = eating && ai.biteT >= 1.35 && ai.biteT < 3.15;
+        table.noodleLift.visible = eating && ai.biteT >= 0.45 && ai.biteT < 2.85;
         table.heldCup.visible = drinking;
         if (table.bowl) {
           for (const stick of table.bowl.userData.restingChopsticks || []) stick.visible = !eating;
@@ -1255,7 +1303,7 @@ export function initScene(canvas, onHotspot, opts = {}) {
     const heldChopsticks = new THREE.Group();
     // Tip is the group origin. The grip end sits to the diner's right so the
     // pair spans the food-to-hand line instead of inheriting the wrist hinge.
-    const stickDirection = new THREE.Vector3(0.24, 0, 0.14);
+    const stickDirection = new THREE.Vector3(0.24, 0, -0.1);
     const stickLength = stickDirection.length();
     for (const x of [-0.01, 0.01]) {
       const stick = new THREE.Mesh(
@@ -1272,9 +1320,9 @@ export function initScene(canvas, onHotspot, opts = {}) {
     heldChopsticks.add(noodleLift);
     heldChopsticks.visible = false;
     r.torso.add(heldChopsticks);
-    const heldCup = pos(cyl(0.055, 0.045, 0.11, 0xd8c8a5, { rough: 0.86 }, 14), 0, -0.03, 0.06);
+    const heldCup = pos(mug(0.055, 0.045, 0.11, 0xd8c8a5), -0.24, 0.45, 0.29);
     heldCup.visible = false;
-    r.armL.wrist.add(heldCup);
+    r.torso.add(heldCup);
     d.userData.table = { bowl, heldChopsticks, noodleLift, heldCup };
     if (autonomous) {
       initAI(d, 'diner', seatedPose);
@@ -2038,8 +2086,8 @@ export function initScene(canvas, onHotspot, opts = {}) {
       // Props follow the action exactly as the live tick switches them, so the
       // audit sees what a visitor sees.
       if (table) {
-        table.heldChopsticks.visible = act === 'eat';
-        if (table.noodleLift) table.noodleLift.visible = act === 'eat' && tl >= 1.35 && tl < 3.15;
+        table.heldChopsticks.visible = act === 'eat' && tl >= 0.4 && tl < 3.5;
+        if (table.noodleLift) table.noodleLift.visible = act === 'eat' && tl >= 0.45 && tl < 2.85;
         table.heldCup.visible = act === 'drink';
         for (const stick of table.bowl?.userData.restingChopsticks || []) stick.visible = act !== 'eat';
         if (table.bowl?.userData.counterCup) table.bowl.userData.counterCup.visible = act !== 'drink';
