@@ -13,6 +13,7 @@ mkdirSync(out, { recursive: true });
 
 const reviews = [
   { kind: 'diner', index: 2, act: 'eat', times: [0, 0.7, 1.35, 1.75, 2.4, 3.2, 3.8, 4.2] },
+  { kind: 'diner', index: 2, act: 'drink', times: [0, 0.4, 0.75, 1.2, 1.8, 2.2, 2.55, 2.8] },
   { kind: 'cook', index: 0, act: 'stir', times: [0, 0.4, 0.8, 1.2, 1.6, 2, 2.4, 2.8] },
 ];
 
