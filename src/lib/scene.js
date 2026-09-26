@@ -919,8 +919,8 @@ export function initScene(canvas, onHotspot, opts = {}) {
       // Keep each hand on its own side of the bowl and below the face. The old
       // pose crossed both arms onto the same point and lifted the bowl over
       // the cook's eyes.
-      reachArm(p, 'l', 0.50, 0.31, 0.90);
-      reachArm(p, 'r', 0.50, 0.31, 0.70);
+      reachArm(p, 'l', 0.50, 0.31, 0.70);
+      reachArm(p, 'r', 0.50, 0.31, 0.85);
       p.torsoX = 0.12;
       p.headX = 0.18;
     },
