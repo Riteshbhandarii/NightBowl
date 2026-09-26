@@ -379,6 +379,29 @@ await session([], async (ctx) => {
   check('cook returns a full bowl and diner resumes', serviceDone,
     JSON.stringify((await evaluate('window.__nightbowl.selfCheck()')).dinerActions[0]));
 
+  const beforeTurnover = await evaluate('window.__nightbowl.selfCheck().customerGenerations[1]');
+  const turnoverTriggered = await evaluate('window.__nightbowl.testTurnover(1)');
+  check('a diner can finish their second meal', turnoverTriggered);
+  const turnoverPhases = new Set();
+  let replacementSeated = false;
+  for (let i = 0; i < 140 && !replacementSeated; i++) {
+    await sleep(250);
+    const state = await evaluate('window.__nightbowl.selfCheck()');
+    if (state.turnover?.phase) turnoverPhases.add(state.turnover.phase);
+    replacementSeated = !state.turnover
+      && state.customerGenerations[1] > beforeTurnover
+      && state.dinerActions[1].action === 'eat'
+      && state.dinerActions[1].fill > 0.95;
+  }
+  check('finished diner stands and walks away',
+    ['stand', 'stepOut', 'leave'].every((phase) => turnoverPhases.has(phase)),
+    [...turnoverPhases].join(','));
+  check('stool stays vacant before a new customer arrives', turnoverPhases.has('vacant'),
+    [...turnoverPhases].join(','));
+  check('a different customer walks in, sits, and starts eating',
+    replacementSeated && ['arrive', 'stepIn', 'sit'].every((phase) => turnoverPhases.has(phase)),
+    [...turnoverPhases].join(','));
+
   // the director is on a randomised timer, so poll rather than assume a moment
   let spoke = false;
   for (let i = 0; i < 90 && !spoke; i++) {

@@ -110,10 +110,18 @@ export function initScene(canvas, onHotspot, opts = {}) {
   const norenFlaps = [];
   const diners = [];
   const walkers = [];
+  let activeTurnover = null;
   const DINER_SPECS = [
     { x: -1.92, facing: -0.2, hair: 0x2a1c12, shirt: 0x6b4a2f, scale: 1.0, build: 1.08, headScale: 0.97 },
     { x: -1.06, facing: 0.16, hair: 0x14100c, shirt: 0x394a5e, scale: 0.92, build: 0.94, headScale: 1.03 },
     { x: 1.78, facing: 0.24, hair: 0x3a2a1a, shirt: 0x5a5560, scale: 0.97, build: 1.0, headScale: 1.0 },
+  ];
+  const CUSTOMER_PALETTE = [
+    { shirt: 0x3f5568, hair: 0x17120e },
+    { shirt: 0x704839, hair: 0x302015 },
+    { shirt: 0x4f6044, hair: 0x191513 },
+    { shirt: 0x59456b, hair: 0x3a2417 },
+    { shirt: 0x665b3f, hair: 0x16110e },
   ];
   // the one stool that is never taken, and the ring that advertises it
   const SEAT = { x: 0.1, z: 1.52 };
@@ -654,7 +662,8 @@ export function initScene(canvas, onHotspot, opts = {}) {
     );
     face.position.set(0, 0.008, 0.099 * hs);
     head.add(face);
-    head.add(pos(sph(0.111 * hs, opt.hair || 0x1c1510, { rough: 1 }, 16), 0, 0.024, -0.008));
+    const hair = pos(sph(0.111 * hs, opt.hair || 0x1c1510, { rough: 1 }, 16), 0, 0.024, -0.008);
+    head.add(hair);
     if (opt.cap != null) {
       head.add(pos(cyl(0.115 * hs, 0.115 * hs, 0.05, opt.cap, { rough: 1 }, 14), 0, 0.057, 0));
       head.add(pos(box(0.196 * hs, 0.017, 0.017, opt.cap), 0, 0.04, 0));
@@ -707,6 +716,10 @@ export function initScene(canvas, onHotspot, opts = {}) {
     const legL = leg(-1), legR = leg(1);
 
     p.userData.rig = { hip, torso, head, armL, armR, legL, legR, face, pelvis };
+    p.userData.appearance = {
+      shirt: [pelvis.material, trunk.material, traps.material],
+      hair: hair.material,
+    };
     p.scale.setScalar(sc);
     return p;
   }
@@ -812,7 +825,12 @@ export function initScene(canvas, onHotspot, opts = {}) {
     ai.biteT = 0;
     if (ai.act !== 'eat' || !bowl) return;
     if (bowl.userData.fill <= 0.01) {
-      ai.needsService = true;
+      if (!ai.emptyCounted) {
+        ai.emptyCounted = true;
+        ai.mealsFinished++;
+      }
+      ai.readyToLeave = ai.mealsFinished >= 2;
+      ai.needsService = !ai.readyToLeave;
       setAct(npc, 'pause', 30);
       return;
     }
@@ -822,7 +840,6 @@ export function initScene(canvas, onHotspot, opts = {}) {
     if (biteT >= 4.25) {
       setBowlFill(bowl, bowl.userData.fill - rnd(0.14, 0.2));
       ai.nextBiteAt = at + rnd(0.8, 2.2);
-      if (bowl.userData.fill <= 0.01) ai.needsService = true;
       return;
     }
     ai.biting = true;
@@ -1025,6 +1042,8 @@ export function initScene(canvas, onHotspot, opts = {}) {
       mouthPhase: random() * Math.PI * 2,
       nextBiteAt: kind === 'diner' ? nowSec() + rnd(0.2, 1.2) : 0,
       biting: false, biteT: 0,
+      mealsFinished: 0, emptyCounted: false, readyToLeave: false,
+      customerGeneration: 0, turnover: null,
     };
   }
   function setAct(npc, act, dur) {
@@ -1117,6 +1136,7 @@ export function initScene(canvas, onHotspot, opts = {}) {
     }
     if (t >= 4.8 && !s.placed) {
       setBowlFill(s.bowl, 1);
+      s.diner.userData.ai.emptyCounted = false;
       s.bowl.visible = true;
       serviceBowl.visible = false;
       s.placed = true;
@@ -1223,7 +1243,7 @@ export function initScene(canvas, onHotspot, opts = {}) {
 
   function chooseBeat() {
     const cook = guideRig ? guide : null;
-    const seated = diners.filter((d) => d.userData.ai);
+    const seated = diners.filter((d) => d.userData.ai && !d.userData.ai.turnover && !d.userData.ai.readyToLeave);
     if (!seated.length) return;
     const roll = random();
 
@@ -1291,6 +1311,156 @@ export function initScene(canvas, onHotspot, opts = {}) {
     rig.torso.rotation.z = Math.sin(phase) * 0.03 * amt;
   }
 
+  function standingCustomerPose(npc) {
+    const p = seatedPose(npc);
+    p.hipY = 0.8;
+    p.torsoX = 0.04;
+    p.headX = 0;
+    p.lShX = 0; p.lShZ = 0; p.lElX = 0;
+    p.rShX = 0; p.rShZ = 0; p.rElX = 0;
+    return p;
+  }
+
+  function blendPose(a, b, u) {
+    const p = {};
+    for (const key in a) p[key] = mix(a[key], b[key], u);
+    return p;
+  }
+
+  function setCustomerAppearance(npc) {
+    const ai = npc.userData.ai;
+    const index = diners.indexOf(npc);
+    const look = CUSTOMER_PALETTE[(index + ai.customerGeneration) % CUSTOMER_PALETTE.length];
+    for (const mat of npc.userData.appearance?.shirt || []) mat.color.setHex(look.shirt);
+    npc.userData.appearance?.hair?.color.setHex(look.hair);
+  }
+
+  function setTurnoverPhase(turnover, phase, duration) {
+    turnover.phase = phase;
+    turnover.phaseAt = nowSec();
+    turnover.duration = duration;
+    turnover.diner.userData.ai.turnover = phase;
+  }
+
+  function beginTurnover(diner) {
+    const ai = diner.userData.ai;
+    if (!ai || activeTurnover || service || beat) return false;
+    ai.locked = true;
+    ai.needsService = false;
+    setAct(diner, 'pause', 60);
+    const entryX = diner.position.x < 0 ? -4.35 : 4.35;
+    activeTurnover = {
+      diner,
+      seatX: diner.userData.seatX,
+      seatRotation: diner.userData.seatRotation,
+      entryX,
+      phase: 'stand', phaseAt: nowSec(), duration: 1.2,
+    };
+    ai.turnover = 'stand';
+    const table = diner.userData.table;
+    table.heldChopsticks.visible = false;
+    table.noodleLift.visible = false;
+    table.heldCup.visible = false;
+    for (const stick of table.bowl?.userData.restingChopsticks || []) stick.visible = true;
+    if (table.bowl?.userData.counterCup) table.bowl.userData.counterCup.visible = true;
+    return true;
+  }
+
+  function finishTurnover(turnover) {
+    const diner = turnover.diner;
+    const ai = diner.userData.ai;
+    diner.position.set(turnover.seatX, 0, CUSTOMER_Z);
+    diner.rotation.y = turnover.seatRotation;
+    const seated = seatedPose(diner);
+    applyPose(diner.userData.rig, seated);
+    diner.userData.rig.legL.hp.rotation.x = -1.5;
+    diner.userData.rig.legR.hp.rotation.x = -1.5;
+    diner.userData.rig.legL.knee.rotation.x = 1.5;
+    diner.userData.rig.legR.knee.rotation.x = 1.5;
+    ai.cur = seated;
+    ai.tgt = seatedPose(diner);
+    ai.mealsFinished = 0;
+    ai.emptyCounted = false;
+    ai.readyToLeave = false;
+    ai.turnover = null;
+    ai.locked = false;
+    setBowlFill(diner.userData.table.bowl, 1);
+    setAct(diner, 'eat', rnd(28, 42));
+    activeTurnover = null;
+  }
+
+  function tickTurnover() {
+    if (!activeTurnover) {
+      if (service || beat) return;
+      const waiting = diners.find((d) => d.userData.ai?.readyToLeave);
+      if (waiting) beginTurnover(waiting);
+      return;
+    }
+
+    const tr = activeTurnover;
+    const diner = tr.diner;
+    const rig = diner.userData.rig;
+    const elapsed = nowSec() - tr.phaseAt;
+    const u = ease01(elapsed / tr.duration);
+    const standing = standingCustomerPose(diner);
+
+    if (tr.phase === 'stand') {
+      applyPose(rig, blendPose(seatedPose(diner), standing, u));
+      rig.legL.hp.rotation.x = mix(-1.5, 0, u);
+      rig.legR.hp.rotation.x = mix(-1.5, 0, u);
+      rig.legL.knee.rotation.x = mix(1.5, 0, u);
+      rig.legR.knee.rotation.x = mix(1.5, 0, u);
+      diner.rotation.y = mix(tr.seatRotation, 0, u);
+      if (elapsed >= tr.duration) setTurnoverPhase(tr, 'stepOut', 1.5);
+    } else if (tr.phase === 'stepOut') {
+      applyPose(rig, standing);
+      diner.position.z = mix(CUSTOMER_Z, 2.42, u);
+      diner.rotation.y = 0;
+      walkRig(rig, elapsed * 7, 0.75);
+      if (elapsed >= tr.duration) setTurnoverPhase(tr, 'leave', 2.2);
+    } else if (tr.phase === 'leave') {
+      applyPose(rig, standing);
+      diner.position.x = mix(tr.seatX, tr.entryX, u);
+      diner.position.z = 2.42;
+      diner.rotation.y = tr.entryX < tr.seatX ? -Math.PI / 2 : Math.PI / 2;
+      walkRig(rig, elapsed * 7, 1);
+      if (elapsed >= tr.duration) {
+        diner.visible = false;
+        diner.userData.ai.customerGeneration++;
+        setCustomerAppearance(diner);
+        setTurnoverPhase(tr, 'vacant', rnd(4, 7));
+      }
+    } else if (tr.phase === 'vacant') {
+      if (elapsed >= tr.duration) {
+        diner.position.set(tr.entryX, 0, 2.42);
+        diner.visible = true;
+        setTurnoverPhase(tr, 'arrive', 2.2);
+      }
+    } else if (tr.phase === 'arrive') {
+      applyPose(rig, standing);
+      diner.position.x = mix(tr.entryX, tr.seatX, u);
+      diner.position.z = 2.42;
+      diner.rotation.y = tr.entryX < tr.seatX ? Math.PI / 2 : -Math.PI / 2;
+      walkRig(rig, elapsed * 7, 1);
+      if (elapsed >= tr.duration) setTurnoverPhase(tr, 'stepIn', 1.5);
+    } else if (tr.phase === 'stepIn') {
+      applyPose(rig, standing);
+      diner.position.x = tr.seatX;
+      diner.position.z = mix(2.42, CUSTOMER_Z, u);
+      diner.rotation.y = Math.PI;
+      walkRig(rig, elapsed * 7, 0.7);
+      if (elapsed >= tr.duration) setTurnoverPhase(tr, 'sit', 1.2);
+    } else if (tr.phase === 'sit') {
+      applyPose(rig, blendPose(standing, seatedPose(diner), u));
+      rig.legL.hp.rotation.x = mix(0, -1.5, u);
+      rig.legR.hp.rotation.x = mix(0, -1.5, u);
+      rig.legL.knee.rotation.x = mix(0, 1.5, u);
+      rig.legR.knee.rotation.x = mix(0, 1.5, u);
+      diner.rotation.y = mix(Math.PI, tr.seatRotation, u);
+      if (elapsed >= tr.duration) finishTurnover(tr);
+    }
+  }
+
   // one person hunched over a bowl, chopsticks in hand
   function seatedPerson(sp, bowl = null, autonomous = true, seatTopY = SEAT_TOP_Y) {
     const d = buildPerson({
@@ -1299,6 +1469,8 @@ export function initScene(canvas, onHotspot, opts = {}) {
     });
     d.position.set(sp.x, 0, CUSTOMER_Z);
     d.rotation.y = Math.PI + (sp.facing || 0);
+    d.userData.seatX = sp.x;
+    d.userData.seatRotation = d.rotation.y;
     const r = d.userData.rig;
     // Sit the pelvis on the seat instead of through it. The pelvis is a sphere
     // of radius 0.135*build squashed to 0.66 in y, and the whole person is
@@ -1974,10 +2146,13 @@ export function initScene(canvas, onHotspot, opts = {}) {
     } else {
       // the director only performs for someone who is actually sitting down
       if (phase === 'seated') {
-        tickService();
-        if (!service) tickDirector();
+        tickTurnover();
+        if (!activeTurnover) {
+          tickService();
+          if (!service) tickDirector();
+        }
       }
-      for (const d of diners) tickNPC(d, poseDt);
+      for (const d of diners) if (!d.userData.ai?.turnover) tickNPC(d, poseDt);
       if (guideRig && guide.userData.ai) tickNPC(guide, poseDt);
       syncServiceBowl();
       updateBubbles();
@@ -2029,6 +2204,19 @@ export function initScene(canvas, onHotspot, opts = {}) {
       if (!bowl) return false;
       setBowlFill(bowl, 0);
       diner.userData.ai.needsService = true;
+      return true;
+    },
+    testTurnover(index = 0) {
+      const diner = diners[index];
+      const bowl = diner?.userData.table?.bowl;
+      const ai = diner?.userData.ai;
+      if (!diner || !bowl || !ai || activeTurnover) return false;
+      setBowlFill(bowl, 0);
+      ai.mealsFinished = 2;
+      ai.emptyCounted = true;
+      ai.readyToLeave = true;
+      ai.needsService = false;
+      setAct(diner, 'pause', 60);
       return true;
     },
 
@@ -2387,6 +2575,15 @@ export function initScene(canvas, onHotspot, opts = {}) {
           .concat(guide?.userData.ai?.mouthPhase ?? []),
         actionTempos: diners.map((diner) => diner.userData.ai?.tempo)
           .concat(guide?.userData.ai?.tempo ?? []),
+        turnover: activeTurnover ? {
+          phase: activeTurnover.phase,
+          index: diners.indexOf(activeTurnover.diner),
+          x: activeTurnover.diner.position.x,
+          z: activeTurnover.diner.position.z,
+          visible: activeTurnover.diner.visible,
+          generation: activeTurnover.diner.userData.ai.customerGeneration,
+        } : null,
+        customerGenerations: diners.map((diner) => diner.userData.ai?.customerGeneration || 0),
         service: service && {
           active: true,
           filled: service.filled,
