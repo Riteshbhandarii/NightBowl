@@ -53,6 +53,10 @@ function gap(a, b) {
   }
   return Math.sqrt(sum);
 }
+function pointGap(a, b) {
+  if (!a || !b) return null;
+  return Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z);
+}
 const round = (v) => (typeof v === 'number' ? Math.round(v * 1000) / 1000 : v);
 
 /* ---------- limits ----------
@@ -174,6 +178,20 @@ await session({ width: 1440, height: 900 }, async (ctx) => {
           { gap: round(g) });
       }
     }
+    if (act === 'eat' && s.boxes.handL && s.boxes.ownBowl) {
+      const d = overlap(s.boxes.handL, s.boxes.ownBowl);
+      if (d !== null && d > CLIP_TOL) {
+        record(`clip:${key}:eat:free-hand:own-bowl`, 'geometry interpenetration', key, act, tl,
+          `free hand is ${round(d)}m inside its own bowl`, { depth: round(d) });
+      }
+    }
+    if (act === 'eat' && tl >= 2.15 && tl <= 3.0 && s.joints.handR && s.joints.head) {
+      const rise = s.joints.handR.y - s.joints.head.y;
+      if (rise > 0.04) {
+        record(`pose:${key}:eat:hand-above-head`, 'impossible pose', key, act, tl,
+          `chopstick hand is ${round(rise)}m above the head centre`, { gap: round(rise) });
+      }
+    }
     if (act === 'wipe' && s.boxes.cloth && furniture.counterTop) {
       const g = gap(s.boxes.cloth, furniture.counterTop);
       if (g !== null && g > CONTACT_TOL) {
@@ -186,6 +204,13 @@ await session({ width: 1440, height: 900 }, async (ctx) => {
       if (d === null || d <= CLIP_TOL) {
         record(`contact:${key}:stir:ladle-pot`, 'contact miss', key, act, tl,
           'ladle is not inside the pot while stirring', { depth: round(d) });
+      }
+    }
+    if (act === 'stir' && s.joints.toolGrip && s.joints.handL) {
+      const g = pointGap(s.joints.toolGrip, s.joints.handL);
+      if (g !== null && g > CONTACT_TOL) {
+        record(`contact:${key}:stir:hand-ladle-grip`, 'contact miss', key, act, tl,
+          `ladle grip is ${round(g)}m away from the hand`, { gap: round(g) });
       }
     }
   }
