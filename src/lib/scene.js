@@ -804,6 +804,7 @@ export function initScene(canvas, onHotspot, opts = {}) {
   const SEATED_ACTS = {
     eat(p, tl, npc) {
       const ai = npc.userData.ai;
+      const held = npc.userData.table?.heldChopsticks;
       if (!ai.biting) {
         p.torsoX = 0.12;
         p.headX = 0.08;
@@ -823,8 +824,25 @@ export function initScene(canvas, onHotspot, opts = {}) {
       p.lShX = 0.05;
       p.lShZ = 0.22;
       p.lElX = -0.72;
-      reachArm(p, 'r', 0.54, mix(0.18, 0.02, lift), mix(-0.10, -0.55, lift));
-      p.rWrX = mix(-0.22, -0.42, lift);
+      // Animate the chopstick tips between the bowl and mouth, then send the
+      // hand to the grip end. Keeping the prop under the torso instead of the
+      // wrist prevents a bent forearm from turning the sticks through the
+      // diner's neck or straight up over their head.
+      // The tips start in the bowl while the grip stays back by the diner's
+      // shoulder. At the mouth the grip drops below the tips. The previous
+      // pair pointed from the bowl farther across the counter, forcing the arm
+      // to full extension and through the worktop before every bite.
+      const stickAngle = mix(-0.60, 0.20, lift);
+      const tipY = mix(0.47, 0.59, lift);
+      const tipZ = mix(0.30, 0.14, lift);
+      if (held) {
+        held.position.set(0, tipY, tipZ);
+        held.rotation.x = stickAngle;
+      }
+      const gripY = tipY - Math.sin(stickAngle) * 0.14;
+      const gripZ = tipZ + Math.cos(stickAngle) * 0.14;
+      reachArm(p, 'r', gripY, gripZ, mix(-0.04, -0.16, lift));
+      p.rWrX = 0;
       const gathering = t < 1.35 ? ease01(t / 0.7) : 1;
       p.torsoX = 0.2 - lift * 0.1 + (1 - gathering) * 0.05;
       p.headX = 0.16 - lift * 0.12;
@@ -867,16 +885,18 @@ export function initScene(canvas, onHotspot, opts = {}) {
 
   // ---- cook actions ----
   const COOK_ACTS = {
-    stir(p, tl) {
-      // The utensil stays in the pot. Only the wrist-sized circular motion moves.
+    stir(p, tl, npc) {
+      // The hand stays above and behind the hot rim while the ladle reaches
+      // down into the pot. Keeping the utensil in torso space prevents the
+      // bent wrist from rotating its scoop upward through the cook's face.
       const circle = tl * 2.0;
-      reachArm(p, 'l', 0.60 + Math.sin(circle) * 0.014, 0.20 + Math.cos(circle) * 0.014,
-        1.15 + Math.sin(circle) * 0.04);
-      p.lWrX = 2.25;
-      p.lWrZ = -0.6;
-      p.torsoX = 0.16;
+      reachArm(p, 'r', 0.43 + Math.sin(circle) * 0.008, 0.22 + Math.cos(circle) * 0.008,
+        Math.sin(circle) * 0.025);
+      const ladle = npc?.userData.tools?.ladle;
+      if (ladle) ladle.position.set(Math.sin(circle) * 0.012, 0, Math.cos(circle) * 0.012);
+      p.torsoX = 0.10;
       p.torsoY = -0.13;
-      p.headX = 0.26;
+      p.headX = 0.16;
       p.headY = -0.14;
     },
     chat(p, tl, npc) {
@@ -899,8 +919,8 @@ export function initScene(canvas, onHotspot, opts = {}) {
       // Keep each hand on its own side of the bowl and below the face. The old
       // pose crossed both arms onto the same point and lifted the bowl over
       // the cook's eyes.
-      reachArm(p, 'l', 0.50, 0.31, 0.90);
-      reachArm(p, 'r', 0.50, 0.31, 0.70);
+      reachArm(p, 'l', 0.50, 0.31, 0.70);
+      reachArm(p, 'r', 0.50, 0.31, 0.85);
       p.torsoX = 0.12;
       p.headX = 0.18;
     },
@@ -1227,16 +1247,25 @@ export function initScene(canvas, onHotspot, opts = {}) {
     r.armL.sh.rotation.x = -0.5; r.armR.sh.rotation.x = -0.7;
     r.armR.elbow.rotation.x = -1.0;
     const heldChopsticks = new THREE.Group();
-    for (const x of [-0.012, 0.012]) {
-      const stick = pos(box(0.009, 0.009, 0.24, 0x8a6a3c), x, -0.02, 0.12);
-      stick.rotation.x = 0.32;
+    // Tip is the group origin. The grip end sits to the diner's right so the
+    // pair spans the food-to-hand line instead of inheriting the wrist hinge.
+    const stickDirection = new THREE.Vector3(0.24, 0, 0.14);
+    const stickLength = stickDirection.length();
+    for (const x of [-0.01, 0.01]) {
+      const stick = new THREE.Mesh(
+        new THREE.BoxGeometry(0.009, 0.009, stickLength),
+        m(0x8a6a3c, { rough: 0.8 })
+      );
+      stick.position.copy(stickDirection).multiplyScalar(0.5);
+      stick.position.x += x;
+      stick.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), stickDirection.clone().normalize());
       heldChopsticks.add(stick);
     }
-    const noodleLift = pos(cap(0.006, 0.15, 0xe8c26a, { rough: 0.8 }, 6), 0, -0.12, 0.19);
+    const noodleLift = pos(cap(0.006, 0.13, 0xe8c26a, { rough: 0.8 }, 6), 0, -0.065, 0);
     noodleLift.rotation.z = 0.08;
     heldChopsticks.add(noodleLift);
     heldChopsticks.visible = false;
-    r.armR.wrist.add(heldChopsticks);
+    r.torso.add(heldChopsticks);
     const heldCup = pos(cyl(0.055, 0.045, 0.11, 0xd8c8a5, { rough: 0.86 }, 14), 0, -0.03, 0.06);
     heldCup.visible = false;
     r.armL.wrist.add(heldCup);
@@ -1385,19 +1414,21 @@ export function initScene(canvas, onHotspot, opts = {}) {
   /* ---------- the cook: GLB if present, stand-in otherwise ---------- */
   function useStandInCook() {
     guide = buildPerson({ shirt: 0xffffff, apron: true, toque: true, skin: 0xd7a173, hair: 0x241a12 });
-    guide.position.set(0.45, 0, -0.2);
+    guide.position.set(0.45, 0, -0.3);
     guide.rotation.y = -0.08;
     guideRig = guide.userData.rig;
-    // Build from an explicit grip at the wrist. The old cylinder was offset
-    // and rotated as a whole, leaving the handle beside the hand even when the
-    // scoop happened to intersect the pot.
+    // Build the tool in torso space from its grip to its scoop. A wrist child
+    // inherits both arm hinges; that made the ladle flip upward behind the
+    // cook's head even though the hand itself was aimed at the pot.
     const ladle = new THREE.Group();
     ladle.userData.grip = new THREE.Object3D();
+    ladle.userData.grip.position.set(0.185, 0.43, 0.22);
     ladle.add(ladle.userData.grip);
-    const ladleEnd = new THREE.Vector3(-0.40, -0.20, -0.20);
-    const handle = cyl(0.012, 0.012, ladleEnd.length(), 0x9a8058, {}, 8);
-    handle.position.copy(ladleEnd).multiplyScalar(0.5);
-    handle.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), ladleEnd.clone().normalize());
+    const ladleEnd = new THREE.Vector3(-0.30, 0.23, 0.35);
+    const ladleVector = ladleEnd.clone().sub(ladle.userData.grip.position);
+    const handle = cyl(0.012, 0.012, ladleVector.length(), 0x9a8058, {}, 8);
+    handle.position.copy(ladle.userData.grip.position).addScaledVector(ladleVector, 0.5);
+    handle.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), ladleVector.clone().normalize());
     ladle.add(handle);
     const scoop = sph(0.045, 0x8d939a, { metal: 0.5, rough: 0.4 }, 10);
     scoop.position.copy(ladleEnd);
@@ -1405,16 +1436,16 @@ export function initScene(canvas, onHotspot, opts = {}) {
     ladle.userData.scoop = new THREE.Object3D();
     ladle.userData.scoop.position.copy(ladleEnd);
     ladle.add(ladle.userData.scoop);
-    guideRig.armL.wrist.add(ladle);
+    guideRig.torso.add(ladle);
     const cloth = pos(box(0.16, 0.012, 0.12, 0xd7c9a6, { rough: 1 }), 0, -0.30, 0.08);
     cloth.rotation.x = 0.16;
     cloth.visible = false;
     guideRig.armR.wrist.add(cloth);
-    guide.userData.tools = { ladle, cloth };
+    guide.userData.tools = { ladle, ladleHand: 'R', cloth };
     addBlobShadow(guide, 0.4, 0.7);
     initAI(guide, 'cook', standingPose);
     scene.add(guide);
-    registerHotspot('guide', LABELS.navigation.guide, guide, new THREE.Vector3(0.45, 1.7, -0.2));
+    registerHotspot('guide', LABELS.navigation.guide, guide, new THREE.Vector3(0.45, 1.7, -0.3));
     buildPins();
   }
 
@@ -2053,6 +2084,9 @@ export function initScene(canvas, onHotspot, opts = {}) {
           elbowL: w(rig.armL.elbow), elbowR: w(rig.armR.elbow),
           handL: w(rig.armL.hand), handR: w(rig.armR.hand),
           toolGrip: npc.userData.tools ? w(npc.userData.tools.ladle.userData.grip) : null,
+          toolHand: npc.userData.tools
+            ? w(npc.userData.tools.ladleHand === 'R' ? rig.armR.hand : rig.armL.hand)
+            : null,
           toolScoop: npc.userData.tools ? w(npc.userData.tools.ladle.userData.scoop) : null,
           footL: w(rig.legL.shoe), footR: w(rig.legR.shoe),
         },

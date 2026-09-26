@@ -16,6 +16,7 @@
     "smoke": "node scripts/smoke.mjs",
     "smoke:cms": "node scripts/cms-smoke.mjs",
     "audit:npc": "node scripts/npc-audit.mjs",
+    "audit:motion": "node scripts/motion-review.mjs",
     "baseline": "node scripts/perf-baseline.mjs",
     "audit:visual": "node scripts/pose-shots.mjs"
   },

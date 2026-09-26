@@ -206,8 +206,8 @@ await session({ width: 1440, height: 900 }, async (ctx) => {
           'ladle is not inside the pot while stirring', { depth: round(d) });
       }
     }
-    if (act === 'stir' && s.joints.toolGrip && s.joints.handL) {
-      const g = pointGap(s.joints.toolGrip, s.joints.handL);
+    if (act === 'stir' && s.joints.toolGrip && s.joints.toolHand) {
+      const g = pointGap(s.joints.toolGrip, s.joints.toolHand);
       if (g !== null && g > CONTACT_TOL) {
         record(`contact:${key}:stir:hand-ladle-grip`, 'contact miss', key, act, tl,
           `ladle grip is ${round(g)}m away from the hand`, { gap: round(g) });
