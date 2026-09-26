@@ -304,6 +304,12 @@ await session([], async (ctx) => {
       && Math.max(...before.lanterns.map((lantern) => lantern.intensity))
         - Math.min(...before.lanterns.map((lantern) => lantern.intensity)) >= 0.6,
     JSON.stringify(before.lanterns));
+  check('stools vary in height, colour and rotation',
+    before.stoolStyles.length === 4
+      && new Set(before.stoolStyles.map((stool) => stool.topY)).size >= 3
+      && new Set(before.stoolStyles.map((stool) => stool.color)).size === 4
+      && new Set(before.stoolStyles.map((stool) => stool.rotation)).size === 4,
+    JSON.stringify(before.stoolStyles));
   check('ramen detail stays inside the scene budget', before.renderCalls <= 250 && before.triangles <= 50000,
     `calls=${before.renderCalls} triangles=${before.triangles}`);
   check('no non-finite values in any rig', before.nonFinite === 0, `count=${before.nonFinite}`);

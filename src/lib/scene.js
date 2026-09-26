@@ -120,6 +120,12 @@ export function initScene(canvas, onHotspot, opts = {}) {
   // Top face of a stool seat. buildStool and the seated pose both read this, so
   // the two cannot drift apart.
   const SEAT_TOP_Y = 0.69;
+  const STOOL_STYLES = [
+    { height: -0.01, rotation: -0.055, color: 0xa83f38 },
+    { height: 0.012, rotation: 0.035, color: 0xb4473e },
+    { height: -0.004, rotation: 0.07, color: 0x9e3b35 },
+    { height: 0, rotation: -0.025, color: 0xad433a },
+  ];
   // Where an idle seated hand goes: on the counter in front of the diner, in
   // the arm solver's local frame. Tuned against scripts/npc-audit.mjs.
   const REST_ON_COUNTER = { y: 0.57, z: 0.30 };
@@ -144,6 +150,7 @@ export function initScene(canvas, onHotspot, opts = {}) {
   // scene rather than against numbers copied out of this file.
   let counterTop = null, counterFront = null, counterShelf = null;
   const stoolSeats = [];
+  const stoolStyles = [];
   let service = null;
   let serviceBowl = null;
   let serviceAudit = { started: false, lifted: false, filledCarry: false, completed: false };
@@ -691,9 +698,8 @@ export function initScene(canvas, onHotspot, opts = {}) {
      with no explicit crossfade code and no snapping.
      ============================================== */
 
-  // Stool height is fixed but bodies are not, so the hip height that puts a
-  // pelvis on the seat is per person. Without this the smaller diners sit
-  // through the stool: see SEAT_TOP_Y below.
+  // Stool heights and bodies both vary, so the hip height that puts a pelvis
+  // on the seat is per person. Without this the smaller diners sit through it.
   function seatedPose(npc) {
     const p = {
       hipY: npc?.userData?.seatHipY ?? 0.74, torsoX: 0.08, torsoY: 0, torsoZ: 0,
@@ -1226,7 +1232,7 @@ export function initScene(canvas, onHotspot, opts = {}) {
   }
 
   // one person hunched over a bowl, chopsticks in hand
-  function seatedPerson(sp, bowl = null, autonomous = true) {
+  function seatedPerson(sp, bowl = null, autonomous = true, seatTopY = SEAT_TOP_Y) {
     const d = buildPerson({
       shirt: sp.shirt, hair: sp.hair,
       scale: sp.scale ?? 0.96, build: sp.build ?? 1, headScale: sp.headScale ?? 1,
@@ -1240,7 +1246,7 @@ export function initScene(canvas, onHotspot, opts = {}) {
     // per character.
     const sc = sp.scale ?? 0.96;
     const pelvisHalf = 0.135 * (sp.build ?? 1) * 0.66;
-    d.userData.seatHipY = SEAT_TOP_Y / sc + pelvisHalf;
+    d.userData.seatHipY = seatTopY / sc + pelvisHalf;
     r.hip.position.y = d.userData.seatHipY;
     r.legL.hp.rotation.x = -1.5; r.legR.hp.rotation.x = -1.5;
     r.legL.knee.rotation.x = 1.5; r.legR.knee.rotation.x = 1.5;
@@ -1278,32 +1284,39 @@ export function initScene(canvas, onHotspot, opts = {}) {
     return d;
   }
 
-  function buildStool(x) {
-    const seat = pos(cyl(0.17, 0.17, 0.06, 0xb0423a, { rough: 0.7 }, 18), x, SEAT_TOP_Y - 0.03, 1.43);
+  function buildStool(x, style) {
+    const topY = SEAT_TOP_Y + style.height;
+    const seat = pos(cyl(0.17, 0.17, 0.06, style.color, { rough: 0.76 }, 18), x, topY - 0.03, 1.43);
+    seat.rotation.y = style.rotation;
     seat.userData.seatX = x;
     stoolSeats.push(seat);
     scene.add(seat);
-    scene.add(pos(cyl(0.03, 0.05, SEAT_TOP_Y - 0.03, 0x2a2018, {}, 10), x, (SEAT_TOP_Y - 0.03) / 2, 1.43));
+    scene.add(pos(cyl(0.03, 0.05, topY - 0.03, 0x2a2018, {}, 10), x, (topY - 0.03) / 2, 1.43));
     const g = new THREE.Group();
     g.position.set(x, 0, 1.43);
     addBlobShadow(g, 0.46, 0.75);
     scene.add(g);
+    stoolStyles.push({ x, topY, rotation: style.rotation, color: style.color });
+    return topY;
   }
 
   function buildDiners() {
-    DINER_SPECS.forEach((sp) => {
-      buildStool(sp.x);
+    DINER_SPECS.forEach((sp, index) => {
+      const seatTopY = buildStool(sp.x, STOOL_STYLES[index]);
       const bowl = ramenBowls.find((candidate) => candidate.userData.seatX === sp.x);
-      seatedPerson(sp, bowl);
+      seatedPerson(sp, bowl, true, seatTopY);
     });
   }
 
   /* ---------- the free stool: the one seat that is always open ---------- */
   function buildEmptySeat() {
+    const style = STOOL_STYLES[3];
     const g = new THREE.Group();
     g.position.set(SEAT.x, 0, SEAT.z);
-    g.add(pos(cyl(0.17, 0.17, 0.06, 0xb0423a, { rough: 0.7 }, 18), 0, SEAT_TOP_Y - 0.03, 0));
+    g.rotation.y = style.rotation;
+    g.add(pos(cyl(0.17, 0.17, 0.06, style.color, { rough: 0.76 }, 18), 0, SEAT_TOP_Y - 0.03, 0));
     g.add(pos(cyl(0.03, 0.05, SEAT_TOP_Y - 0.03, 0x2a2018, {}, 10), 0, (SEAT_TOP_Y - 0.03) / 2, 0));
+    stoolStyles.push({ x: SEAT.x, topY: SEAT_TOP_Y, rotation: style.rotation, color: style.color });
     buildYou();
     // a warm ring on the ground so the open stool reads as an invitation
     seatGlowMat = new THREE.MeshBasicMaterial({
@@ -2248,6 +2261,7 @@ export function initScene(canvas, onHotspot, opts = {}) {
           intensity: light.intensity,
           color: light.color.getHex(),
         })),
+        stoolStyles,
         dinerStations: diners.map((diner) => ({
           seatX: diner.position.x,
           bowlX: diner.userData.table?.bowl?.position.x,
