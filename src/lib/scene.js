@@ -760,7 +760,7 @@ export function initScene(canvas, onHotspot, opts = {}) {
     )));
     const line = Math.atan2(-dz, -dy);
     const shoulder = line - Math.atan2(l2 * Math.sin(elbow), l1 + l2 * Math.cos(elbow));
-    p[`${side}ShX`] = shoulder;
+    p[`${side}ShX`] = Math.atan2(Math.sin(shoulder), Math.cos(shoulder));
     p[`${side}ElX`] = elbow;
     p[`${side}ShZ`] = shoulderZ;
   }
@@ -806,10 +806,14 @@ export function initScene(canvas, onHotspot, opts = {}) {
       else if (t < 3.0) lift = 1;
       else if (t < 3.8) lift = 1 - ease01((t - 3.0) / 0.8);
 
-      // Left hand steadies the bowl; right hand takes one deliberate bite.
-      reachArm(p, 'l', 0.60, 0.33, 0.08);
-      reachArm(p, 'r', mix(0.58, 0.68, lift), mix(0.37, 0.14, lift), -0.08 - lift * 0.18);
-      p.rWrX = lift * 0.55;
+      // The free hand rests in the diner's lap. The chopstick hand starts below
+      // the rim and approaches the mouth from below; lifting it past the face
+      // made the diner look as though they were eating over their own head.
+      p.lShX = 0.05;
+      p.lShZ = 0.22;
+      p.lElX = -0.72;
+      reachArm(p, 'r', 0.54, mix(0.18, 0.02, lift), mix(-0.10, -0.55, lift));
+      p.rWrX = mix(-0.22, -0.42, lift);
       const gathering = t < 1.35 ? ease01(t / 0.7) : 1;
       p.torsoX = 0.2 - lift * 0.1 + (1 - gathering) * 0.05;
       p.headX = 0.16 - lift * 0.12;
@@ -855,10 +859,10 @@ export function initScene(canvas, onHotspot, opts = {}) {
     stir(p, tl) {
       // The utensil stays in the pot. Only the wrist-sized circular motion moves.
       const circle = tl * 2.0;
-      reachArm(p, 'l', 0.72 + Math.sin(circle) * 0.018, 0.35 + Math.cos(circle) * 0.018,
-        0.85 + Math.sin(circle) * 0.06);
+      reachArm(p, 'l', 0.60 + Math.sin(circle) * 0.014, 0.20 + Math.cos(circle) * 0.014,
+        1.15 + Math.sin(circle) * 0.04);
       p.lWrX = 2.25;
-      p.lWrZ = -0.12;
+      p.lWrZ = -0.6;
       p.torsoX = 0.16;
       p.torsoY = -0.13;
       p.headX = 0.26;
@@ -1370,10 +1374,23 @@ export function initScene(canvas, onHotspot, opts = {}) {
     guide.position.set(0.45, 0, -0.2);
     guide.rotation.y = -0.08;
     guideRig = guide.userData.rig;
-    // a ladle in the stirring hand, so the motion reads as cooking
-    const ladle = pos(cyl(0.012, 0.012, 0.46, 0x9a8058, {}, 8), 0, -0.14, 0.12);
-    ladle.rotation.x = 0.32;
-    ladle.add(pos(sph(0.045, 0x8d939a, { metal: 0.5, rough: 0.4 }, 10), 0, -0.25, 0.01));
+    // Build from an explicit grip at the wrist. The old cylinder was offset
+    // and rotated as a whole, leaving the handle beside the hand even when the
+    // scoop happened to intersect the pot.
+    const ladle = new THREE.Group();
+    ladle.userData.grip = new THREE.Object3D();
+    ladle.add(ladle.userData.grip);
+    const ladleEnd = new THREE.Vector3(-0.40, -0.20, -0.20);
+    const handle = cyl(0.012, 0.012, ladleEnd.length(), 0x9a8058, {}, 8);
+    handle.position.copy(ladleEnd).multiplyScalar(0.5);
+    handle.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), ladleEnd.clone().normalize());
+    ladle.add(handle);
+    const scoop = sph(0.045, 0x8d939a, { metal: 0.5, rough: 0.4 }, 10);
+    scoop.position.copy(ladleEnd);
+    ladle.add(scoop);
+    ladle.userData.scoop = new THREE.Object3D();
+    ladle.userData.scoop.position.copy(ladleEnd);
+    ladle.add(ladle.userData.scoop);
     guideRig.armL.wrist.add(ladle);
     const cloth = pos(box(0.16, 0.012, 0.12, 0xd7c9a6, { rough: 1 }), 0, -0.30, 0.08);
     cloth.rotation.x = 0.16;
@@ -1966,6 +1983,8 @@ export function initScene(canvas, onHotspot, opts = {}) {
         table.heldChopsticks.visible = act === 'eat';
         if (table.noodleLift) table.noodleLift.visible = act === 'eat' && tl >= 1.35 && tl < 3.15;
         table.heldCup.visible = act === 'drink';
+        for (const stick of table.bowl?.userData.restingChopsticks || []) stick.visible = act !== 'eat';
+        if (table.bowl?.userData.counterCup) table.bowl.userData.counterCup.visible = act !== 'drink';
       }
       if (npc.userData.tools) {
         npc.userData.tools.ladle.visible = act === 'stir';
@@ -2019,6 +2038,8 @@ export function initScene(canvas, onHotspot, opts = {}) {
           shoulderL: w(rig.armL.sh), shoulderR: w(rig.armR.sh),
           elbowL: w(rig.armL.elbow), elbowR: w(rig.armR.elbow),
           handL: w(rig.armL.hand), handR: w(rig.armR.hand),
+          toolGrip: npc.userData.tools ? w(npc.userData.tools.ladle.userData.grip) : null,
+          toolScoop: npc.userData.tools ? w(npc.userData.tools.ladle.userData.scoop) : null,
           footL: w(rig.legL.shoe), footR: w(rig.legR.shoe),
         },
         boxes: {
