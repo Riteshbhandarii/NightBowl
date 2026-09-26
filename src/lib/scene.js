@@ -349,7 +349,7 @@ export function initScene(canvas, onHotspot, opts = {}) {
 
     DINER_SPECS.forEach(({ x }, k) => {
       const z = 1.0 + rnd(-0.025, 0.025);
-      const bowl = buildRamenBowl(k === 1);
+      const bowl = buildRamenBowl(k === 1, k === 2);
       bowl.position.set(x, 1.09, z);
       bowl.rotation.y = rnd(-0.22, 0.22);
       bowl.userData.seatX = x;
@@ -416,7 +416,7 @@ export function initScene(canvas, onHotspot, opts = {}) {
     return ramenAssetCache;
   }
 
-  function buildRamenBowl(hero = false) {
+  function buildRamenBowl(hero = false, restsAcrossRim = false) {
     const { geo, mat } = ramenAssets();
     const bowl = new THREE.Group();
     bowl.userData.hero = hero;
@@ -471,9 +471,12 @@ export function initScene(canvas, onHotspot, opts = {}) {
       bowl.add(onion);
     }
 
-    for (const z of [-0.032, 0.012]) {
-      const stick = pos(new THREE.Mesh(geo.chopstick, mat.wood), 0, 0.236, z);
-      stick.rotation.y = -0.17;
+    const chopstickAngle = restsAcrossRim ? rnd(0.2, 0.34) : rnd(-0.28, 0.08);
+    const chopstickZ = rnd(-0.025, 0.025);
+    const chopstickY = restsAcrossRim ? 0.255 : rnd(0.222, 0.24);
+    for (const offset of [-0.018, 0.018]) {
+      const stick = pos(new THREE.Mesh(geo.chopstick, mat.wood), 0, chopstickY, chopstickZ + offset);
+      stick.rotation.y = chopstickAngle;
       stick.name = 'chopsticks';
       (bowl.userData.restingChopsticks ||= []).push(stick);
       bowl.add(stick);
