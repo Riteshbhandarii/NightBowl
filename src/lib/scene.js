@@ -348,10 +348,10 @@ export function initScene(canvas, onHotspot, opts = {}) {
     registerHotspot('menu', LABELS.specialsHotspot, potG, new THREE.Vector3(0.1, 1.64, 0.2));
 
     DINER_SPECS.forEach(({ x }, k) => {
-      const z = 1.0;
+      const z = 1.0 + rnd(-0.025, 0.025);
       const bowl = buildRamenBowl(k === 1);
       bowl.position.set(x, 1.09, z);
-      bowl.rotation.y = k * 0.16 - 0.12;
+      bowl.rotation.y = rnd(-0.22, 0.22);
       bowl.userData.seatX = x;
       setBowlFill(bowl, [0.34, 0.62, 0.88][k]);
       const cup = pos(cyl(0.07, 0.055, 0.13, 0xd8c8a5, { rough: 0.86 }, 14), 0.24, 0.11, 0.01);
