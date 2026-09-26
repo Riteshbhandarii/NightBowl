@@ -256,6 +256,9 @@ await session([], async (ctx) => {
     before.cook && before.diners === 3 && before.visitor && before.walkers >= 2,
     `cook=${before.cook} diners=${before.diners} visitor=${before.visitor} walkers=${before.walkers}`);
   check('visitor is not an autonomous diner', !before.visitorAutonomous);
+  check('each speaking character has a distinct mouth phase',
+    before.mouthPhases.length === 4 && new Set(before.mouthPhases).size === 4,
+    JSON.stringify(before.mouthPhases));
   check('each diner owns a reachable bowl, chopsticks and cup',
     before.dinerStations.length === 3 && before.dinerStations.every((station) =>
       Math.abs(station.seatX - station.bowlX) < 0.01
