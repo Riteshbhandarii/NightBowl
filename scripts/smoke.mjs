@@ -285,6 +285,15 @@ await session([], async (ctx) => {
     `bowls=${before.ramenBowls} hero=${before.heroBowls}`);
   check('steam uses curling ribbons', before.steamSources === 4 && before.steamStyle,
     `sources=${before.steamSources} ribbons=${before.steamStyle}`);
+  check('lanterns vary in spacing, height, colour and intensity',
+    before.lanterns.length === 3
+      && before.lanterns[1].x !== 0
+      && Math.abs(before.lanterns[0].x + before.lanterns[2].x) > 0.1
+      && new Set(before.lanterns.map((lantern) => lantern.y)).size === 3
+      && new Set(before.lanterns.map((lantern) => lantern.color)).size === 3
+      && Math.max(...before.lanterns.map((lantern) => lantern.intensity))
+        - Math.min(...before.lanterns.map((lantern) => lantern.intensity)) >= 0.6,
+    JSON.stringify(before.lanterns));
   check('ramen detail stays inside the scene budget', before.renderCalls <= 250 && before.triangles <= 50000,
     `calls=${before.renderCalls} triangles=${before.triangles}`);
   check('no non-finite values in any rig', before.nonFinite === 0, `count=${before.nonFinite}`);

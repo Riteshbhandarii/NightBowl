@@ -106,6 +106,7 @@ export function initScene(canvas, onHotspot, opts = {}) {
   let ramenAssetCache = null;
   let steamTexture = null;
   const lanternMats = [];
+  const lanterns = [];
   const norenFlaps = [];
   const diners = [];
   const walkers = [];
@@ -310,16 +311,21 @@ export function initScene(canvas, onHotspot, opts = {}) {
     s.add(poster);
     registerHotspot('log', LABELS.navigation.log, poster, new THREE.Vector3(1.8, 2.56, -1.03));
 
-    [-2.3, 0, 2.3].forEach((x) => {
+    [
+      { x: -2.42, y: 2.61, color: 0xff9c42, intensity: 1.78, size: 1.04 },
+      { x: -0.08, y: 2.53, color: 0xffad58, intensity: 1.42, size: 0.96 },
+      { x: 2.21, y: 2.58, color: 0xffc184, intensity: 1.08, size: 1 },
+    ].forEach(({ x, y, color, intensity, size }) => {
       const lg = new THREE.Group();
       lg.add(pos(cyl(0.012, 0.012, 0.62, 0x0f0f0f, {}, 6), 0, 0.31, 0));
       const b = sph(0.25, 0xffb066, { emissive: 0xff7326, emissiveIntensity: 1.35, rough: 0.6 }, 20);
-      b.scale.y = 1.28; b.position.y = -0.1; lg.add(b);
+      b.scale.set(size, 1.28 * size, size); b.position.y = -0.1; lg.add(b);
       lanternMats.push(b.material);
       lg.add(pos(cyl(0.07, 0.09, 0.06, 0x281b13, {}, 10), 0, 0.13, 0));
-      const light = new THREE.PointLight(0xffa64d, 1.5, 7.5, 2);
+      const light = new THREE.PointLight(color, intensity, 7.5, 2);
       light.position.y = -0.1; lg.add(light);
-      lg.position.set(x, 2.56, 0.6);
+      lg.position.set(x, y, 0.6);
+      lanterns.push({ group: lg, light });
       scene.add(lg);
     });
 
@@ -2197,6 +2203,12 @@ export function initScene(canvas, onHotspot, opts = {}) {
         ramenIngredients: ramenBowls.map((b) => b.userData.ingredients || []),
         steamSources: steamGroups.length,
         steamStyle: steamGroups.every((g) => g.userData.style === 'curling-ribbon'),
+        lanterns: lanterns.map(({ group, light }) => ({
+          x: group.position.x,
+          y: group.position.y,
+          intensity: light.intensity,
+          color: light.color.getHex(),
+        })),
         dinerStations: diners.map((diner) => ({
           seatX: diner.position.x,
           bowlX: diner.userData.table?.bowl?.position.x,
