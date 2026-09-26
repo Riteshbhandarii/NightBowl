@@ -982,8 +982,8 @@ export function initScene(canvas, onHotspot, opts = {}) {
       // Keep each hand on its own side of the bowl and below the face. The old
       // pose crossed both arms onto the same point and lifted the bowl over
       // the cook's eyes.
-      reachArm(p, 'l', 0.50, 0.31, 0.70);
-      reachArm(p, 'r', 0.50, 0.31, 0.85);
+      reachArm(p, 'l', 0.50, 0.31, 0.62);
+      reachArm(p, 'r', 0.50, 0.31, 0.98);
       p.torsoX = 0.12;
       p.headX = 0.18;
     },
@@ -1140,7 +1140,10 @@ export function initScene(canvas, onHotspot, opts = {}) {
       setAct(guide, 'stir', rnd(6, 10));
       serviceAudit.completed = true;
       service = null;
-      nextBeatAt = nowSec() + rnd(8, 15);
+      // Resume the room promptly after service. On a software renderer the old
+      // delay plus sparse frames could leave the stall silent for the full
+      // smoke-test window even though the director itself was still healthy.
+      nextBeatAt = nowSec() + rnd(3, 6);
     }
   }
 
