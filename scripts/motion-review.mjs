@@ -12,7 +12,12 @@ const out = arg('--out', '/tmp/nightbowl-motion-review');
 mkdirSync(out, { recursive: true });
 
 const reviews = [
+  { kind: 'diner', index: 0, act: 'eat', times: [0, 0.7, 1.35, 1.75, 2.4, 3.2, 3.8, 4.2] },
+  { kind: 'diner', index: 1, act: 'eat', times: [0, 0.7, 1.35, 1.75, 2.4, 3.2, 3.8, 4.2] },
   { kind: 'diner', index: 2, act: 'eat', times: [0, 0.7, 1.35, 1.75, 2.4, 3.2, 3.8, 4.2] },
+  { kind: 'diner', index: 0, act: 'drink', times: [0, 0.4, 0.75, 1.2, 1.8, 2.2, 2.55, 2.8] },
+  { kind: 'diner', index: 1, act: 'drink', times: [0, 0.4, 0.75, 1.2, 1.8, 2.2, 2.55, 2.8] },
+  { kind: 'diner', index: 2, act: 'drink', times: [0, 0.4, 0.75, 1.2, 1.8, 2.2, 2.55, 2.8] },
   { kind: 'cook', index: 0, act: 'stir', times: [0, 0.4, 0.8, 1.2, 1.6, 2, 2.4, 2.8] },
 ];
 
@@ -31,20 +36,24 @@ await session({ width: 1200, height: 900 }, async (ctx) => {
   for (const review of reviews) {
     const subject = subjects.find((item) => item.kind === review.kind && item.index === review.index);
     if (!subject) continue;
+    await evaluate(`window.__nightbowl.auditFocus(${JSON.stringify(review.kind)}, ${review.index})`);
     const front = review.kind === 'cook' ? 0.2 : Math.PI + 0.2;
     for (const time of review.times) {
       await evaluate(`window.__nightbowl.auditPose(
         ${JSON.stringify(review.kind)}, ${review.index}, ${JSON.stringify(review.act)}, ${time})`);
-      for (const [view, azimuth] of [['front', front], ['side', front + Math.PI / 2]]) {
+      const views = [['front', front], ['side', front + Math.PI / 2]];
+      if (review.kind === 'diner') views.push(['full-side', front + Math.PI / 2]);
+      for (const [view, azimuth] of views) {
+        const full = view === 'full-side';
         await evaluate(`window.__nightbowl.auditFrame(${JSON.stringify({
-          target: { x: subject.x, y: 1.22, z: subject.z },
+          target: { x: subject.x, y: full ? 0.78 : 1.22, z: subject.z },
           azimuth,
           elevation: 0.04,
-          radius: view === 'front' ? 1.25 : 1.05,
+          radius: full ? 1.65 : view === 'front' ? 1.25 : 1.05,
         })})`);
         const reply = await send('Page.captureScreenshot', { format: 'png' });
         const stamp = String(Math.round(time * 100)).padStart(3, '0');
-        writeFileSync(join(out, `${review.kind}-${review.act}-${stamp}-${view}.png`),
+        writeFileSync(join(out, `${review.kind}${review.index}-${review.act}-${stamp}-${view}.png`),
           Buffer.from(reply.result.data, 'base64'));
       }
     }

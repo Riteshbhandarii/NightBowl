@@ -278,7 +278,7 @@ await session([], async (ctx) => {
     JSON.stringify(before.dinerStations));
   check('diner props match what their hands are doing',
     before.dinerActions.every((state) =>
-      state.action === 'eat' && state.biting
+      state.action === 'eat'
         ? state.heldChopsticks && !state.restingChopsticks && !state.heldCup
         : state.action === 'drink'
           ? state.heldCup && !state.counterCup && !state.heldChopsticks

@@ -99,8 +99,6 @@ await session({ width: 1440, height: 900 }, async (ctx) => {
   await evaluate('window.__nightbowl.auditBegin()');
 
   const furniture = await evaluate('window.__nightbowl.auditFurniture()');
-  const subjects = await evaluate('window.__nightbowl.auditSubjects()');
-  const acts = await evaluate('window.__nightbowl.auditActs()');
 
   const solids = [
     ['counter top', furniture.counterTop],
@@ -124,7 +122,9 @@ await session({ width: 1440, height: 900 }, async (ctx) => {
 
     /* --- limbs inside solid furniture --- */
     for (const [name, box] of solids) {
-      for (const part of ['handL', 'handR', 'forearmL', 'forearmR']) {
+      const parts = ['handL', 'handR', 'forearmL', 'forearmR'];
+      if (sub.kind === 'diner') parts.push('thighL', 'thighR', 'shinL', 'shinR');
+      for (const part of parts) {
         const d = overlap(s.boxes[part], box);
         if (d !== null && d > CLIP_TOL) {
           record(`clip:${key}:${act}:${part}:${name.replace(/ /g, '-')}`,
@@ -183,6 +183,13 @@ await session({ width: 1440, height: 900 }, async (ctx) => {
       if (d !== null && d > CLIP_TOL) {
         record(`clip:${key}:eat:free-hand:own-bowl`, 'geometry interpenetration', key, act, tl,
           `free hand is ${round(d)}m inside its own bowl`, { depth: round(d) });
+      }
+    }
+    if (act === 'eat' && s.boxes.ownBowl) {
+      const d = overlap(s.boxes.handR, s.boxes.ownBowl);
+      if (d !== null && d > CLIP_TOL) {
+        record(`clip:${key}:eat:handR:own-bowl`, 'geometry interpenetration', key, act, tl,
+          `handR is ${round(d)}m inside its own bowl`, { depth: round(d) });
       }
     }
     if (act === 'eat' && tl >= 2.15 && tl <= 3.0 && s.joints.handR && s.joints.head) {

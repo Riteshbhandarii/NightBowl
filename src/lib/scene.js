@@ -117,6 +117,7 @@ export function initScene(canvas, onHotspot, opts = {}) {
   ];
   // the one stool that is never taken, and the ring that advertises it
   const SEAT = { x: 0.1, z: 1.52 };
+  const CUSTOMER_Z = 1.52;
   // Top face of a stool seat. buildStool and the seated pose both read this, so
   // the two cannot drift apart.
   const SEAT_TOP_Y = 0.69;
@@ -151,6 +152,7 @@ export function initScene(canvas, onHotspot, opts = {}) {
   let counterTop = null, counterFront = null, counterShelf = null;
   const stoolSeats = [];
   const stoolStyles = [];
+  let auditVisibility = null;
   let service = null;
   let serviceBowl = null;
   let serviceAudit = { started: false, lifted: false, filledCarry: false, completed: false };
@@ -168,6 +170,21 @@ export function initScene(canvas, onHotspot, opts = {}) {
   const box = (w, h, d, color, o) => new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m(color, o));
   const cyl = (rt, rb, h, color, o, seg = 22) => new THREE.Mesh(new THREE.CylinderGeometry(rt, rb, h, seg), m(color, o));
   const sph = (r, color, o, s = 18) => new THREE.Mesh(new THREE.SphereGeometry(r, s, s - 4), m(color, o));
+  const mug = (rt, rb, h, color) => {
+    const g = new THREE.Group();
+    g.add(cyl(rt, rb, h, color, { rough: 0.86 }, 14));
+    const drink = cyl(rt * 0.78, rt * 0.78, 0.004, 0x39251a, { rough: 0.72 }, 14);
+    drink.position.y = h * 0.5 + 0.003;
+    g.add(drink);
+    const handle = new THREE.Mesh(
+      new THREE.TorusGeometry(h * 0.27, 0.008, 6, 14),
+      m(color, { rough: 0.86 })
+    );
+    handle.rotation.y = Math.PI / 2;
+    handle.position.x = rt + h * 0.16;
+    g.add(handle);
+    return g;
+  };
   // total height of a capsule is len + 2r; callers pass the total they want
   const cap = (r, total, color, o, seg = 14) =>
     new THREE.Mesh(new THREE.CapsuleGeometry(r, Math.max(0.001, total - r * 2), 5, seg), m(color, o));
@@ -342,7 +359,9 @@ export function initScene(canvas, onHotspot, opts = {}) {
   function buildCounterItems() {
     const g = new THREE.Group();
     counterTop = pos(box(6.4, 0.14, 1.05, 0x7a5334, { rough: 0.66 }), 0, 1.02, 0.6);
-    counterFront = pos(box(6.4, 0.95, 0.12, 0x5c3d26, { rough: 0.86 }), 0, 0.52, 1.08);
+    // Recess the solid cabinet behind the counter overhang so seated knees have
+    // real clearance instead of being forced through the front panel.
+    counterFront = pos(box(6.4, 0.95, 0.12, 0x5c3d26, { rough: 0.86 }), 0, 0.52, 0.82);
     counterShelf = pos(box(6.1, 0.08, 0.9, 0x452f1f, { rough: 0.9 }), 0, 0.55, 0.2);
     g.add(counterTop);
     g.add(counterFront);
@@ -367,7 +386,7 @@ export function initScene(canvas, onHotspot, opts = {}) {
       bowl.rotation.y = rnd(-0.22, 0.22);
       bowl.userData.seatX = x;
       setBowlFill(bowl, [0.34, 0.62, 0.88][k]);
-      const cup = pos(cyl(0.07, 0.055, 0.13, 0xd8c8a5, { rough: 0.86 }, 14), 0.24, 0.11, 0.01);
+      const cup = pos(mug(0.07, 0.055, 0.13, 0xd8c8a5), 0.24, 0.11, 0.01);
       bowl.userData.counterCup = cup;
       bowl.add(cup);
       ramenBowls.push(bowl);
@@ -782,6 +801,10 @@ export function initScene(canvas, onHotspot, opts = {}) {
     p[`${side}ShZ`] = shoulderZ;
   }
 
+  function restArmInLap(p, side) {
+    reachArm(p, side, 0.12, 0.08, side === 'l' ? 0.14 : -0.14);
+  }
+
   function updateMeal(npc, at) {
     const ai = npc.userData.ai;
     const bowl = npc.userData.table?.bowl;
@@ -808,28 +831,20 @@ export function initScene(canvas, onHotspot, opts = {}) {
 
   // ---- seated actions ----
   const SEATED_ACTS = {
-    eat(p, tl, npc) {
+    eat(p, _tl, npc) {
       const ai = npc.userData.ai;
       const held = npc.userData.table?.heldChopsticks;
-      if (!ai.biting) {
-        p.torsoX = 0.12;
-        p.headX = 0.08;
-        return;
-      }
-      const t = ai.biteT;
+      const t = ai.biting ? ai.biteT : 0;
       let lift = 0;
-      if (t < 0.7) lift = 0;
-      else if (t < 1.35) lift = 0;
-      else if (t < 2.15) lift = ease01((t - 1.35) / 0.8);
+      if (!ai.biting || t < 0.4 || t >= 3.5) lift = 0;
+      else if (t < 1.35) lift = ease01((t - 0.4) / 0.95);
       else if (t < 3.0) lift = 1;
-      else if (t < 3.8) lift = 1 - ease01((t - 3.0) / 0.8);
+      else lift = 1 - ease01((t - 3.0) / 0.5);
 
       // The free hand rests in the diner's lap. The chopstick hand starts below
       // the rim and approaches the mouth from below; lifting it past the face
       // made the diner look as though they were eating over their own head.
-      p.lShX = 0.05;
-      p.lShZ = 0.22;
-      p.lElX = -0.72;
+      restArmInLap(p, 'l');
       // Animate the chopstick tips between the bowl and mouth, then send the
       // hand to the grip end. Keeping the prop under the torso instead of the
       // wrist prevents a bent forearm from turning the sticks through the
@@ -838,36 +853,78 @@ export function initScene(canvas, onHotspot, opts = {}) {
       // shoulder. At the mouth the grip drops below the tips. The previous
       // pair pointed from the bowl farther across the counter, forcing the arm
       // to full extension and through the worktop before every bite.
-      const stickAngle = mix(-0.60, 0.20, lift);
-      const tipY = mix(0.47, 0.59, lift);
+      const tipX = mix(npc.userData.table?.bowlAimX ?? 0, 0, lift);
+      const tipY = mix(0.47, 0.54, lift);
       const tipZ = mix(0.30, 0.14, lift);
+      const gripX = mix(tipX + 0.18, 0.18, lift);
+      // The grip stays on the diner's side of the bowl throughout both strokes.
+      // Dropping it toward the rim during the return was the remaining frame
+      // where the hand cut through the ceramic.
+      const gripY = mix(0.405, 0.52, lift);
+      const gripZ = mix(0.175, 0.08, lift);
       if (held) {
-        held.position.set(0, tipY, tipZ);
-        held.rotation.x = stickAngle;
+        held.position.set(tipX, tipY, tipZ);
+        held.rotation.set(0, 0, 0);
+        const direction = held.userData.direction;
+        direction.set(gripX - tipX, gripY - tipY, gripZ - tipZ);
+        const length = direction.length();
+        held.userData.normalized.copy(direction).normalize();
+        for (const stick of held.userData.sticks) {
+          stick.position.copy(direction).multiplyScalar(0.5);
+          stick.position.x += stick.userData.pairOffset;
+          stick.scale.set(1, 1, length);
+          stick.quaternion.setFromUnitVectors(held.userData.axis, held.userData.normalized);
+        }
       }
-      const gripY = tipY - Math.sin(stickAngle) * 0.14;
-      const gripZ = tipZ + Math.cos(stickAngle) * 0.14;
-      reachArm(p, 'r', gripY, gripZ, mix(-0.04, -0.16, lift));
+      // Chopstick studies show small shoulder-abduction changes: keep the elbow
+      // tucked instead of flaring it sideways like a wing.
+      reachArm(p, 'r', gripY, gripZ, 0.09);
       p.rWrX = 0;
-      const gathering = t < 1.35 ? ease01(t / 0.7) : 1;
-      p.torsoX = 0.2 - lift * 0.1 + (1 - gathering) * 0.05;
+      p.torsoX = 0.1 - lift * 0.02;
       p.headX = 0.16 - lift * 0.12;
-      p.mouth = t >= 2.08 && t < 3.08 ? 1 : 0;
+      p.mouth = ai.biting && t >= 1.2 && t < 2.8 ? 1 : 0;
     },
     pause(p, tl) {
       p.torsoX = 0.06 + Math.sin(tl * 0.9) * 0.02;
       p.headX = 0.05;
       p.headY = Math.sin(tl * 0.5) * 0.3;
     },
-    drink(p, tl) {
-      const up = tl < 0.75 ? ease01(tl / 0.75)
-        : tl < 1.8 ? 1
-          : 1 - ease01((tl - 1.8) / 0.75);
-      reachArm(p, 'l', mix(0.56, 0.66, up), mix(0.34, 0.13, up), 0.08);
-      p.lWrX = up * 0.45;
-      p.torsoX = 0.1 - up * 0.04;
-      p.headX = -up * 0.16;
-      p.mouth = up > 0.9 ? 1 : 0;
+    drink(p, tl, npc) {
+      restArmInLap(p, 'r');
+      if (tl <= 0.4) {
+        restArmInLap(p, 'l');
+        p.torsoX = 0.1;
+        return;
+      }
+      const up = tl < 1.2 ? ease01((tl - 0.4) / 0.8)
+        : tl < 1.85 ? 1
+          : 1 - ease01((tl - 1.85) / 0.85);
+      const cup = npc.userData.table?.heldCup;
+      if (tl >= 2.7) {
+        if (cup) {
+          cup.position.set(-0.24, 0.45, 0.29);
+          cup.rotation.set(0, Math.PI, 0);
+        }
+        restArmInLap(p, 'l');
+        p.torsoX = 0.1;
+        return;
+      }
+      // Lift over the counter lip on both the outward and return strokes.
+      const cupY = mix(0.45, 0.535, up) + Math.sin(Math.PI * up) * 0.07;
+      const cupZ = mix(0.29, 0.08, up);
+      if (cup) {
+        cup.position.set(mix(-0.24, -0.15, up), cupY, cupZ);
+        // Face the handle toward the left hand. The old orientation put the
+        // handle against the diner's cheek while the fist grabbed bare ceramic.
+        cup.rotation.set(mix(0, 0.5, up), Math.PI, 0);
+      }
+      // The cup is stable in torso space. The hand follows its lower back edge,
+      // keeping the wrist below the face while the rim—not the fist—meets the mouth.
+      reachArm(p, 'l', cupY - 0.015, cupZ + 0.1, mix(0.08, 0.2, up));
+      p.lWrX = 0;
+      p.torsoX = 0.1 - up * 0.03;
+      p.headX = -up * 0.05;
+      p.mouth = 0;
     },
     talk(p, tl, npc) {
       p.torsoY = npc.userData.ai.face * 0.5;
@@ -926,7 +983,7 @@ export function initScene(canvas, onHotspot, opts = {}) {
       // pose crossed both arms onto the same point and lifted the bowl over
       // the cook's eyes.
       reachArm(p, 'l', 0.50, 0.31, 0.70);
-      reachArm(p, 'r', 0.50, 0.31, 0.85);
+      reachArm(p, 'r', 0.50, 0.31, 0.98);
       p.torsoX = 0.12;
       p.headX = 0.18;
     },
@@ -936,7 +993,7 @@ export function initScene(canvas, onHotspot, opts = {}) {
   // Each NPC picks its own next action on a timer. The director can lock one out
   // of self-selection while a scripted beat is using it.
   const DINER_PLAN = [
-    { act: 'eat', w: 5, dur: [12, 20] },
+    { act: 'eat', w: 5, dur: [28, 42] },
     { act: 'pause', w: 2, dur: [2.5, 4.5] },
     { act: 'drink', w: 1, dur: [2.6, 3.4] },
   ];
@@ -996,11 +1053,11 @@ export function initScene(canvas, onHotspot, opts = {}) {
     applyPose(npc.userData.rig, ai.cur);
     if (ai.kind === 'diner') {
       const table = npc.userData.table;
-      const eating = ai.act === 'eat' && ai.biting;
+      const eating = ai.act === 'eat';
       const drinking = ai.act === 'drink';
       if (table) {
         table.heldChopsticks.visible = eating;
-        table.noodleLift.visible = eating && ai.biteT >= 1.35 && ai.biteT < 3.15;
+        table.noodleLift.visible = eating && ai.biting && ai.biteT >= 0.45 && ai.biteT < 2.85;
         table.heldCup.visible = drinking;
         if (table.bowl) {
           for (const stick of table.bowl.userData.restingChopsticks || []) stick.visible = !eating;
@@ -1083,7 +1140,10 @@ export function initScene(canvas, onHotspot, opts = {}) {
       setAct(guide, 'stir', rnd(6, 10));
       serviceAudit.completed = true;
       service = null;
-      nextBeatAt = nowSec() + rnd(8, 15);
+      // Resume the room promptly after service. On a software renderer the old
+      // delay plus sparse frames could leave the stall silent for the full
+      // smoke-test window even though the director itself was still healthy.
+      nextBeatAt = nowSec() + rnd(3, 6);
     }
   }
 
@@ -1237,7 +1297,7 @@ export function initScene(canvas, onHotspot, opts = {}) {
       shirt: sp.shirt, hair: sp.hair,
       scale: sp.scale ?? 0.96, build: sp.build ?? 1, headScale: sp.headScale ?? 1,
     });
-    d.position.set(sp.x, 0, 1.43);
+    d.position.set(sp.x, 0, CUSTOMER_Z);
     d.rotation.y = Math.PI + (sp.facing || 0);
     const r = d.userData.rig;
     // Sit the pelvis on the seat instead of through it. The pelvis is a sphere
@@ -1248,6 +1308,8 @@ export function initScene(canvas, onHotspot, opts = {}) {
     const pelvisHalf = 0.135 * (sp.build ?? 1) * 0.66;
     d.userData.seatHipY = seatTopY / sc + pelvisHalf;
     r.hip.position.y = d.userData.seatHipY;
+    // Neutral seated posture: thighs horizontal and lower legs vertical. The
+    // recessed counter front provides the knee space this pose actually needs.
     r.legL.hp.rotation.x = -1.5; r.legR.hp.rotation.x = -1.5;
     r.legL.knee.rotation.x = 1.5; r.legR.knee.rotation.x = 1.5;
     r.armL.sh.rotation.x = -0.5; r.armR.sh.rotation.x = -0.7;
@@ -1255,45 +1317,53 @@ export function initScene(canvas, onHotspot, opts = {}) {
     const heldChopsticks = new THREE.Group();
     // Tip is the group origin. The grip end sits to the diner's right so the
     // pair spans the food-to-hand line instead of inheriting the wrist hinge.
-    const stickDirection = new THREE.Vector3(0.24, 0, 0.14);
-    const stickLength = stickDirection.length();
+    heldChopsticks.userData.axis = new THREE.Vector3(0, 0, 1);
+    heldChopsticks.userData.direction = new THREE.Vector3();
+    heldChopsticks.userData.normalized = new THREE.Vector3();
+    heldChopsticks.userData.sticks = [];
     for (const x of [-0.01, 0.01]) {
       const stick = new THREE.Mesh(
-        new THREE.BoxGeometry(0.009, 0.009, stickLength),
+        new THREE.BoxGeometry(0.009, 0.009, 1),
         m(0x8a6a3c, { rough: 0.8 })
       );
-      stick.position.copy(stickDirection).multiplyScalar(0.5);
-      stick.position.x += x;
-      stick.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), stickDirection.clone().normalize());
+      stick.userData.pairOffset = x;
       heldChopsticks.add(stick);
+      heldChopsticks.userData.sticks.push(stick);
     }
     const noodleLift = pos(cap(0.006, 0.13, 0xe8c26a, { rough: 0.8 }, 6), 0, -0.065, 0);
     noodleLift.rotation.z = 0.08;
     heldChopsticks.add(noodleLift);
     heldChopsticks.visible = false;
     r.torso.add(heldChopsticks);
-    const heldCup = pos(cyl(0.055, 0.045, 0.11, 0xd8c8a5, { rough: 0.86 }, 14), 0, -0.03, 0.06);
+    const heldCup = pos(mug(0.055, 0.045, 0.11, 0xd8c8a5), -0.24, 0.45, 0.29);
+    heldCup.rotation.y = Math.PI;
     heldCup.visible = false;
-    r.armL.wrist.add(heldCup);
-    d.userData.table = { bowl, heldChopsticks, noodleLift, heldCup };
+    r.torso.add(heldCup);
+    d.userData.table = { bowl, heldChopsticks, noodleLift, heldCup, bowlAimX: 0 };
     if (autonomous) {
       initAI(d, 'diner', seatedPose);
       diners.push(d);
     }
     scene.add(d);
+    if (bowl) {
+      scene.updateMatrixWorld(true);
+      const bowlPoint = bowl.getWorldPosition(new THREE.Vector3());
+      r.torso.worldToLocal(bowlPoint);
+      d.userData.table.bowlAimX = bowlPoint.x;
+    }
     return d;
   }
 
   function buildStool(x, style) {
     const topY = SEAT_TOP_Y + style.height;
-    const seat = pos(cyl(0.17, 0.17, 0.06, style.color, { rough: 0.76 }, 18), x, topY - 0.03, 1.43);
+    const seat = pos(cyl(0.17, 0.17, 0.06, style.color, { rough: 0.76 }, 18), x, topY - 0.03, CUSTOMER_Z);
     seat.rotation.y = style.rotation;
     seat.userData.seatX = x;
     stoolSeats.push(seat);
     scene.add(seat);
-    scene.add(pos(cyl(0.03, 0.05, topY - 0.03, 0x2a2018, {}, 10), x, (topY - 0.03) / 2, 1.43));
+    scene.add(pos(cyl(0.03, 0.05, topY - 0.03, 0x2a2018, {}, 10), x, (topY - 0.03) / 2, CUSTOMER_Z));
     const g = new THREE.Group();
-    g.position.set(x, 0, 1.43);
+    g.position.set(x, 0, CUSTOMER_Z);
     addBlobShadow(g, 0.46, 0.75);
     scene.add(g);
     stoolStyles.push({ x, topY, rotation: style.rotation, color: style.color });
@@ -1851,7 +1921,12 @@ export function initScene(canvas, onHotspot, opts = {}) {
     // getDelta() first: getElapsedTime() calls it internally and consumes the
     // delta, so asking for elapsed first leaves dt at ~0 forever (which froze the
     // street walkers and the animation mixer). elapsedTime is safe to read direct.
-    const dt = Math.min(clock.getDelta(), 0.05);
+    const poseDt = Math.min(clock.getDelta(), 0.5);
+    // Locomotion stays capped so one stalled frame cannot teleport a walker.
+    // Pose easing uses the real elapsed interval; otherwise a 1 FPS software
+    // renderer advances wall-clock actions while leaving the limbs seconds
+    // behind the object they are supposed to hold.
+    const dt = Math.min(poseDt, 0.05);
     const t = clock.elapsedTime;
     if (!startT) startT = t;
     const intro = REDUCED ? 1 : Math.min(1, (t - startT) / 2.6);
@@ -1902,8 +1977,8 @@ export function initScene(canvas, onHotspot, opts = {}) {
         tickService();
         if (!service) tickDirector();
       }
-      for (const d of diners) tickNPC(d, dt);
-      if (guideRig && guide.userData.ai) tickNPC(guide, dt);
+      for (const d of diners) tickNPC(d, poseDt);
+      if (guideRig && guide.userData.ai) tickNPC(guide, poseDt);
       syncServiceBowl();
       updateBubbles();
     }
@@ -1962,8 +2037,27 @@ export function initScene(canvas, onHotspot, opts = {}) {
        its timeline, and reports where the joints and props actually ended up in
        world space. Bounds come from the objects in the scene, never from numbers
        copied out of this file, so moving a stool moves the test with it. */
-    auditBegin() { cancelAnimationFrame(raf); raf = 0; return true; },
-    auditEnd() { if (!raf) raf = requestAnimationFrame(frame); return true; },
+    auditBegin() {
+      cancelAnimationFrame(raf);
+      raf = 0;
+      const roots = [...diners, ...walkers, guide, you].filter(Boolean);
+      auditVisibility = new Map(roots.map((root) => [root, root.visible]));
+      return true;
+    },
+    auditFocus(kind, index) {
+      if (!auditVisibility) return false;
+      const subject = kind === 'cook' ? guide : diners[index];
+      for (const root of auditVisibility.keys()) root.visible = root === subject;
+      return Boolean(subject);
+    },
+    auditEnd() {
+      if (auditVisibility) {
+        for (const [root, visible] of auditVisibility) root.visible = visible;
+        auditVisibility = null;
+      }
+      if (!raf) raf = requestAnimationFrame(frame);
+      return true;
+    },
 
     /* Point the camera at a world position and draw one frame, so a pose the
        audit flagged can be photographed. scripts/pose-shots.mjs uses this
@@ -2039,7 +2133,7 @@ export function initScene(canvas, onHotspot, opts = {}) {
       // audit sees what a visitor sees.
       if (table) {
         table.heldChopsticks.visible = act === 'eat';
-        if (table.noodleLift) table.noodleLift.visible = act === 'eat' && tl >= 1.35 && tl < 3.15;
+        if (table.noodleLift) table.noodleLift.visible = act === 'eat' && tl >= 0.45 && tl < 2.85;
         table.heldCup.visible = act === 'drink';
         for (const stick of table.bowl?.userData.restingChopsticks || []) stick.visible = act !== 'eat';
         if (table.bowl?.userData.counterCup) table.bowl.userData.counterCup.visible = act !== 'drink';
@@ -2108,12 +2202,14 @@ export function initScene(canvas, onHotspot, opts = {}) {
           handL: b(rig.armL.hand, rig.armL.wrist), handR: b(rig.armR.hand, rig.armR.wrist),
           forearmL: b(rig.armL.elbow, rig.armL.hand),
           forearmR: b(rig.armR.elbow, rig.armR.hand),
+          thighL: b(rig.legL.hp, rig.legL.knee), thighR: b(rig.legR.hp, rig.legR.knee),
+          shinL: b(rig.legL.knee, rig.legL.shoe), shinR: b(rig.legR.knee, rig.legR.shoe),
           pelvis: b(rig.pelvis),
           heldChopsticks: table ? b(table.heldChopsticks) : null,
           heldCup: table ? b(table.heldCup) : null,
           ladle: npc.userData.tools ? b(npc.userData.tools.ladle) : null,
           cloth: npc.userData.tools ? b(npc.userData.tools.cloth) : null,
-          ownBowl: table && table.bowl ? b(table.bowl) : null,
+          ownBowl: table?.bowl ? b(table.bowl.getObjectByName('bowl')) : null,
         },
       };
       Object.assign(ai, keep);
