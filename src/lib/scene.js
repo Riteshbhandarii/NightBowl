@@ -923,10 +923,12 @@ export function initScene(canvas, onHotspot, opts = {}) {
   }
 
   function initAI(npc, kind, base) {
+    const tempo = rnd(0.82, 1.18);
     npc.userData.ai = {
       kind, cur: base(), tgt: base(),
       act: kind === 'cook' ? 'stir' : 'eat',
-      startedAt: nowSec() - random() * 3, dur: rnd(3, 7),
+      startedAt: nowSec() - random() * 3, dur: rnd(3, 7) * tempo,
+      tempo,
       locked: false, face: 0, needsService: false,
       mouthPhase: random() * Math.PI * 2,
       nextBiteAt: kind === 'diner' ? nowSec() + rnd(0.2, 1.2) : 0,
@@ -936,7 +938,7 @@ export function initScene(canvas, onHotspot, opts = {}) {
   function setAct(npc, act, dur) {
     const ai = npc.userData.ai;
     if (!ai) return;
-    ai.act = act; ai.startedAt = nowSec(); ai.dur = dur;
+    ai.act = act; ai.startedAt = nowSec(); ai.dur = dur * ai.tempo;
     if (act === 'eat') ai.nextBiteAt = nowSec() + rnd(0.25, 1.2);
   }
 
@@ -2223,6 +2225,8 @@ export function initScene(canvas, onHotspot, opts = {}) {
         cookAction: guide?.userData.ai?.act || null,
         mouthPhases: diners.map((diner) => diner.userData.ai?.mouthPhase)
           .concat(guide?.userData.ai?.mouthPhase ?? []),
+        actionTempos: diners.map((diner) => diner.userData.ai?.tempo)
+          .concat(guide?.userData.ai?.tempo ?? []),
         service: service && {
           active: true,
           filled: service.filled,

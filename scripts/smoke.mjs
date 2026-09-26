@@ -259,6 +259,11 @@ await session([], async (ctx) => {
   check('each speaking character has a distinct mouth phase',
     before.mouthPhases.length === 4 && new Set(before.mouthPhases).size === 4,
     JSON.stringify(before.mouthPhases));
+  check('each NPC keeps a distinct action tempo',
+    before.actionTempos.length === 4
+      && new Set(before.actionTempos).size === 4
+      && before.actionTempos.every((tempo) => tempo >= 0.82 && tempo <= 1.18),
+    JSON.stringify(before.actionTempos));
   check('each diner owns a reachable bowl, chopsticks and cup',
     before.dinerStations.length === 3 && before.dinerStations.every((station) =>
       Math.abs(station.seatX - station.bowlX) < 0.01
