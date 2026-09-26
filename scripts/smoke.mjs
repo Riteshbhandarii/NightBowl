@@ -264,6 +264,11 @@ await session([], async (ctx) => {
       && new Set(before.actionTempos).size === 4
       && before.actionTempos.every((tempo) => tempo >= 0.82 && tempo <= 1.18),
     JSON.stringify(before.actionTempos));
+  const seatGaps = before.seatXs.slice(1).map((x, i) => Number((x - before.seatXs[i]).toFixed(2)));
+  check('counter seats break the mechanical one-metre grid',
+    seatGaps.length === 3 && new Set(seatGaps).size === 3
+      && seatGaps.some((gap) => gap < 1) && seatGaps.some((gap) => gap > 1.4),
+    JSON.stringify({ seats: before.seatXs, gaps: seatGaps }));
   check('each diner owns a reachable bowl, chopsticks and cup',
     before.dinerStations.length === 3 && before.dinerStations.every((station) =>
       Math.abs(station.seatX - station.bowlX) < 0.01

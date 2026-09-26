@@ -111,9 +111,9 @@ export function initScene(canvas, onHotspot, opts = {}) {
   const diners = [];
   const walkers = [];
   const DINER_SPECS = [
-    { x: -1.9, facing: -0.2, hair: 0x2a1c12, shirt: 0x6b4a2f, scale: 1.0, build: 1.08, headScale: 0.97 },
-    { x: -0.9, facing: 0.16, hair: 0x14100c, shirt: 0x394a5e, scale: 0.92, build: 0.94, headScale: 1.03 },
-    { x: 1.75, facing: 0.24, hair: 0x3a2a1a, shirt: 0x5a5560, scale: 0.97, build: 1.0, headScale: 1.0 },
+    { x: -1.92, facing: -0.2, hair: 0x2a1c12, shirt: 0x6b4a2f, scale: 1.0, build: 1.08, headScale: 0.97 },
+    { x: -1.06, facing: 0.16, hair: 0x14100c, shirt: 0x394a5e, scale: 0.92, build: 0.94, headScale: 1.03 },
+    { x: 1.78, facing: 0.24, hair: 0x3a2a1a, shirt: 0x5a5560, scale: 0.97, build: 1.0, headScale: 1.0 },
   ];
   // the one stool that is never taken, and the ring that advertises it
   const SEAT = { x: 0.1, z: 1.52 };
@@ -2221,6 +2221,7 @@ export function initScene(canvas, onHotspot, opts = {}) {
           hasHeldChopsticks: !!diner.userData.table?.heldChopsticks,
           hasCup: !!diner.userData.table?.heldCup && !!diner.userData.table?.bowl?.userData.counterCup,
         })),
+        seatXs: DINER_SPECS.map((spec) => spec.x).concat(SEAT.x).sort((a, b) => a - b),
         dinerActions: diners.map((diner) => ({
           action: diner.userData.ai?.act,
           biting: !!diner.userData.ai?.biting,
