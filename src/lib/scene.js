@@ -1870,18 +1870,19 @@ export function initScene(canvas, onHotspot, opts = {}) {
     for (let i = 0; i < 2; i++) {
       const bird = new THREE.Group();
       const mat = new THREE.MeshBasicMaterial({ color: 0x343c52, side: THREE.DoubleSide });
-      const wing = new THREE.Shape();
-      wing.moveTo(-0.005, -0.012);
-      wing.lineTo(-0.13, 0.038);
-      wing.lineTo(-0.08, -0.02);
-      wing.lineTo(-0.018, -0.03);
-      wing.closePath();
-      const left = new THREE.Mesh(new THREE.ShapeGeometry(wing), mat);
-      const right = left.clone();
-      const body = new THREE.Mesh(new THREE.SphereGeometry(0.017, 8, 6), mat);
-      body.scale.set(1.5, 0.72, 0.72);
-      right.scale.x = -1;
-      bird.add(left, right, body);
+      // One symmetric silhouette per bird. The former two wing meshes plus a
+      // separate body cost six draw calls for two tiny background details.
+      const silhouette = new THREE.Shape();
+      silhouette.moveTo(0, 0.018);
+      silhouette.lineTo(-0.13, 0.038);
+      silhouette.lineTo(-0.08, -0.02);
+      silhouette.lineTo(-0.018, -0.03);
+      silhouette.lineTo(0, -0.018);
+      silhouette.lineTo(0.018, -0.03);
+      silhouette.lineTo(0.08, -0.02);
+      silhouette.lineTo(0.13, 0.038);
+      silhouette.closePath();
+      bird.add(new THREE.Mesh(new THREE.ShapeGeometry(silhouette), mat));
       bird.position.set(-2.8 + i * 1.4, 4.32 + i * 0.24, 1.9 - i * 0.25);
       bird.userData.speed = 0.38 + i * 0.08;
       bird.userData.phase = i * 1.7;
@@ -2507,8 +2508,7 @@ export function initScene(canvas, onHotspot, opts = {}) {
       bird.position.x += bird.userData.speed * dt;
       if (bird.position.x > 12) bird.position.x = -12;
       bird.rotation.z = Math.sin(t * 2.2 + bird.userData.phase) * 0.06;
-      bird.children[0].rotation.y = Math.sin(t * 4 + bird.userData.phase) * 0.28;
-      bird.children[1].rotation.y = -Math.sin(t * 4 + bird.userData.phase) * 0.28;
+      bird.children[0].scale.y = 0.72 + Math.sin(t * 4 + bird.userData.phase) * 0.25;
     }
 
     for (const grp of steamGroups) {
