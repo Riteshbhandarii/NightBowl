@@ -395,10 +395,16 @@ await session([], async (ctx) => {
   let sawWelcomeWithoutSeatBowl = false;
   let sawForwardStepOut = false;
   let sawForwardLeave = false;
+  let calmDepartureTiming = false;
+  let calmArrivalTiming = false;
   for (let i = 0; i < 140 && !replacementSeated; i++) {
     await sleep(250);
     const state = await evaluate('window.__nightbowl.selfCheck()');
     if (state.turnover?.phase) turnoverPhases.add(state.turnover.phase);
+    if (state.turnover?.phase === 'stepOut') calmDepartureTiming ||= state.turnover.duration >= 2.4;
+    if (state.turnover?.phase === 'leave') calmDepartureTiming &&= state.turnover.duration >= 4;
+    if (state.turnover?.phase === 'arrive') calmArrivalTiming ||= state.turnover.duration >= 4;
+    if (state.turnover?.phase === 'stepIn') calmArrivalTiming &&= state.turnover.duration >= 2.4;
     if (state.turnover?.phase === 'stepOut'
       && state.turnover.z > state.turnover.stageZ + 0.02) {
       sawForwardStepOut ||= state.turnover.facingZ > 0.8;
@@ -423,6 +429,9 @@ await session([], async (ctx) => {
   check('departing diner turns before walking outward and toward the exit',
     sawForwardStepOut && sawForwardLeave,
     `stepOut=${sawForwardStepOut} leave=${sawForwardLeave}`);
+  check('customer arrival and departure use the calm walking pace',
+    calmDepartureTiming && calmArrivalTiming,
+    `departure=${calmDepartureTiming} arrival=${calmArrivalTiming}`);
   check('cook clears the finished bowl and the stool stays vacant',
     turnoverPhases.has('vacant') && sawClearedSeat,
     [...turnoverPhases].join(','));

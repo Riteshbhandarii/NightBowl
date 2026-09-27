@@ -128,6 +128,7 @@ export function initScene(canvas, onHotspot, opts = {}) {
   // the one stool that is never taken, and the ring that advertises it
   const SEAT = { x: 0.1, z: 1.52 };
   const CUSTOMER_Z = 1.52;
+  const TURNOVER_WALK = { depthSeconds: 2.4, lateralSeconds: 4, cadence: 5 };
   // Top face of a stool seat. buildStool and the seated pose both read this, so
   // the two cannot drift apart.
   const SEAT_TOP_Y = 0.69;
@@ -1521,7 +1522,7 @@ export function initScene(canvas, onHotspot, opts = {}) {
       rig.legR.knee.rotation.x = mix(1.5, 0, legs);
       diner.position.z = mix(CUSTOMER_Z, tr.stageZ, u);
       diner.rotation.y = mix(tr.seatRotation, Math.PI, u);
-      if (elapsed >= tr.duration) setTurnoverPhase(tr, 'stepOut', 1.5);
+      if (elapsed >= tr.duration) setTurnoverPhase(tr, 'stepOut', TURNOVER_WALK.depthSeconds);
     } else if (tr.phase === 'stepOut') {
       applyPose(rig, standing);
       // Turn away from the counter before taking the first outward step. The
@@ -1531,8 +1532,8 @@ export function initScene(canvas, onHotspot, opts = {}) {
       const travel = ease01((u - 0.32) / 0.68);
       diner.position.z = mix(tr.stageZ, 2.42, travel);
       diner.rotation.y = mix(Math.PI, 0, turn);
-      walkRig(rig, elapsed * 7, travel * 0.75);
-      if (elapsed >= tr.duration) setTurnoverPhase(tr, 'leave', 2.2);
+      walkRig(rig, elapsed * TURNOVER_WALK.cadence, travel * 0.75);
+      if (elapsed >= tr.duration) setTurnoverPhase(tr, 'leave', TURNOVER_WALK.lateralSeconds);
     } else if (tr.phase === 'leave') {
       applyPose(rig, standing);
       const exitRotation = tr.entryX < tr.seatX ? -Math.PI / 2 : Math.PI / 2;
@@ -1541,7 +1542,7 @@ export function initScene(canvas, onHotspot, opts = {}) {
       diner.position.x = mix(tr.seatX, tr.entryX, travel);
       diner.position.z = 2.42;
       diner.rotation.y = mix(0, exitRotation, turn);
-      walkRig(rig, elapsed * 7, travel);
+      walkRig(rig, elapsed * TURNOVER_WALK.cadence, travel);
       if (elapsed >= tr.duration) {
         diner.visible = false;
         diner.userData.ai.customerGeneration++;
@@ -1569,21 +1570,21 @@ export function initScene(canvas, onHotspot, opts = {}) {
       if (elapsed >= tr.duration) {
         diner.position.set(tr.entryX, 0, 2.42);
         diner.visible = true;
-        setTurnoverPhase(tr, 'arrive', 2.2);
+        setTurnoverPhase(tr, 'arrive', TURNOVER_WALK.lateralSeconds);
       }
     } else if (tr.phase === 'arrive') {
       applyPose(rig, standing);
       diner.position.x = mix(tr.entryX, tr.seatX, u);
       diner.position.z = 2.42;
       diner.rotation.y = tr.entryX < tr.seatX ? Math.PI / 2 : -Math.PI / 2;
-      walkRig(rig, elapsed * 7, 1);
-      if (elapsed >= tr.duration) setTurnoverPhase(tr, 'stepIn', 1.5);
+      walkRig(rig, elapsed * TURNOVER_WALK.cadence, 1);
+      if (elapsed >= tr.duration) setTurnoverPhase(tr, 'stepIn', TURNOVER_WALK.depthSeconds);
     } else if (tr.phase === 'stepIn') {
       applyPose(rig, standing);
       diner.position.x = tr.seatX;
       diner.position.z = mix(2.42, tr.stageZ, u);
       diner.rotation.y = Math.PI;
-      walkRig(rig, elapsed * 7, 0.7);
+      walkRig(rig, elapsed * TURNOVER_WALK.cadence, 0.7);
       if (elapsed >= tr.duration) setTurnoverPhase(tr, 'sit', 1.2);
     } else if (tr.phase === 'sit') {
       applyPose(rig, blendPose(standing, seatedPose(diner), u));
@@ -2996,6 +2997,7 @@ export function initScene(canvas, onHotspot, opts = {}) {
           .concat(guide?.userData.ai?.tempo ?? []),
         turnover: activeTurnover ? {
           phase: activeTurnover.phase,
+          duration: activeTurnover.duration,
           index: diners.indexOf(activeTurnover.diner),
           x: activeTurnover.diner.position.x,
           z: activeTurnover.diner.position.z,
