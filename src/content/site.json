@@ -15,8 +15,7 @@
     "guide": "The Guide",
     "log": "Kitchen Log",
     "bill": "The Bill",
-    "openMenu": "Open menu",
-    "theme": "Switch colour theme"
+    "openMenu": "Open menu"
   },
   "menu": {
     "title": "The Menu",

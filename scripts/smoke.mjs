@@ -335,7 +335,9 @@ await session([], async (ctx) => {
       && seatTarget.text === '' && !!seatTarget.aria,
     JSON.stringify(seatTarget));
   check('top bar nav is live before sitting',
-    (await evaluate(`document.querySelectorAll('.topbar [data-open]').length`)) > 0);
+    (await evaluate(`document.querySelectorAll('.topbar [data-open]').length`)) === 5);
+  check('home chrome has no duplicate wordmark or theme switch',
+    await evaluate(`!document.querySelector('.wordmark') && !document.getElementById('themeBtn')`));
 
   await send('Input.dispatchMouseEvent', { type: 'mousePressed', x: seatTarget.x, y: seatTarget.y, button: 'left', clickCount: 1 });
   await send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: seatTarget.x, y: seatTarget.y, button: 'left', clickCount: 1 });
@@ -673,7 +675,6 @@ await session(['--force-prefers-reduced-motion'], async (ctx) => {
         : document.querySelector('.nav');
       return {
         primary: rect(primary),
-        wordmark: rect(document.querySelector('.wordmark')),
         overflowX: document.documentElement.scrollWidth - innerWidth,
         overflowY: document.documentElement.scrollHeight - innerHeight,
         touchAction: getComputedStyle(document.getElementById('scene')).touchAction,
@@ -682,7 +683,7 @@ await session(['--force-prefers-reduced-motion'], async (ctx) => {
     const contained = (rect) => rect && rect.left >= -0.5 && rect.top >= -0.5
       && rect.right <= device.width + 0.5 && rect.bottom <= device.height + 0.5;
     check(`${device.name}: primary controls remain reachable`,
-      contained(shell.primary) && contained(shell.wordmark), JSON.stringify(shell));
+      contained(shell.primary), JSON.stringify(shell));
     check(`${device.name}: shell has no page overflow`,
       shell.overflowX <= 0.5 && shell.overflowY <= 0.5,
       `x=${shell.overflowX} y=${shell.overflowY}`);
