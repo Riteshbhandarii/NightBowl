@@ -22,6 +22,8 @@
     "audit:environment": "node scripts/environment-review.mjs",
     "audit:pot-walkway": "node scripts/pot-walkway-review.mjs",
     "audit:camera": "node scripts/camera-limits-review.mjs",
+    "audit:human-motion": "node scripts/human-motion-review.mjs",
+    "audit:exit-facing": "node scripts/exit-facing-review.mjs",
     "baseline": "node scripts/perf-baseline.mjs",
     "audit:visual": "node scripts/pose-shots.mjs"
   },

@@ -393,10 +393,21 @@ await session([], async (ctx) => {
   let replacementSeated = false;
   let sawClearedSeat = false;
   let sawWelcomeWithoutSeatBowl = false;
+  let sawForwardStepOut = false;
+  let sawForwardLeave = false;
   for (let i = 0; i < 140 && !replacementSeated; i++) {
     await sleep(250);
     const state = await evaluate('window.__nightbowl.selfCheck()');
     if (state.turnover?.phase) turnoverPhases.add(state.turnover.phase);
+    if (state.turnover?.phase === 'stepOut'
+      && state.turnover.z > state.turnover.stageZ + 0.02) {
+      sawForwardStepOut ||= state.turnover.facingZ > 0.8;
+    }
+    if (state.turnover?.phase === 'leave'
+      && Math.abs(state.turnover.x - state.turnover.seatX) > 0.05) {
+      const exitDirection = Math.sign(state.turnover.entryX - state.turnover.seatX);
+      sawForwardLeave ||= state.turnover.facingX * exitDirection > 0.8;
+    }
     if (state.turnover?.phase === 'vacant') sawClearedSeat ||= !state.turnover.seatBowlVisible;
     if (state.turnover?.phase === 'welcome') {
       sawWelcomeWithoutSeatBowl ||= !state.turnover.seatBowlVisible && state.turnover.carryBowlVisible;
@@ -409,6 +420,9 @@ await session([], async (ctx) => {
   check('finished diner stands and walks away',
     ['stand', 'stepOut', 'leave', 'clear'].every((phase) => turnoverPhases.has(phase)),
     [...turnoverPhases].join(','));
+  check('departing diner turns before walking outward and toward the exit',
+    sawForwardStepOut && sawForwardLeave,
+    `stepOut=${sawForwardStepOut} leave=${sawForwardLeave}`);
   check('cook clears the finished bowl and the stool stays vacant',
     turnoverPhases.has('vacant') && sawClearedSeat,
     [...turnoverPhases].join(','));

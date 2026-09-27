@@ -405,8 +405,8 @@ export function initScene(canvas, onHotspot, opts = {}) {
         garnish.setColorAt(index, new THREE.Color(color));
       });
     potG.add(garnish);
-    potG.scale.setScalar(0.58);
-    potG.position.set(0.1, 1.02, 0.2);
+    potG.scale.setScalar(0.52);
+    potG.position.set(0.1, 1.01, 0.2);
     potG.userData.stationX = 0.1;
     cookingPot = potG;
     g.add(potG);
@@ -709,10 +709,12 @@ export function initScene(canvas, onHotspot, opts = {}) {
       torso.add(coat);
     }
     if (opt.bag) {
-      const strap = pos(box(0.025, 0.55, 0.018, 0x261d1a, { rough: 1 }), 0.03, 0.12, 0.145);
-      strap.rotation.z = -0.48;
-      torso.add(strap);
-      torso.add(pos(box(0.18, 0.19, 0.08, opt.bag, { rough: 0.95 }), 0.14, -0.08, 0.15));
+      // A compact backpack sits flush against the spine. The previous side bag
+      // was a hard box offset from the body, so even though it inherited the
+      // torso transform it looked like a prop floating beside the walker.
+      const backpack = pos(sph(0.13, opt.bag, { rough: 0.95 }, 12), 0, 0.13, -0.13);
+      backpack.scale.set(0.86, 1.28, 0.46);
+      torso.add(backpack);
     }
     if (opt.cap != null) {
       head.add(pos(cyl(0.115 * hs, 0.115 * hs, 0.05, opt.cap, { rough: 1 }, 14), 0, 0.057, 0));
@@ -1034,14 +1036,14 @@ export function initScene(canvas, onHotspot, opts = {}) {
       // down into the pot. Keeping the utensil in torso space prevents the
       // bent wrist from rotating its scoop upward through the cook's face.
       const circle = tl * 2.0;
-      reachArm(p, 'r', 0.43 + Math.sin(circle) * 0.008, 0.22 + Math.cos(circle) * 0.008,
-        Math.sin(circle) * 0.025);
+      reachArm(p, 'r', 0.50 + Math.sin(circle) * 0.012, 0.27 + Math.cos(circle) * 0.012,
+        Math.sin(circle) * 0.04);
       // The free hand braces the near handle instead of vanishing beside the
       // apron. It stays outside the hot rim while remaining visible front-on.
-      reachArm(p, 'l', 0.47, 0.46, 0.58);
-      p.lElZ = -0.34;
+      reachArm(p, 'l', 0.50, 0.40, 0.28);
+      p.lElZ = -0.12;
       const ladle = npc?.userData.tools?.ladle;
-      if (ladle) ladle.position.set(Math.sin(circle) * 0.012, 0, Math.cos(circle) * 0.012);
+      if (ladle) ladle.userData.setStir(circle);
       p.torsoX = 0.10;
       p.torsoY = -0.13;
       p.headX = 0.16;
@@ -1522,16 +1524,24 @@ export function initScene(canvas, onHotspot, opts = {}) {
       if (elapsed >= tr.duration) setTurnoverPhase(tr, 'stepOut', 1.5);
     } else if (tr.phase === 'stepOut') {
       applyPose(rig, standing);
-      diner.position.z = mix(tr.stageZ, 2.42, u);
-      diner.rotation.y = Math.PI;
-      walkRig(rig, elapsed * 7, 0.75);
+      // Turn away from the counter before taking the first outward step. The
+      // old version translated toward +Z while still facing -Z, so customers
+      // visibly moonwalked away from their stool.
+      const turn = ease01(u / 0.32);
+      const travel = ease01((u - 0.32) / 0.68);
+      diner.position.z = mix(tr.stageZ, 2.42, travel);
+      diner.rotation.y = mix(Math.PI, 0, turn);
+      walkRig(rig, elapsed * 7, travel * 0.75);
       if (elapsed >= tr.duration) setTurnoverPhase(tr, 'leave', 2.2);
     } else if (tr.phase === 'leave') {
       applyPose(rig, standing);
-      diner.position.x = mix(tr.seatX, tr.entryX, u);
+      const exitRotation = tr.entryX < tr.seatX ? -Math.PI / 2 : Math.PI / 2;
+      const turn = ease01(u / 0.24);
+      const travel = ease01((u - 0.24) / 0.76);
+      diner.position.x = mix(tr.seatX, tr.entryX, travel);
       diner.position.z = 2.42;
-      diner.rotation.y = tr.entryX < tr.seatX ? -Math.PI / 2 : Math.PI / 2;
-      walkRig(rig, elapsed * 7, 1);
+      diner.rotation.y = mix(0, exitRotation, turn);
+      walkRig(rig, elapsed * 7, travel);
       if (elapsed >= tr.duration) {
         diner.visible = false;
         diner.userData.ai.customerGeneration++;
@@ -2022,11 +2032,11 @@ export function initScene(canvas, onHotspot, opts = {}) {
     // cook's head even though the hand itself was aimed at the pot.
     const ladle = new THREE.Group();
     ladle.userData.grip = new THREE.Object3D();
-    ladle.userData.grip.position.set(0.185, 0.43, 0.22);
+    ladle.userData.grip.position.set(0.185, 0.50, 0.27);
     ladle.add(ladle.userData.grip);
     // The scoop terminates below the open rim and near the broth centre. The
     // old endpoint sat behind the closed lid, so neither contact was readable.
-    const ladleEnd = new THREE.Vector3(-0.50, 0.34, 0.52);
+    const ladleEnd = new THREE.Vector3(-0.58, 0.36, 0.50);
     const ladleVector = ladleEnd.clone().sub(ladle.userData.grip.position);
     const handle = cyl(0.012, 0.012, ladleVector.length(), 0x9a8058, {}, 8);
     handle.position.copy(ladle.userData.grip.position).addScaledVector(ladleVector, 0.5);
@@ -2038,6 +2048,21 @@ export function initScene(canvas, onHotspot, opts = {}) {
     ladle.userData.scoop = new THREE.Object3D();
     ladle.userData.scoop.position.copy(ladleEnd);
     ladle.add(ladle.userData.scoop);
+    // Pivot the handle from the hand while the scoop traces a visible circle
+    // below the broth surface. Moving the entire utensil a centimetre made it
+    // look parked against the rim rather than actively stirring.
+    ladle.userData.setStir = (angle) => {
+      const end = ladleEnd.clone();
+      end.x += Math.cos(angle) * 0.07;
+      end.z += Math.sin(angle) * 0.055;
+      end.y += Math.sin(angle * 2) * 0.012;
+      const vector = end.clone().sub(ladle.userData.grip.position);
+      handle.position.copy(ladle.userData.grip.position).addScaledVector(vector, 0.5);
+      handle.scale.y = vector.length() / ladleVector.length();
+      handle.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), vector.clone().normalize());
+      scoop.position.copy(end);
+      ladle.userData.scoop.position.copy(end);
+    };
     guideRig.torso.add(ladle);
     const cloth = pos(box(0.16, 0.012, 0.12, 0xd7c9a6, { rough: 1 }), 0, -0.30, 0.08);
     cloth.rotation.x = 0.16;
@@ -2611,7 +2636,7 @@ export function initScene(canvas, onHotspot, opts = {}) {
     },
     auditFocus(kind, index) {
       if (!auditVisibility) return false;
-      const subject = kind === 'cook' ? guide : diners[index];
+      const subject = kind === 'cook' ? guide : kind === 'walker' ? walkers[index] : diners[index];
       for (const root of auditVisibility.keys()) root.visible = root === subject;
       return Boolean(subject);
     },
@@ -2974,6 +2999,11 @@ export function initScene(canvas, onHotspot, opts = {}) {
           index: diners.indexOf(activeTurnover.diner),
           x: activeTurnover.diner.position.x,
           z: activeTurnover.diner.position.z,
+          facingX: Math.sin(activeTurnover.diner.rotation.y),
+          facingZ: Math.cos(activeTurnover.diner.rotation.y),
+          seatX: activeTurnover.seatX,
+          entryX: activeTurnover.entryX,
+          stageZ: activeTurnover.stageZ,
           visible: activeTurnover.diner.visible,
           generation: activeTurnover.diner.userData.ai.customerGeneration,
           seatBowlVisible: !!activeTurnover.diner.userData.table.bowl.visible,
