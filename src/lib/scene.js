@@ -675,14 +675,20 @@ export function initScene(canvas, onHotspot, opts = {}) {
     const hair = pos(sph(0.111 * hs, opt.hair || 0x1c1510, { rough: 1 }, 16), 0, 0.024, -0.008);
     head.add(hair);
     if (opt.longHair) {
-      const backHair = pos(cap(0.09 * hs, 0.34, opt.hair || 0x1c1510, { rough: 1 }, 12), 0, -0.13, -0.055);
+      const backHair = pos(cap(0.09 * hs, 0.42, opt.hair || 0x1c1510, { rough: 1 }, 12), 0, -0.17, -0.055);
       backHair.scale.set(1.05, 1, 0.72);
       head.add(backHair);
     }
     if (opt.coat) {
-      const coat = pos(cyl(0.18 * bw, 0.145 * bw, 0.42, opt.coat, { rough: 0.95 }, 14), 0, 0.04, -0.005);
+      const coat = pos(cyl(0.19 * bw, 0.145 * bw, 0.62, opt.coat, { rough: 0.95 }, 14), 0, -0.05, -0.005);
       coat.scale.z = 0.86;
       torso.add(coat);
+    }
+    if (opt.bag) {
+      const strap = pos(box(0.025, 0.55, 0.018, 0x261d1a, { rough: 1 }), 0.03, 0.12, 0.145);
+      strap.rotation.z = -0.48;
+      torso.add(strap);
+      torso.add(pos(box(0.18, 0.19, 0.08, opt.bag, { rough: 0.95 }), 0.14, -0.08, 0.15));
     }
     if (opt.cap != null) {
       head.add(pos(cyl(0.115 * hs, 0.115 * hs, 0.05, opt.cap, { rough: 1 }, 14), 0, 0.057, 0));
@@ -1746,60 +1752,115 @@ export function initScene(canvas, onHotspot, opts = {}) {
     const bld2 = bld.clone(); bld2.position.set(12, 6, -16); bld2.scale.set(0.7, 0.8, 1);
     scene.add(bld2);
 
-    const w1 = buildPerson({ shirt: 0x273044, coat: 0x1d2638, hair: 0x101010, scale: 1.04, build: 1.07, headScale: 0.96 });
-    addBlobShadow(w1, 0.36, 0.6);
-    w1.position.set(-8, 0, 3.4); w1.rotation.y = Math.PI / 2;
-    w1.userData.speed = 0.9; w1.userData.range = 8;
+    // Keep the pavement quiet: two differently built passers-by at different
+    // depths read as a street, while three abreast read as a crowd on display.
+    const w1 = buildPerson({ shirt: 0x222a38, coat: 0x18202d, cap: 0x141922, hair: 0x101010, scale: 0.96, build: 1.05, headScale: 0.97 });
+    addBlobShadow(w1, 0.34, 0.46);
+    w1.position.set(-7.2, 0.02, 3.72); w1.rotation.y = Math.PI / 2;
+    w1.userData.speed = 0.62; w1.userData.range = 8.4;
     walkers.push(w1); scene.add(w1);
-    const w2 = buildPerson({ shirt: 0x583a48, coat: 0x3f2936, hair: 0x241713, longHair: true, scale: 0.95, build: 0.92, headScale: 1.02 });
-    addBlobShadow(w2, 0.34, 0.6);
-    w2.position.set(7, 0, 4.1); w2.rotation.y = -Math.PI / 2;
-    w2.userData.speed = -0.65; w2.userData.range = 7;
+    const w2 = buildPerson({ shirt: 0x49343f, coat: 0x30242e, bag: 0x6d4936, hair: 0x241713, longHair: true, scale: 0.86, build: 0.88, headScale: 1.03 });
+    addBlobShadow(w2, 0.31, 0.42);
+    w2.position.set(6.5, 0.02, 3.08); w2.rotation.y = -Math.PI / 2;
+    w2.userData.speed = -0.48; w2.userData.range = 7.2;
     walkers.push(w2); scene.add(w2);
 
-    const w3 = buildPerson({ shirt: 0x46513e, coat: 0x30382d, hair: 0x3a2518, scale: 0.89, build: 0.86, headScale: 1.04 });
-    addBlobShadow(w3, 0.32, 0.5);
-    w3.position.set(-4.5, 0, 4.55); w3.rotation.y = Math.PI / 2;
-    w3.userData.speed = 0.48; w3.userData.range = 9;
-    walkers.push(w3); scene.add(w3);
-
-    const tree = (x, z, scale, lean = 0) => {
+    const tree = (x, z, scale, mirror = 1) => {
       const g = new THREE.Group();
-      const trunk = pos(cyl(0.09, 0.14, 1.45, 0x4a3327, { rough: 1 }, 8), 0, 0.72, 0);
-      trunk.rotation.z = lean;
+      // Street trees belong in planters and grow unevenly. A cluster of flat
+      // low-poly crowns catches both the cool sky and the shop spill without
+      // turning into the bright cone row from the first pass.
+      g.add(pos(cyl(0.26, 0.31, 0.32, 0x343238, { rough: 1 }, 8), 0, 0.16, 0));
+      const trunk = pos(cyl(0.055, 0.085, 1.28, 0x3c2c27, { rough: 1 }, 7), 0, 0.89, 0);
+      trunk.rotation.z = mirror * 0.035;
       g.add(trunk);
-      // A basic material keeps the trees readable as quiet silhouettes even
-      // outside the stall lights. They should frame the street, not disappear.
-      const crownMat = new THREE.MeshBasicMaterial({ color: 0x24443a });
-      for (const [y, r] of [[1.35, 0.54], [1.72, 0.45], [2.03, 0.32]]) {
-        const crown = new THREE.Mesh(new THREE.ConeGeometry(r, 0.9, 9), crownMat);
-        crown.position.y = y;
+      const crownMat = new THREE.MeshStandardMaterial({ color: 0x18352f, roughness: 1, flatShading: true });
+      const clusters = [
+        [0, 1.52, 0, 0.43],
+        [-0.30 * mirror, 1.65, 0.02, 0.32],
+        [0.27 * mirror, 1.74, -0.03, 0.36],
+        [-0.08 * mirror, 1.98, 0, 0.34],
+        [0.13 * mirror, 2.18, 0.02, 0.25],
+      ];
+      for (const [cx, cy, cz, r] of clusters) {
+        const crown = new THREE.Mesh(new THREE.IcosahedronGeometry(r, 1), crownMat);
+        crown.position.set(cx, cy, cz);
+        crown.scale.y = 0.84;
         g.add(crown);
       }
       g.position.set(x, 0, z); g.scale.setScalar(scale);
-      addBlobShadow(g, 0.58 * scale, 0.38);
+      addBlobShadow(g, 0.5 * scale, 0.32);
       streetTrees.push(g); scene.add(g);
     };
-    tree(-4.45, 4.85, 1.02, -0.03);
-    tree(4.55, 4.95, 0.9, 0.025);
-    tree(9.2, 5.2, 1.12, -0.02);
+    tree(-4.55, 1.72, 0.9, -1);
+    tree(4.86, 1.48, 0.8, 1);
+
+    // One utility pole and loose overhead lines do more for the alley context
+    // than another decorative object on the pavement.
+    const pole = pos(cyl(0.065, 0.09, 4.4, 0x20202a, { rough: 1 }, 8), -5.48, 2.2, 3.65);
+    scene.add(pole);
+    scene.add(pos(box(1.0, 0.07, 0.08, 0x20202a, { rough: 1 }), -5.25, 3.82, 3.65));
+    const wireMat = new THREE.LineBasicMaterial({ color: 0x161722, transparent: true, opacity: 0.8 });
+    for (let i = 0; i < 3; i++) {
+      const points = [];
+      for (let s = 0; s <= 20; s++) {
+        const u = s / 20;
+        points.push(new THREE.Vector3(-5.65 + u * 11.5, 3.92 - i * 0.16 - Math.sin(u * Math.PI) * 0.24, 3.64 + i * 0.04));
+      }
+      scene.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(points), wireMat));
+    }
+
+    // A single warm lamp gives the sidewalk a secondary pool of light without
+    // competing with the stall.
+    const lamp = new THREE.Group();
+    lamp.add(pos(cyl(0.035, 0.05, 2.6, 0x282832, { rough: 0.9 }, 8), 0, 1.3, 0));
+    lamp.add(pos(box(0.42, 0.08, 0.08, 0x282832, { rough: 0.9 }), -0.17, 2.56, 0));
+    const shade = pos(sph(0.16, 0x252631, { rough: 0.9 }, 12), -0.37, 2.49, 0);
+    shade.scale.set(1, 0.38, 1);
+    lamp.add(shade);
+    lamp.add(pos(cyl(0.09, 0.09, 0.025, 0xffbd73, { emissive: 0xff8f45, emissiveIntensity: 2 }, 12), -0.37, 2.41, 0));
+    lamp.position.set(4.18, 0, 3.62);
+    scene.add(lamp);
+    const streetLight = new THREE.PointLight(0xffa45a, 0.82, 3.4, 2);
+    streetLight.position.set(3.81, 2.42, 3.62);
+    scene.add(streetLight);
+
+    const vending = (x, color, glow) => {
+      const machine = new THREE.Group();
+      machine.add(pos(box(0.48, 0.92, 0.34, color, { rough: 0.82 }), 0, 0.46, 0));
+      machine.add(pos(box(0.39, 0.34, 0.012, 0xe6e2d6, { emissive: glow, emissiveIntensity: 0.75 }), 0, 0.62, 0.178));
+      machine.add(pos(box(0.34, 0.06, 0.014, 0xb64d3c, { emissive: 0x5a130d, emissiveIntensity: 0.6 }), 0, 0.37, 0.18));
+      machine.position.set(x, 0, 1.7);
+      scene.add(machine);
+    };
+    vending(-4.45, 0x303844, 0x6d8faf);
+    vending(-3.92, 0x4b2b2b, 0xb06b55);
+
+    const board = new THREE.Group();
+    board.add(pos(box(0.48, 0.56, 0.055, 0x3b2b24, { rough: 1 }), 0, 0.58, 0));
+    board.add(pos(box(0.045, 0.7, 0.045, 0x29201c, { rough: 1 }), -0.18, 0.25, 0));
+    board.add(pos(box(0.045, 0.7, 0.045, 0x29201c, { rough: 1 }), 0.18, 0.25, 0));
+    board.add(pos(box(0.36, 0.32, 0.012, 0x8f3c2e, { emissive: 0x32100a, emissiveIntensity: 0.5 }), 0, 0.6, 0.035));
+    board.position.set(3.85, 0, 1.72);
+    board.rotation.y = -0.18;
+    scene.add(board);
 
     for (let i = 0; i < 2; i++) {
       const bird = new THREE.Group();
-      const mat = new THREE.MeshBasicMaterial({ color: 0x68738b, side: THREE.DoubleSide });
+      const mat = new THREE.MeshBasicMaterial({ color: 0x343c52, side: THREE.DoubleSide });
       const wing = new THREE.Shape();
-      wing.moveTo(-0.01, -0.025);
-      wing.lineTo(-0.23, 0.07);
-      wing.lineTo(-0.14, -0.035);
-      wing.lineTo(-0.03, -0.055);
+      wing.moveTo(-0.005, -0.012);
+      wing.lineTo(-0.13, 0.038);
+      wing.lineTo(-0.08, -0.02);
+      wing.lineTo(-0.018, -0.03);
       wing.closePath();
       const left = new THREE.Mesh(new THREE.ShapeGeometry(wing), mat);
       const right = left.clone();
-      const body = new THREE.Mesh(new THREE.SphereGeometry(0.028, 8, 6), mat);
+      const body = new THREE.Mesh(new THREE.SphereGeometry(0.017, 8, 6), mat);
       body.scale.set(1.5, 0.72, 0.72);
       right.scale.x = -1;
       bird.add(left, right, body);
-      bird.position.set(-2.4 + i * 2.2, 4.08 + i * 0.32, 2.55 - i * 0.35);
+      bird.position.set(-2.8 + i * 1.4, 4.32 + i * 0.24, 1.9 - i * 0.25);
       bird.userData.speed = 0.38 + i * 0.08;
       bird.userData.phase = i * 1.7;
       birds.push(bird); scene.add(bird);
@@ -1821,19 +1882,66 @@ export function initScene(canvas, onHotspot, opts = {}) {
     ground.rotation.x = -Math.PI / 2;
     scene.add(ground);
 
-    const road = pos(new THREE.Mesh(new THREE.PlaneGeometry(34, 3.6), m(0x0b0e14, { rough: 0.98 })), 0, 0.008, 5.9);
+    // Separate pavement, kerb and road. The old white dashed centre line made
+    // this intimate frontage look like it sat beside a highway.
+    const paveTex = textTexture((g, w, h) => {
+      g.fillStyle = '#24252b'; g.fillRect(0, 0, w, h);
+      g.strokeStyle = 'rgba(8,10,14,0.65)'; g.lineWidth = 2;
+      const cell = 32;
+      for (let y = 0; y <= h; y += cell) {
+        g.beginPath(); g.moveTo(0, y); g.lineTo(w, y); g.stroke();
+        const offset = (y / cell) % 2 ? cell / 2 : 0;
+        for (let x = -offset; x <= w; x += cell) {
+          g.beginPath(); g.moveTo(x, y); g.lineTo(x, y + cell); g.stroke();
+        }
+      }
+      for (let i = 0; i < 180; i++) {
+        g.fillStyle = `rgba(255,255,255,${random() * 0.025})`;
+        g.fillRect(random() * w, random() * h, 2, 2);
+      }
+    }, 256, 256);
+    paveTex.wrapS = paveTex.wrapT = THREE.RepeatWrapping; paveTex.repeat.set(7, 1.5);
+    const pavement = pos(new THREE.Mesh(
+      new THREE.PlaneGeometry(15, 2.25),
+      new THREE.MeshStandardMaterial({ map: paveTex, color: 0xb0aaa5, roughness: 0.92 })
+    ), 0, 0.009, 3.08);
+    pavement.rotation.x = -Math.PI / 2;
+    scene.add(pavement);
+
+    const roadTex = textTexture((g, w, h) => {
+      g.fillStyle = '#0d1016'; g.fillRect(0, 0, w, h);
+      for (let i = 0; i < 500; i++) {
+        const shade = 20 + Math.floor(random() * 18);
+        g.fillStyle = `rgba(${shade},${shade + 2},${shade + 7},${0.12 + random() * 0.18})`;
+        const r = 1 + random() * 2.4;
+        g.fillRect(random() * w, random() * h, r, r);
+      }
+      g.strokeStyle = 'rgba(0,0,0,0.28)'; g.lineWidth = 1;
+      for (let i = 0; i < 5; i++) {
+        g.beginPath();
+        g.moveTo(random() * w, random() * h);
+        g.quadraticCurveTo(random() * w, random() * h, random() * w, random() * h);
+        g.stroke();
+      }
+    }, 256, 256);
+    roadTex.wrapS = roadTex.wrapT = THREE.RepeatWrapping; roadTex.repeat.set(10, 2);
+    const road = pos(new THREE.Mesh(
+      new THREE.PlaneGeometry(34, 4.2),
+      new THREE.MeshStandardMaterial({ map: roadTex, color: 0x71747c, roughness: 0.84 })
+    ), 0, 0.008, 5.72);
     road.rotation.x = -Math.PI / 2;
     scene.add(road);
-    const curb = pos(box(34, 0.12, 0.22, 0x5d5e61, { rough: 1 }), 0, 0.06, 4.08);
+    const curb = pos(box(18, 0.14, 0.2, 0x4b4c52, { rough: 1 }), 0, 0.07, 4.18);
     scene.add(curb);
-    for (const x of [-8, -4, 0, 4, 8]) {
-      const dash = pos(new THREE.Mesh(new THREE.PlaneGeometry(1.8, 0.08), m(0xc4b78e, { rough: 1 })), x, 0.014, 5.9);
-      dash.rotation.x = -Math.PI / 2;
-      scene.add(dash);
-    }
 
-    const glow = new THREE.Mesh(new THREE.PlaneGeometry(8, 3.4), new THREE.MeshBasicMaterial({ color: 0xff9a4d, transparent: true, opacity: 0.06 }));
-    glow.rotation.x = -Math.PI / 2; glow.position.set(0, 0.01, 1.6);
+    const wetMat = new THREE.MeshStandardMaterial({ color: 0x8f4a32, roughness: 0.28, metalness: 0.08, transparent: true, opacity: 0.09, depthWrite: false });
+    const wet = pos(new THREE.Mesh(new THREE.CircleGeometry(1, 32), wetMat), 0.35, 0.022, 3.05);
+    wet.rotation.x = -Math.PI / 2; wet.scale.set(3.2, 0.72, 1); scene.add(wet);
+    const lampWet = pos(new THREE.Mesh(new THREE.CircleGeometry(1, 24), wetMat.clone()), 3.82, 0.022, 3.62);
+    lampWet.rotation.x = -Math.PI / 2; lampWet.scale.set(1.15, 0.42, 1); scene.add(lampWet);
+
+    const glow = new THREE.Mesh(new THREE.PlaneGeometry(8, 3.6), new THREE.MeshBasicMaterial({ color: 0xff9a4d, transparent: true, opacity: 0.105, depthWrite: false }));
+    glow.rotation.x = -Math.PI / 2; glow.position.set(0, 0.025, 2.0);
     scene.add(glow);
   }
 

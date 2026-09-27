@@ -256,11 +256,11 @@ await session([], async (ctx) => {
     before.cook && before.diners === 3 && before.visitor && before.walkers >= 2,
     `cook=${before.cook} diners=${before.diners} visitor=${before.visitor} walkers=${before.walkers}`);
   check('night street stays sparse but visibly alive',
-    before.streetLife.trees === 3
+    before.streetLife.trees === 2
       && before.streetLife.birds === 2
-      && before.streetLife.walkers === 3
+      && before.streetLife.walkers === 2
       && before.streetLife.longHair >= 1
-      && before.streetLife.coats === 3,
+      && before.streetLife.coats === 2,
     JSON.stringify(before.streetLife));
   check('visitor is not an autonomous diner', !before.visitorAutonomous);
   check('each speaking character has a distinct mouth phase',
