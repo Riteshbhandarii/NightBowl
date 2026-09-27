@@ -2104,6 +2104,17 @@ export function initScene(canvas, onHotspot, opts = {}) {
   }
 
   /* ---------- camera ---------- */
+  // NightBowl is composed as a street-front diorama, not a hollow 360-degree
+  // world. Keep the orbit on the built frontage and stop zoom-out before the
+  // edge of the set becomes the subject.
+  const CAMERA_LIMITS = Object.freeze({
+    azimuthMin: 0.02,
+    azimuthMax: 0.92,
+    radiusMin: 4.6,
+    radiusMax: 7.4,
+  });
+  // The arrival begins farther out for the walk-in composition; seated input
+  // still obeys radiusMax through rT and the wheel/pinch clamps below.
   const cam = { az: 0.78, el: 0.28, r: 9.6, azT: 0.5, elT: 0.17, rT: 6.7 };
   const target = new THREE.Vector3(0, 1.2, 0.25);
   let dragging = false, movedFar = false, dnX = 0, dnY = 0, lX = 0, lY = 0, dnT = 0, userMoved = false;
@@ -2284,7 +2295,10 @@ export function initScene(canvas, onHotspot, opts = {}) {
       const [a, b] = [...activePointers.values()];
       const distance = Math.hypot(a.x - b.x, a.y - b.y);
       if (pinchDistance > 0) {
-        cam.rT = Math.max(4.6, Math.min(10, cam.rT - (distance - pinchDistance) * 0.012));
+        cam.rT = Math.max(CAMERA_LIMITS.radiusMin, Math.min(
+          CAMERA_LIMITS.radiusMax,
+          cam.rT - (distance - pinchDistance) * 0.012,
+        ));
       }
       pinchDistance = distance;
       movedFar = true;
@@ -2295,7 +2309,10 @@ export function initScene(canvas, onHotspot, opts = {}) {
     const dx = e.clientX - lX, dy = e.clientY - lY;
     lX = e.clientX; lY = e.clientY;
     if (Math.abs(e.clientX - dnX) + Math.abs(e.clientY - dnY) > 6) movedFar = true;
-    cam.azT -= dx * 0.006;
+    cam.azT = Math.max(CAMERA_LIMITS.azimuthMin, Math.min(
+      CAMERA_LIMITS.azimuthMax,
+      cam.azT - dx * 0.006,
+    ));
     cam.elT = Math.max(-0.03, Math.min(0.62, cam.elT - dy * 0.004));
   };
   const onUp = (e) => {
@@ -2309,7 +2326,10 @@ export function initScene(canvas, onHotspot, opts = {}) {
     e.preventDefault();
     if (phase !== 'seated') return;
     userMoved = true;
-    cam.rT = Math.max(4.6, Math.min(10, cam.rT + e.deltaY * 0.002));
+    cam.rT = Math.max(CAMERA_LIMITS.radiusMin, Math.min(
+      CAMERA_LIMITS.radiusMax,
+      cam.rT + e.deltaY * 0.002,
+    ));
   };
   canvas.addEventListener('pointerdown', onDown);
   canvas.addEventListener('pointermove', onMove);
@@ -2946,7 +2966,12 @@ export function initScene(canvas, onHotspot, opts = {}) {
         // Counts, not bytes: WebGL exposes no query for texture memory.
         textures: renderer.info.memory.textures,
         geometries: renderer.info.memory.geometries,
-        camera: { azimuth: cam.azT, elevation: cam.elT, radius: cam.rT },
+        camera: {
+          azimuth: cam.azT,
+          elevation: cam.elT,
+          radius: cam.rT,
+          limits: { ...CAMERA_LIMITS },
+        },
         touchAction: getComputedStyle(canvas).touchAction,
         nonFinite,
       };

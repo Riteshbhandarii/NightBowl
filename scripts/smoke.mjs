@@ -717,14 +717,26 @@ await session(['--force-prefers-reduced-motion'], async (ctx) => {
         fire('pointerup', 1, 70, 210);
         fire('pointerup', 2, 250, 210);
         const afterPinch = window.__nightbowl.selfCheck().camera;
+        fire('pointerdown', 1, 200, 210);
+        fire('pointermove', 1, -2000, 210);
+        fire('pointerup', 1, -2000, 210);
+        const atMaxOrbit = window.__nightbowl.selfCheck().camera;
+        fire('pointerdown', 1, 200, 210);
+        fire('pointermove', 1, 2400, 210);
+        fire('pointerup', 1, 2400, 210);
+        const atMinOrbit = window.__nightbowl.selfCheck().camera;
         return {
           dragged: Math.abs(afterDrag.azimuth - before.azimuth) > 0.01,
           pinched: Math.abs(afterPinch.radius - afterDrag.radius) > 0.05,
           stayedPut: scrollX === scrollBefore.x && scrollY === scrollBefore.y,
+          orbitClamped:
+            Math.abs(atMaxOrbit.azimuth - atMaxOrbit.limits.azimuthMax) < 0.0001
+            && Math.abs(atMinOrbit.azimuth - atMinOrbit.limits.azimuthMin) < 0.0001,
         };
       })()`);
       check(`${device.name}: drag rotates the camera`, gesture.dragged);
       check(`${device.name}: pinch zooms the camera`, gesture.pinched);
+      check(`${device.name}: orbit stays on the built frontage`, gesture.orbitClamped);
       check(`${device.name}: gestures do not scroll the page`, gesture.stayedPut);
     }
   }
