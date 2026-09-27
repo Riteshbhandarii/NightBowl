@@ -1838,14 +1838,16 @@ export function initScene(canvas, onHotspot, opts = {}) {
     scene.add(pole);
     scene.add(pos(box(1.0, 0.07, 0.08, 0x20202a, { rough: 1 }), -5.25, 3.82, 3.65));
     const wireMat = new THREE.LineBasicMaterial({ color: 0x161722, transparent: true, opacity: 0.8 });
+    const wireSegments = [];
     for (let i = 0; i < 3; i++) {
       const points = [];
       for (let s = 0; s <= 20; s++) {
         const u = s / 20;
         points.push(new THREE.Vector3(-5.65 + u * 11.5, 3.92 - i * 0.16 - Math.sin(u * Math.PI) * 0.24, 3.64 + i * 0.04));
       }
-      scene.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(points), wireMat));
+      for (let s = 1; s < points.length; s++) wireSegments.push(points[s - 1], points[s]);
     }
+    scene.add(new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(wireSegments), wireMat));
 
     // A single warm lamp gives the sidewalk a secondary pool of light without
     // competing with the stall.
@@ -1865,8 +1867,15 @@ export function initScene(canvas, onHotspot, opts = {}) {
     const vending = (x, color, glow) => {
       const machine = new THREE.Group();
       machine.add(pos(box(0.48, 0.92, 0.34, color, { rough: 0.82 }), 0, 0.46, 0));
-      machine.add(pos(box(0.39, 0.34, 0.012, 0xe6e2d6, { emissive: glow, emissiveIntensity: 0.75 }), 0, 0.62, 0.178));
-      machine.add(pos(box(0.34, 0.06, 0.014, 0xb64d3c, { emissive: 0x5a130d, emissiveIntensity: 0.6 }), 0, 0.37, 0.18));
+      const panelTex = textTexture((ctx, w, h) => {
+        ctx.fillStyle = '#e6e2d6'; ctx.fillRect(0, 0, w, h);
+        ctx.fillStyle = `#${glow.toString(16).padStart(6, '0')}`; ctx.fillRect(8, 8, w - 16, h * 0.68);
+        ctx.fillStyle = '#b64d3c'; ctx.fillRect(8, h * 0.8, w - 16, h * 0.13);
+      }, 128, 256);
+      machine.add(pos(new THREE.Mesh(
+        new THREE.PlaneGeometry(0.39, 0.48),
+        new THREE.MeshBasicMaterial({ map: panelTex }),
+      ), 0, 0.55, 0.181));
       machine.position.set(x, 0, 1.7);
       scene.add(machine);
     };
@@ -1874,9 +1883,18 @@ export function initScene(canvas, onHotspot, opts = {}) {
     vending(-3.92, 0x4b2b2b, 0xb06b55);
 
     const board = new THREE.Group();
-    board.add(pos(box(0.48, 0.56, 0.055, 0x3b2b24, { rough: 1 }), 0, 0.58, 0));
-    board.add(pos(box(0.045, 0.7, 0.045, 0x29201c, { rough: 1 }), -0.18, 0.25, 0));
-    board.add(pos(box(0.045, 0.7, 0.045, 0x29201c, { rough: 1 }), 0.18, 0.25, 0));
+    const boardFrame = new THREE.InstancedMesh(
+      new THREE.BoxGeometry(1, 1, 1), m(0x33251f, { rough: 1 }), 3,
+    );
+    const boardPart = new THREE.Object3D();
+    [[0, 0.58, 0, 0.48, 0.56, 0.055], [-0.18, 0.25, 0, 0.045, 0.7, 0.045], [0.18, 0.25, 0, 0.045, 0.7, 0.045]]
+      .forEach(([x, y, z, sx, sy, sz], index) => {
+        boardPart.position.set(x, y, z);
+        boardPart.scale.set(sx, sy, sz);
+        boardPart.updateMatrix();
+        boardFrame.setMatrixAt(index, boardPart.matrix);
+      });
+    board.add(boardFrame);
     board.add(pos(box(0.36, 0.32, 0.012, 0x8f3c2e, { emissive: 0x32100a, emissiveIntensity: 0.5 }), 0, 0.6, 0.035));
     board.position.set(3.85, 0, 1.72);
     board.rotation.y = -0.18;
