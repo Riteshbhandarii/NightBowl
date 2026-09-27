@@ -392,9 +392,19 @@ export function initScene(canvas, onHotspot, opts = {}) {
     rim.rotation.x = Math.PI / 2;
     potG.add(rim);
     potG.add(pos(cyl(0.35, 0.35, 0.024, 0x6c2d14, { rough: 0.48, emissive: 0x2a0b03, emissiveIntensity: 0.45 }, 28), 0, 0.575, 0));
-    for (const [x, z, color] of [[-0.12, 0.08, 0xd8b46d], [0.13, -0.07, 0x6b8b53], [0.04, 0.14, 0xe6d1a0]]) {
-      potG.add(pos(sph(0.045, color, { rough: 0.8 }, 8), x, 0.6, z));
-    }
+    const garnish = new THREE.InstancedMesh(
+      new THREE.SphereGeometry(0.045, 8, 6),
+      m(0xffffff, { rough: 0.8 }),
+      3,
+    );
+    const garnishMatrix = new THREE.Matrix4();
+    [[-0.12, 0.08, 0xd8b46d], [0.13, -0.07, 0x6b8b53], [0.04, 0.14, 0xe6d1a0]]
+      .forEach(([x, z, color], index) => {
+        garnishMatrix.makeTranslation(x, 0.6, z);
+        garnish.setMatrixAt(index, garnishMatrix);
+        garnish.setColorAt(index, new THREE.Color(color));
+      });
+    potG.add(garnish);
     potG.scale.setScalar(0.58);
     potG.position.set(0.1, 1.02, 0.2);
     potG.userData.stationX = 0.1;
