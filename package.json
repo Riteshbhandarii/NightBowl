@@ -19,6 +19,7 @@
     "audit:motion": "node scripts/motion-review.mjs",
     "audit:turnover": "node scripts/turnover-review.mjs",
     "audit:service": "node scripts/service-review.mjs",
+    "audit:environment": "node scripts/environment-review.mjs",
     "baseline": "node scripts/perf-baseline.mjs",
     "audit:visual": "node scripts/pose-shots.mjs"
   },
