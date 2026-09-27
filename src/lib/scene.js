@@ -1814,12 +1814,17 @@ export function initScene(canvas, onHotspot, opts = {}) {
         [-0.08 * mirror, 1.98, 0, 0.34],
         [0.13 * mirror, 2.18, 0.02, 0.25],
       ];
-      for (const [cx, cy, cz, r] of clusters) {
-        const crown = new THREE.Mesh(new THREE.IcosahedronGeometry(r, 1), crownMat);
-        crown.position.set(cx, cy, cz);
-        crown.scale.y = 0.84;
-        g.add(crown);
-      }
+      const crowns = new THREE.InstancedMesh(
+        new THREE.IcosahedronGeometry(1, 1), crownMat, clusters.length,
+      );
+      const crownTransform = new THREE.Object3D();
+      clusters.forEach(([cx, cy, cz, r], index) => {
+        crownTransform.position.set(cx, cy, cz);
+        crownTransform.scale.set(r, r * 0.84, r);
+        crownTransform.updateMatrix();
+        crowns.setMatrixAt(index, crownTransform.matrix);
+      });
+      g.add(crowns);
       g.position.set(x, 0, z); g.scale.setScalar(scale);
       addBlobShadow(g, 0.5 * scale, 0.32);
       streetTrees.push(g); scene.add(g);
