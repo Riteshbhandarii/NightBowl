@@ -36,7 +36,7 @@ await session({ width: 2048, height: 768 }, async (ctx) => {
 
   await shot('00-before');
   if (!await evaluate(`window.__nightbowl.testTurnover(${dinerIndex})`)) throw new Error('Could not start turnover');
-  const wanted = ['stand', 'stepOut', 'leave', 'vacant', 'arrive', 'stepIn', 'sit'];
+  const wanted = ['stand', 'stepOut', 'leave', 'clear', 'vacant', 'arrive', 'stepIn', 'sit', 'welcome'];
   const seen = new Set();
   const started = Date.now();
   while (Date.now() - started < 24000 && seen.size < wanted.length) {
@@ -54,7 +54,7 @@ await session({ width: 2048, height: 768 }, async (ctx) => {
     if (!state.turnover && state.customerGenerations[dinerIndex] > 0) break;
     await sleep(250);
   }
-  await shot('08-new-customer-seated');
+  await shot('10-new-customer-seated');
   if (seen.size !== wanted.length) throw new Error(`Missing turnover phases: ${wanted.filter((p) => !seen.has(p)).join(', ')}`);
 });
 

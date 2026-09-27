@@ -384,22 +384,31 @@ await session([], async (ctx) => {
   check('a diner can finish their second meal', turnoverTriggered);
   const turnoverPhases = new Set();
   let replacementSeated = false;
+  let sawClearedSeat = false;
+  let sawWelcomeWithoutSeatBowl = false;
   for (let i = 0; i < 140 && !replacementSeated; i++) {
     await sleep(250);
     const state = await evaluate('window.__nightbowl.selfCheck()');
     if (state.turnover?.phase) turnoverPhases.add(state.turnover.phase);
+    if (state.turnover?.phase === 'vacant') sawClearedSeat ||= !state.turnover.seatBowlVisible;
+    if (state.turnover?.phase === 'welcome') {
+      sawWelcomeWithoutSeatBowl ||= !state.turnover.seatBowlVisible && state.turnover.carryBowlVisible;
+    }
     replacementSeated = !state.turnover
       && state.customerGenerations[1] > beforeTurnover
       && state.dinerActions[1].action === 'eat'
       && state.dinerActions[1].fill > 0.95;
   }
   check('finished diner stands and walks away',
-    ['stand', 'stepOut', 'leave'].every((phase) => turnoverPhases.has(phase)),
+    ['stand', 'stepOut', 'leave', 'clear'].every((phase) => turnoverPhases.has(phase)),
     [...turnoverPhases].join(','));
-  check('stool stays vacant before a new customer arrives', turnoverPhases.has('vacant'),
+  check('cook clears the finished bowl and the stool stays vacant',
+    turnoverPhases.has('vacant') && sawClearedSeat,
+    [...turnoverPhases].join(','));
+  check('cook carries a fresh bowl only after the replacement sits', sawWelcomeWithoutSeatBowl,
     [...turnoverPhases].join(','));
   check('a different customer walks in, sits, and starts eating',
-    replacementSeated && ['arrive', 'stepIn', 'sit'].every((phase) => turnoverPhases.has(phase)),
+    replacementSeated && ['arrive', 'stepIn', 'sit', 'welcome'].every((phase) => turnoverPhases.has(phase)),
     [...turnoverPhases].join(','));
 
   // the director is on a randomised timer, so poll rather than assume a moment
