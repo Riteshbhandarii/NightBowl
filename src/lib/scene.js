@@ -378,9 +378,23 @@ export function initScene(canvas, onHotspot, opts = {}) {
     g.add(counterShelf);
 
     const potG = new THREE.Group();
-    potG.add(pos(cyl(0.42, 0.38, 0.5, 0x3d4248, { metal: 0.55, rough: 0.36 }, 28), 0, 0.35, 0));
-    potG.add(pos(cyl(0.4, 0.42, 0.07, 0x4a5056, { metal: 0.55, rough: 0.36 }, 28), 0, 0.63, 0));
-    potG.add(pos(sph(0.05, 0x2b2f33, { metal: 0.4 }, 10), 0, 0.69, 0));
+    const potWall = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.42, 0.38, 0.5, 28, 1, true),
+      m(0x3d4248, { metal: 0.55, rough: 0.36 })
+    );
+    potWall.position.y = 0.35;
+    potG.add(potWall);
+    potG.add(pos(cyl(0.38, 0.38, 0.035, 0x33383d, { metal: 0.45, rough: 0.42 }, 28), 0, 0.11, 0));
+    const rim = pos(new THREE.Mesh(
+      new THREE.TorusGeometry(0.415, 0.028, 8, 28),
+      m(0x697078, { metal: 0.7, rough: 0.28 })
+    ), 0, 0.605, 0);
+    rim.rotation.x = Math.PI / 2;
+    potG.add(rim);
+    potG.add(pos(cyl(0.35, 0.35, 0.024, 0x6c2d14, { rough: 0.48, emissive: 0x2a0b03, emissiveIntensity: 0.45 }, 28), 0, 0.575, 0));
+    for (const [x, z, color] of [[-0.12, 0.08, 0xd8b46d], [0.13, -0.07, 0x6b8b53], [0.04, 0.14, 0xe6d1a0]]) {
+      potG.add(pos(sph(0.045, color, { rough: 0.8 }, 8), x, 0.6, z));
+    }
     potG.scale.setScalar(0.58);
     potG.position.set(0.1, 1.02, 0.2);
     potG.userData.stationX = 0.1;
@@ -1012,6 +1026,10 @@ export function initScene(canvas, onHotspot, opts = {}) {
       const circle = tl * 2.0;
       reachArm(p, 'r', 0.43 + Math.sin(circle) * 0.008, 0.22 + Math.cos(circle) * 0.008,
         Math.sin(circle) * 0.025);
+      // The free hand braces the near handle instead of vanishing beside the
+      // apron. It stays outside the hot rim while remaining visible front-on.
+      reachArm(p, 'l', 0.47, 0.46, 0.58);
+      p.lElZ = -0.34;
       const ladle = npc?.userData.tools?.ladle;
       if (ladle) ladle.position.set(Math.sin(circle) * 0.012, 0, Math.cos(circle) * 0.012);
       p.torsoX = 0.10;
@@ -1758,11 +1776,15 @@ export function initScene(canvas, onHotspot, opts = {}) {
     addBlobShadow(w1, 0.34, 0.46);
     w1.position.set(-7.2, 0.02, 3.72); w1.rotation.y = Math.PI / 2;
     w1.userData.speed = 0.62; w1.userData.range = 8.4;
+    w1.userData.baseZ = 3.46;
+    w1.userData.avoid = [{ x: -5.48, radius: 1.0, offset: -0.52 }, { x: 4.18, radius: 1.0, offset: -0.52 }];
     walkers.push(w1); scene.add(w1);
     const w2 = buildPerson({ shirt: 0x49343f, coat: 0x30242e, bag: 0x6d4936, hair: 0x241713, longHair: true, scale: 0.86, build: 0.88, headScale: 1.03 });
     addBlobShadow(w2, 0.31, 0.42);
     w2.position.set(6.5, 0.02, 3.08); w2.rotation.y = -Math.PI / 2;
     w2.userData.speed = -0.48; w2.userData.range = 7.2;
+    w2.userData.baseZ = 2.68;
+    w2.userData.avoid = [{ x: -4.2, radius: 1.25, offset: 0.42 }, { x: 4.25, radius: 1.2, offset: 0.42 }];
     walkers.push(w2); scene.add(w2);
 
     const tree = (x, z, scale, mirror = 1) => {
@@ -1945,6 +1967,16 @@ export function initScene(canvas, onHotspot, opts = {}) {
     scene.add(glow);
   }
 
+  function walkerPathZ(walker, x = walker.position.x) {
+    const data = walker.userData;
+    let z = data.baseZ;
+    for (const avoid of data.avoid || []) {
+      const proximity = Math.max(0, 1 - Math.abs(x - avoid.x) / avoid.radius);
+      z += avoid.offset * proximity * proximity;
+    }
+    return z;
+  }
+
   /* ---------- the cook: GLB if present, stand-in otherwise ---------- */
   function useStandInCook() {
     guide = buildPerson({ shirt: 0xffffff, apron: true, toque: true, skin: 0xd7a173, hair: 0x241a12 });
@@ -1958,7 +1990,9 @@ export function initScene(canvas, onHotspot, opts = {}) {
     ladle.userData.grip = new THREE.Object3D();
     ladle.userData.grip.position.set(0.185, 0.43, 0.22);
     ladle.add(ladle.userData.grip);
-    const ladleEnd = new THREE.Vector3(-0.30, 0.23, 0.35);
+    // The scoop terminates below the open rim and near the broth centre. The
+    // old endpoint sat behind the closed lid, so neither contact was readable.
+    const ladleEnd = new THREE.Vector3(-0.50, 0.34, 0.52);
     const ladleVector = ladleEnd.clone().sub(ladle.userData.grip.position);
     const handle = cyl(0.012, 0.012, ladleVector.length(), 0x9a8058, {}, 8);
     handle.position.copy(ladle.userData.grip.position).addScaledVector(ladleVector, 0.5);
@@ -2443,6 +2477,8 @@ export function initScene(canvas, onHotspot, opts = {}) {
       wk.position.x += wd.speed * dt;
       if (wk.position.x > wd.range) wk.position.x = -wd.range;
       if (wk.position.x < -wd.range) wk.position.x = wd.range;
+      const pathZ = walkerPathZ(wk);
+      wk.position.z += (pathZ - wk.position.z) * Math.min(1, dt * 4.5);
       walkRig(wk.userData.rig, t * (2.75 + i * 0.55) + i * 1.9, 1);
     }
 
@@ -2533,6 +2569,16 @@ export function initScene(canvas, onHotspot, opts = {}) {
       }
       if (!raf) raf = requestAnimationFrame(frame);
       return true;
+    },
+
+    auditStreetWalkers(xs) {
+      walkers.forEach((walker, index) => {
+        if (!Number.isFinite(xs?.[index])) return;
+        walker.position.x = xs[index];
+        walker.position.z = walkerPathZ(walker, xs[index]);
+      });
+      scene.updateMatrixWorld(true);
+      return walkers.map((walker) => ({ x: walker.position.x, z: walker.position.z }));
     },
 
     /* Point the camera at a world position and draw one frame, so a pose the
