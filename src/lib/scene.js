@@ -110,6 +110,8 @@ export function initScene(canvas, onHotspot, opts = {}) {
   const norenFlaps = [];
   const diners = [];
   const walkers = [];
+  const birds = [];
+  const streetTrees = [];
   let activeTurnover = null;
   const DINER_SPECS = [
     { x: -1.92, facing: -0.2, hair: 0x2a1c12, shirt: 0x6b4a2f, scale: 1.0, build: 1.08, headScale: 0.97 },
@@ -672,6 +674,16 @@ export function initScene(canvas, onHotspot, opts = {}) {
     head.add(face);
     const hair = pos(sph(0.111 * hs, opt.hair || 0x1c1510, { rough: 1 }, 16), 0, 0.024, -0.008);
     head.add(hair);
+    if (opt.longHair) {
+      const backHair = pos(cap(0.09 * hs, 0.34, opt.hair || 0x1c1510, { rough: 1 }, 12), 0, -0.13, -0.055);
+      backHair.scale.set(1.05, 1, 0.72);
+      head.add(backHair);
+    }
+    if (opt.coat) {
+      const coat = pos(cyl(0.18 * bw, 0.145 * bw, 0.42, opt.coat, { rough: 0.95 }, 14), 0, 0.04, -0.005);
+      coat.scale.z = 0.86;
+      torso.add(coat);
+    }
     if (opt.cap != null) {
       head.add(pos(cyl(0.115 * hs, 0.115 * hs, 0.05, opt.cap, { rough: 1 }, 14), 0, 0.057, 0));
       head.add(pos(box(0.196 * hs, 0.017, 0.017, opt.cap), 0, 0.04, 0));
@@ -728,6 +740,7 @@ export function initScene(canvas, onHotspot, opts = {}) {
       shirt: [pelvis.material, trunk.material, traps.material],
       hair: hair.material,
     };
+    p.userData.streetStyle = { longHair: !!opt.longHair, coat: !!opt.coat };
     p.scale.setScalar(sc);
     return p;
   }
@@ -1733,16 +1746,64 @@ export function initScene(canvas, onHotspot, opts = {}) {
     const bld2 = bld.clone(); bld2.position.set(12, 6, -16); bld2.scale.set(0.7, 0.8, 1);
     scene.add(bld2);
 
-    const w1 = buildPerson({ shirt: 0x22202a, hair: 0x101010, scale: 1.04, build: 1.07, headScale: 0.96 });
+    const w1 = buildPerson({ shirt: 0x273044, coat: 0x1d2638, hair: 0x101010, scale: 1.04, build: 1.07, headScale: 0.96 });
     addBlobShadow(w1, 0.36, 0.6);
     w1.position.set(-8, 0, 3.4); w1.rotation.y = Math.PI / 2;
     w1.userData.speed = 0.9; w1.userData.range = 8;
     walkers.push(w1); scene.add(w1);
-    const w2 = buildPerson({ shirt: 0x2b2530, hair: 0x1a1a1a, scale: 0.95, build: 0.92, headScale: 1.02 });
+    const w2 = buildPerson({ shirt: 0x583a48, coat: 0x3f2936, hair: 0x241713, longHair: true, scale: 0.95, build: 0.92, headScale: 1.02 });
     addBlobShadow(w2, 0.34, 0.6);
     w2.position.set(7, 0, 4.1); w2.rotation.y = -Math.PI / 2;
     w2.userData.speed = -0.65; w2.userData.range = 7;
     walkers.push(w2); scene.add(w2);
+
+    const w3 = buildPerson({ shirt: 0x46513e, coat: 0x30382d, hair: 0x3a2518, scale: 0.89, build: 0.86, headScale: 1.04 });
+    addBlobShadow(w3, 0.32, 0.5);
+    w3.position.set(-4.5, 0, 4.55); w3.rotation.y = Math.PI / 2;
+    w3.userData.speed = 0.48; w3.userData.range = 9;
+    walkers.push(w3); scene.add(w3);
+
+    const tree = (x, z, scale, lean = 0) => {
+      const g = new THREE.Group();
+      const trunk = pos(cyl(0.09, 0.14, 1.45, 0x4a3327, { rough: 1 }, 8), 0, 0.72, 0);
+      trunk.rotation.z = lean;
+      g.add(trunk);
+      // A basic material keeps the trees readable as quiet silhouettes even
+      // outside the stall lights. They should frame the street, not disappear.
+      const crownMat = new THREE.MeshBasicMaterial({ color: 0x24443a });
+      for (const [y, r] of [[1.35, 0.54], [1.72, 0.45], [2.03, 0.32]]) {
+        const crown = new THREE.Mesh(new THREE.ConeGeometry(r, 0.9, 9), crownMat);
+        crown.position.y = y;
+        g.add(crown);
+      }
+      g.position.set(x, 0, z); g.scale.setScalar(scale);
+      addBlobShadow(g, 0.58 * scale, 0.38);
+      streetTrees.push(g); scene.add(g);
+    };
+    tree(-4.45, 4.85, 1.02, -0.03);
+    tree(4.55, 4.95, 0.9, 0.025);
+    tree(9.2, 5.2, 1.12, -0.02);
+
+    for (let i = 0; i < 2; i++) {
+      const bird = new THREE.Group();
+      const mat = new THREE.MeshBasicMaterial({ color: 0x68738b, side: THREE.DoubleSide });
+      const wing = new THREE.Shape();
+      wing.moveTo(-0.01, -0.025);
+      wing.lineTo(-0.23, 0.07);
+      wing.lineTo(-0.14, -0.035);
+      wing.lineTo(-0.03, -0.055);
+      wing.closePath();
+      const left = new THREE.Mesh(new THREE.ShapeGeometry(wing), mat);
+      const right = left.clone();
+      const body = new THREE.Mesh(new THREE.SphereGeometry(0.028, 8, 6), mat);
+      body.scale.set(1.5, 0.72, 0.72);
+      right.scale.x = -1;
+      bird.add(left, right, body);
+      bird.position.set(-2.4 + i * 2.2, 4.08 + i * 0.32, 2.55 - i * 0.35);
+      bird.userData.speed = 0.38 + i * 0.08;
+      bird.userData.phase = i * 1.7;
+      birds.push(bird); scene.add(bird);
+    }
   }
 
   function buildGround() {
@@ -1759,6 +1820,17 @@ export function initScene(canvas, onHotspot, opts = {}) {
     const ground = new THREE.Mesh(new THREE.PlaneGeometry(70, 70), new THREE.MeshStandardMaterial({ map: gt, roughness: 1 }));
     ground.rotation.x = -Math.PI / 2;
     scene.add(ground);
+
+    const road = pos(new THREE.Mesh(new THREE.PlaneGeometry(34, 3.6), m(0x0b0e14, { rough: 0.98 })), 0, 0.008, 5.9);
+    road.rotation.x = -Math.PI / 2;
+    scene.add(road);
+    const curb = pos(box(34, 0.12, 0.22, 0x5d5e61, { rough: 1 }), 0, 0.06, 4.08);
+    scene.add(curb);
+    for (const x of [-8, -4, 0, 4, 8]) {
+      const dash = pos(new THREE.Mesh(new THREE.PlaneGeometry(1.8, 0.08), m(0xc4b78e, { rough: 1 })), x, 0.014, 5.9);
+      dash.rotation.x = -Math.PI / 2;
+      scene.add(dash);
+    }
 
     const glow = new THREE.Mesh(new THREE.PlaneGeometry(8, 3.4), new THREE.MeshBasicMaterial({ color: 0xff9a4d, transparent: true, opacity: 0.06 }));
     glow.rotation.x = -Math.PI / 2; glow.position.set(0, 0.01, 1.6);
@@ -2266,6 +2338,15 @@ export function initScene(canvas, onHotspot, opts = {}) {
       walkRig(wk.userData.rig, t * (2.75 + i * 0.55) + i * 1.9, 1);
     }
 
+    for (const bird of birds) {
+      if (REDUCED) continue;
+      bird.position.x += bird.userData.speed * dt;
+      if (bird.position.x > 12) bird.position.x = -12;
+      bird.rotation.z = Math.sin(t * 2.2 + bird.userData.phase) * 0.06;
+      bird.children[0].rotation.y = Math.sin(t * 4 + bird.userData.phase) * 0.28;
+      bird.children[1].rotation.y = -Math.sin(t * 4 + bird.userData.phase) * 0.28;
+    }
+
     for (const grp of steamGroups) {
       for (const q of grp.children) {
         const life = ((t * (REDUCED ? 0.05 : 0.4) + q.userData.seed) % 1);
@@ -2630,6 +2711,13 @@ export function initScene(canvas, onHotspot, opts = {}) {
         visitor: !!you,
         visitorAutonomous: !!you?.userData.ai,
         walkers: walkers.length,
+        streetLife: {
+          trees: streetTrees.length,
+          birds: birds.length,
+          walkers: walkers.length,
+          longHair: walkers.filter((walker) => walker.userData.streetStyle?.longHair).length,
+          coats: walkers.filter((walker) => walker.userData.streetStyle?.coat).length,
+        },
         cook: !!guide,
         hotspots: hotspots.length,
         bubbles: bubbles.length,
