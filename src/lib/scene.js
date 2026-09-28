@@ -163,6 +163,7 @@ export function initScene(canvas, onHotspot, opts = {}) {
   let counterTop = null, counterFront = null, counterShelf = null;
   const stoolSeats = [];
   const stoolStyles = [];
+  let stoolLegs = null;
   let auditVisibility = null;
   let service = null;
   let serviceBowl = null;
@@ -445,9 +446,15 @@ export function initScene(canvas, onHotspot, opts = {}) {
     g.add(boxG);
     registerHotspot('bill', LABELS.navigation.bill, boxG, new THREE.Vector3(2.55, 1.36, 0.6));
 
-    [-2.7, -2.4, 2.75].forEach((x) => {
-      g.add(pos(cyl(0.05, 0.07, 0.34, 0x2f6f5e, { rough: 0.4, metal: 0.1 }, 12), x, 0.72, 0.15));
+    const condiments = new THREE.InstancedMesh(
+      new THREE.CylinderGeometry(0.05, 0.07, 0.34, 12),
+      m(0x2f6f5e, { rough: 0.4, metal: 0.1 }),
+      3,
+    );
+    [-2.7, -2.4, 2.75].forEach((x, index) => {
+      condiments.setMatrixAt(index, new THREE.Matrix4().makeTranslation(x, 0.72, 0.15));
     });
+    g.add(condiments);
 
     scene.add(g);
   }
@@ -1690,7 +1697,14 @@ export function initScene(canvas, onHotspot, opts = {}) {
     seat.userData.seatX = x;
     stoolSeats.push(seat);
     scene.add(seat);
-    scene.add(pos(cyl(0.03, 0.05, topY - 0.03, 0x2a2018, {}, 10), x, (topY - 0.03) / 2, CUSTOMER_Z));
+    const legHeight = topY - 0.03;
+    const legMatrix = new THREE.Matrix4().compose(
+      new THREE.Vector3(x, legHeight / 2, CUSTOMER_Z),
+      new THREE.Quaternion(),
+      new THREE.Vector3(1, legHeight, 1),
+    );
+    stoolLegs.setMatrixAt(stoolLegs.count++, legMatrix);
+    stoolLegs.instanceMatrix.needsUpdate = true;
     const g = new THREE.Group();
     g.position.set(x, 0, CUSTOMER_Z);
     addBlobShadow(g, 0.46, 0.75);
@@ -1700,6 +1714,13 @@ export function initScene(canvas, onHotspot, opts = {}) {
   }
 
   function buildDiners() {
+    stoolLegs = new THREE.InstancedMesh(
+      new THREE.CylinderGeometry(0.03, 0.05, 1, 10),
+      m(0x2a2018),
+      STOOL_STYLES.length,
+    );
+    stoolLegs.count = 0;
+    scene.add(stoolLegs);
     DINER_SPECS.forEach((sp, index) => {
       const seatTopY = buildStool(sp.x, STOOL_STYLES[index]);
       const bowl = ramenBowls.find((candidate) => candidate.userData.seatX === sp.x);
@@ -1714,7 +1735,14 @@ export function initScene(canvas, onHotspot, opts = {}) {
     g.position.set(SEAT.x, 0, SEAT.z);
     g.rotation.y = style.rotation;
     g.add(pos(cyl(0.17, 0.17, 0.06, style.color, { rough: 0.76 }, 18), 0, SEAT_TOP_Y - 0.03, 0));
-    g.add(pos(cyl(0.03, 0.05, SEAT_TOP_Y - 0.03, 0x2a2018, {}, 10), 0, (SEAT_TOP_Y - 0.03) / 2, 0));
+    const legHeight = SEAT_TOP_Y - 0.03;
+    const legMatrix = new THREE.Matrix4().compose(
+      new THREE.Vector3(SEAT.x, legHeight / 2, SEAT.z),
+      new THREE.Quaternion(),
+      new THREE.Vector3(1, legHeight, 1),
+    );
+    stoolLegs.setMatrixAt(stoolLegs.count++, legMatrix);
+    stoolLegs.instanceMatrix.needsUpdate = true;
     stoolStyles.push({ x: SEAT.x, topY: SEAT_TOP_Y, rotation: style.rotation, color: style.color });
     buildYou();
     // a warm ring on the ground so the open stool reads as an invitation
