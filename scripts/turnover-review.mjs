@@ -39,7 +39,7 @@ await session({ width: 2048, height: 768 }, async (ctx) => {
   const wanted = ['stand', 'stepOut', 'leave', 'clear', 'vacant', 'arrive', 'stepIn', 'sit', 'welcome'];
   const seen = new Set();
   const started = Date.now();
-  while (Date.now() - started < 24000 && seen.size < wanted.length) {
+  while (Date.now() - started < 35000 && seen.size < wanted.length) {
     const state = await evaluate('window.__nightbowl.selfCheck()');
     const phase = state?.turnover?.phase;
     if (phase && wanted.includes(phase) && !seen.has(phase)) {

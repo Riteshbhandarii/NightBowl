@@ -256,11 +256,11 @@ await session([], async (ctx) => {
     before.cook && before.diners === 3 && before.visitor && before.walkers >= 2,
     `cook=${before.cook} diners=${before.diners} visitor=${before.visitor} walkers=${before.walkers}`);
   check('night street stays sparse but visibly alive',
-    before.streetLife.trees === 3
+    before.streetLife.trees === 2
       && before.streetLife.birds === 2
-      && before.streetLife.walkers === 3
+      && before.streetLife.walkers === 2
       && before.streetLife.longHair >= 1
-      && before.streetLife.coats === 3,
+      && before.streetLife.coats === 2,
     JSON.stringify(before.streetLife));
   check('visitor is not an autonomous diner', !before.visitorAutonomous);
   check('each speaking character has a distinct mouth phase',
@@ -335,7 +335,9 @@ await session([], async (ctx) => {
       && seatTarget.text === '' && !!seatTarget.aria,
     JSON.stringify(seatTarget));
   check('top bar nav is live before sitting',
-    (await evaluate(`document.querySelectorAll('.topbar [data-open]').length`)) > 0);
+    (await evaluate(`document.querySelectorAll('.topbar [data-open]').length`)) === 5);
+  check('home chrome has no duplicate wordmark or theme switch',
+    await evaluate(`!document.querySelector('.wordmark') && !document.getElementById('themeBtn')`));
 
   await send('Input.dispatchMouseEvent', { type: 'mousePressed', x: seatTarget.x, y: seatTarget.y, button: 'left', clickCount: 1 });
   await send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: seatTarget.x, y: seatTarget.y, button: 'left', clickCount: 1 });
@@ -393,10 +395,27 @@ await session([], async (ctx) => {
   let replacementSeated = false;
   let sawClearedSeat = false;
   let sawWelcomeWithoutSeatBowl = false;
+  let sawForwardStepOut = false;
+  let sawForwardLeave = false;
+  let calmDepartureTiming = false;
+  let calmArrivalTiming = false;
   for (let i = 0; i < 140 && !replacementSeated; i++) {
     await sleep(250);
     const state = await evaluate('window.__nightbowl.selfCheck()');
     if (state.turnover?.phase) turnoverPhases.add(state.turnover.phase);
+    if (state.turnover?.phase === 'stepOut') calmDepartureTiming ||= state.turnover.duration >= 2.4;
+    if (state.turnover?.phase === 'leave') calmDepartureTiming &&= state.turnover.duration >= 4;
+    if (state.turnover?.phase === 'arrive') calmArrivalTiming ||= state.turnover.duration >= 4;
+    if (state.turnover?.phase === 'stepIn') calmArrivalTiming &&= state.turnover.duration >= 2.4;
+    if (state.turnover?.phase === 'stepOut'
+      && state.turnover.z > state.turnover.stageZ + 0.02) {
+      sawForwardStepOut ||= state.turnover.facingZ > 0.8;
+    }
+    if (state.turnover?.phase === 'leave'
+      && Math.abs(state.turnover.x - state.turnover.seatX) > 0.05) {
+      const exitDirection = Math.sign(state.turnover.entryX - state.turnover.seatX);
+      sawForwardLeave ||= state.turnover.facingX * exitDirection > 0.8;
+    }
     if (state.turnover?.phase === 'vacant') sawClearedSeat ||= !state.turnover.seatBowlVisible;
     if (state.turnover?.phase === 'welcome') {
       sawWelcomeWithoutSeatBowl ||= !state.turnover.seatBowlVisible && state.turnover.carryBowlVisible;
@@ -409,6 +428,12 @@ await session([], async (ctx) => {
   check('finished diner stands and walks away',
     ['stand', 'stepOut', 'leave', 'clear'].every((phase) => turnoverPhases.has(phase)),
     [...turnoverPhases].join(','));
+  check('departing diner turns before walking outward and toward the exit',
+    sawForwardStepOut && sawForwardLeave,
+    `stepOut=${sawForwardStepOut} leave=${sawForwardLeave}`);
+  check('customer arrival and departure use the calm walking pace',
+    calmDepartureTiming && calmArrivalTiming,
+    `departure=${calmDepartureTiming} arrival=${calmArrivalTiming}`);
   check('cook clears the finished bowl and the stool stays vacant',
     turnoverPhases.has('vacant') && sawClearedSeat,
     [...turnoverPhases].join(','));
@@ -650,7 +675,6 @@ await session(['--force-prefers-reduced-motion'], async (ctx) => {
         : document.querySelector('.nav');
       return {
         primary: rect(primary),
-        wordmark: rect(document.querySelector('.wordmark')),
         overflowX: document.documentElement.scrollWidth - innerWidth,
         overflowY: document.documentElement.scrollHeight - innerHeight,
         touchAction: getComputedStyle(document.getElementById('scene')).touchAction,
@@ -659,7 +683,7 @@ await session(['--force-prefers-reduced-motion'], async (ctx) => {
     const contained = (rect) => rect && rect.left >= -0.5 && rect.top >= -0.5
       && rect.right <= device.width + 0.5 && rect.bottom <= device.height + 0.5;
     check(`${device.name}: primary controls remain reachable`,
-      contained(shell.primary) && contained(shell.wordmark), JSON.stringify(shell));
+      contained(shell.primary), JSON.stringify(shell));
     check(`${device.name}: shell has no page overflow`,
       shell.overflowX <= 0.5 && shell.overflowY <= 0.5,
       `x=${shell.overflowX} y=${shell.overflowY}`);
@@ -717,14 +741,26 @@ await session(['--force-prefers-reduced-motion'], async (ctx) => {
         fire('pointerup', 1, 70, 210);
         fire('pointerup', 2, 250, 210);
         const afterPinch = window.__nightbowl.selfCheck().camera;
+        fire('pointerdown', 1, 200, 210);
+        fire('pointermove', 1, -2000, 210);
+        fire('pointerup', 1, -2000, 210);
+        const atMaxOrbit = window.__nightbowl.selfCheck().camera;
+        fire('pointerdown', 1, 200, 210);
+        fire('pointermove', 1, 2400, 210);
+        fire('pointerup', 1, 2400, 210);
+        const atMinOrbit = window.__nightbowl.selfCheck().camera;
         return {
           dragged: Math.abs(afterDrag.azimuth - before.azimuth) > 0.01,
           pinched: Math.abs(afterPinch.radius - afterDrag.radius) > 0.05,
           stayedPut: scrollX === scrollBefore.x && scrollY === scrollBefore.y,
+          orbitClamped:
+            Math.abs(atMaxOrbit.azimuth - atMaxOrbit.limits.azimuthMax) < 0.0001
+            && Math.abs(atMinOrbit.azimuth - atMinOrbit.limits.azimuthMin) < 0.0001,
         };
       })()`);
       check(`${device.name}: drag rotates the camera`, gesture.dragged);
       check(`${device.name}: pinch zooms the camera`, gesture.pinched);
+      check(`${device.name}: orbit stays on the built frontage`, gesture.orbitClamped);
       check(`${device.name}: gestures do not scroll the page`, gesture.stayedPut);
     }
   }

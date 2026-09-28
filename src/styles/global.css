@@ -5,38 +5,6 @@
    ============================================================ */
 
 :root {
-  --paper: #f6efe0;
-  --paper-2: #ece0c9;
-  --paper-edge: #d8c7a4;
-  --ink: #2c2418;
-  --ink-soft: #6f6450;
-  --line: #d3c2a0;
-  --accent: #b23a24;
-  --accent-2: #9a6a15;
-  --book-shadow: rgba(28, 18, 8, 0.4);
-  --nav-ink: rgba(247, 240, 226, 0.95);
-  --nav-ink-soft: rgba(247, 240, 226, 0.58);
-  --pill-bg: rgba(18, 14, 22, 0.6);
-  --pill-line: rgba(247, 240, 226, 0.22);
-  --focus: #f0b45a;
-  --shop-bg: #100e16;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme='light']) {
-    --paper: #221d17;
-    --paper-2: #2b241c;
-    --paper-edge: #15110c;
-    --ink: #efe4d0;
-    --ink-soft: #a99d87;
-    --line: #3b3226;
-    --accent: #ef9a4c;
-    --accent-2: #e0b06a;
-    --book-shadow: rgba(0, 0, 0, 0.55);
-    color-scheme: dark;
-  }
-}
-:root[data-theme='dark'] {
   --paper: #221d17;
   --paper-2: #2b241c;
   --paper-edge: #15110c;
@@ -46,6 +14,12 @@
   --accent: #ef9a4c;
   --accent-2: #e0b06a;
   --book-shadow: rgba(0, 0, 0, 0.55);
+  --nav-ink: rgba(247, 240, 226, 0.95);
+  --nav-ink-soft: rgba(247, 240, 226, 0.58);
+  --pill-bg: rgba(18, 14, 22, 0.6);
+  --pill-line: rgba(247, 240, 226, 0.22);
+  --focus: #f0b45a;
+  --shop-bg: #100e16;
   color-scheme: dark;
 }
 
@@ -108,7 +82,7 @@ img { max-width: 100%; }
   z-index: 20;
   display: flex;
   align-items: flex-start;
-  justify-content: space-between;
+  justify-content: flex-end;
   gap: 16px;
   padding:
     max(20px, env(safe-area-inset-top))
@@ -119,51 +93,31 @@ img { max-width: 100%; }
 }
 .topbar > * { pointer-events: auto; }
 
-.wordmark { color: var(--nav-ink); line-height: 1.05; text-shadow: 0 2px 16px rgba(0, 0, 0, 0.6); user-select: none; }
-.wordmark b {
-  display: block;
-  font-family: 'Zilla Slab', Georgia, serif;
-  font-weight: 700;
-  font-size: clamp(19px, 2.6vw, 24px);
-  letter-spacing: 0.02em;
-}
-.wordmark span {
-  display: block;
-  font-family: 'Space Mono', monospace;
-  font-size: 9.5px;
-  letter-spacing: 0.28em;
-  text-transform: uppercase;
-  color: var(--nav-ink-soft);
-  margin-top: 5px;
-}
-
 .nav {
   display: flex;
   align-items: center;
-  gap: 3px;
-  background: var(--pill-bg);
+  gap: 2px;
+  background: rgba(12, 10, 15, 0.78);
   border: 1px solid var(--pill-line);
   backdrop-filter: blur(9px);
   -webkit-backdrop-filter: blur(9px);
   border-radius: 999px;
-  padding: 5px;
+  padding: 4px;
 }
 .nav button {
   font: inherit;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 500;
   color: var(--nav-ink);
   background: transparent;
   border: 0;
   border-radius: 999px;
-  padding: 8px 13px;
+  padding: 9px 14px;
   cursor: pointer;
   white-space: nowrap;
   transition: background 0.16s ease;
 }
 .nav button:hover { background: rgba(247, 240, 226, 0.14); }
-.nav button.icon { padding: 8px 10px; font-family: 'Space Mono', monospace; }
-.nav .sep { width: 1px; align-self: stretch; margin: 4px 3px; background: var(--pill-line); }
 
 .menu-toggle {
   display: none;
@@ -204,9 +158,7 @@ img { max-width: 100%; }
   pointer-events: auto;
   transition: background 0.16s ease, border-color 0.16s ease;
 }
-.pin:hover, .pin.hot { background: rgba(178, 58, 36, 0.85); border-color: rgba(247, 240, 226, 0.45); }
-:root[data-theme='dark'] .pin:hover,
-:root[data-theme='dark'] .pin.hot { background: rgba(239, 154, 76, 0.9); color: #17110a; }
+.pin:hover, .pin.hot { background: rgba(239, 154, 76, 0.9); border-color: rgba(247, 240, 226, 0.45); color: #17110a; }
 .pin .dot {
   width: 7px; height: 7px; border-radius: 50%;
   background: var(--focus);
@@ -232,7 +184,6 @@ img { max-width: 100%; }
   white-space: normal;
   text-wrap: balance;
 }
-:root[data-theme='dark'] .say { background: rgba(250, 244, 232, 0.95); }
 
 /* the quiet tag over your own head once you are sitting down */
 .you-pin {

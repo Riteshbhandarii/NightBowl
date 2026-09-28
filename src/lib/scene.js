@@ -128,6 +128,7 @@ export function initScene(canvas, onHotspot, opts = {}) {
   // the one stool that is never taken, and the ring that advertises it
   const SEAT = { x: 0.1, z: 1.52 };
   const CUSTOMER_Z = 1.52;
+  const TURNOVER_WALK = { depthSeconds: 2.4, lateralSeconds: 4, cadence: 5 };
   // Top face of a stool seat. buildStool and the seated pose both read this, so
   // the two cannot drift apart.
   const SEAT_TOP_Y = 0.69;
@@ -162,6 +163,7 @@ export function initScene(canvas, onHotspot, opts = {}) {
   let counterTop = null, counterFront = null, counterShelf = null;
   const stoolSeats = [];
   const stoolStyles = [];
+  let stoolLegs = null;
   let auditVisibility = null;
   let service = null;
   let serviceBowl = null;
@@ -378,11 +380,35 @@ export function initScene(canvas, onHotspot, opts = {}) {
     g.add(counterShelf);
 
     const potG = new THREE.Group();
-    potG.add(pos(cyl(0.42, 0.38, 0.5, 0x3d4248, { metal: 0.55, rough: 0.36 }, 28), 0, 0.35, 0));
-    potG.add(pos(cyl(0.4, 0.42, 0.07, 0x4a5056, { metal: 0.55, rough: 0.36 }, 28), 0, 0.63, 0));
-    potG.add(pos(sph(0.05, 0x2b2f33, { metal: 0.4 }, 10), 0, 0.69, 0));
-    potG.scale.setScalar(0.58);
-    potG.position.set(0.1, 1.02, 0.2);
+    const potWall = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.42, 0.38, 0.5, 28, 1, true),
+      m(0x3d4248, { metal: 0.55, rough: 0.36 })
+    );
+    potWall.position.y = 0.35;
+    potG.add(potWall);
+    potG.add(pos(cyl(0.38, 0.38, 0.035, 0x33383d, { metal: 0.45, rough: 0.42 }, 28), 0, 0.11, 0));
+    const rim = pos(new THREE.Mesh(
+      new THREE.TorusGeometry(0.415, 0.028, 8, 28),
+      m(0x697078, { metal: 0.7, rough: 0.28 })
+    ), 0, 0.605, 0);
+    rim.rotation.x = Math.PI / 2;
+    potG.add(rim);
+    potG.add(pos(cyl(0.35, 0.35, 0.024, 0x6c2d14, { rough: 0.48, emissive: 0x2a0b03, emissiveIntensity: 0.45 }, 28), 0, 0.575, 0));
+    const garnish = new THREE.InstancedMesh(
+      new THREE.SphereGeometry(0.045, 8, 6),
+      m(0xffffff, { rough: 0.8 }),
+      3,
+    );
+    const garnishMatrix = new THREE.Matrix4();
+    [[-0.12, 0.08, 0xd8b46d], [0.13, -0.07, 0x6b8b53], [0.04, 0.14, 0xe6d1a0]]
+      .forEach(([x, z, color], index) => {
+        garnishMatrix.makeTranslation(x, 0.6, z);
+        garnish.setMatrixAt(index, garnishMatrix);
+        garnish.setColorAt(index, new THREE.Color(color));
+      });
+    potG.add(garnish);
+    potG.scale.setScalar(0.52);
+    potG.position.set(0.1, 1.01, 0.2);
     potG.userData.stationX = 0.1;
     cookingPot = potG;
     g.add(potG);
@@ -420,9 +446,15 @@ export function initScene(canvas, onHotspot, opts = {}) {
     g.add(boxG);
     registerHotspot('bill', LABELS.navigation.bill, boxG, new THREE.Vector3(2.55, 1.36, 0.6));
 
-    [-2.7, -2.4, 2.75].forEach((x) => {
-      g.add(pos(cyl(0.05, 0.07, 0.34, 0x2f6f5e, { rough: 0.4, metal: 0.1 }, 12), x, 0.72, 0.15));
+    const condiments = new THREE.InstancedMesh(
+      new THREE.CylinderGeometry(0.05, 0.07, 0.34, 12),
+      m(0x2f6f5e, { rough: 0.4, metal: 0.1 }),
+      3,
+    );
+    [-2.7, -2.4, 2.75].forEach((x, index) => {
+      condiments.setMatrixAt(index, new THREE.Matrix4().makeTranslation(x, 0.72, 0.15));
     });
+    g.add(condiments);
 
     scene.add(g);
   }
@@ -675,14 +707,22 @@ export function initScene(canvas, onHotspot, opts = {}) {
     const hair = pos(sph(0.111 * hs, opt.hair || 0x1c1510, { rough: 1 }, 16), 0, 0.024, -0.008);
     head.add(hair);
     if (opt.longHair) {
-      const backHair = pos(cap(0.09 * hs, 0.34, opt.hair || 0x1c1510, { rough: 1 }, 12), 0, -0.13, -0.055);
+      const backHair = pos(cap(0.09 * hs, 0.42, opt.hair || 0x1c1510, { rough: 1 }, 12), 0, -0.17, -0.055);
       backHair.scale.set(1.05, 1, 0.72);
       head.add(backHair);
     }
     if (opt.coat) {
-      const coat = pos(cyl(0.18 * bw, 0.145 * bw, 0.42, opt.coat, { rough: 0.95 }, 14), 0, 0.04, -0.005);
+      const coat = pos(cyl(0.19 * bw, 0.145 * bw, 0.62, opt.coat, { rough: 0.95 }, 14), 0, -0.05, -0.005);
       coat.scale.z = 0.86;
       torso.add(coat);
+    }
+    if (opt.bag) {
+      // A compact backpack sits flush against the spine. The previous side bag
+      // was a hard box offset from the body, so even though it inherited the
+      // torso transform it looked like a prop floating beside the walker.
+      const backpack = pos(sph(0.13, opt.bag, { rough: 0.95 }, 12), 0, 0.13, -0.13);
+      backpack.scale.set(0.86, 1.28, 0.46);
+      torso.add(backpack);
     }
     if (opt.cap != null) {
       head.add(pos(cyl(0.115 * hs, 0.115 * hs, 0.05, opt.cap, { rough: 1 }, 14), 0, 0.057, 0));
@@ -1004,10 +1044,14 @@ export function initScene(canvas, onHotspot, opts = {}) {
       // down into the pot. Keeping the utensil in torso space prevents the
       // bent wrist from rotating its scoop upward through the cook's face.
       const circle = tl * 2.0;
-      reachArm(p, 'r', 0.43 + Math.sin(circle) * 0.008, 0.22 + Math.cos(circle) * 0.008,
-        Math.sin(circle) * 0.025);
+      reachArm(p, 'r', 0.50 + Math.sin(circle) * 0.012, 0.27 + Math.cos(circle) * 0.012,
+        Math.sin(circle) * 0.04);
+      // The free hand braces the near handle instead of vanishing beside the
+      // apron. It stays outside the hot rim while remaining visible front-on.
+      reachArm(p, 'l', 0.50, 0.40, 0.28);
+      p.lElZ = -0.12;
       const ladle = npc?.userData.tools?.ladle;
-      if (ladle) ladle.position.set(Math.sin(circle) * 0.012, 0, Math.cos(circle) * 0.012);
+      if (ladle) ladle.userData.setStir(circle);
       p.torsoX = 0.10;
       p.torsoY = -0.13;
       p.headX = 0.16;
@@ -1485,19 +1529,27 @@ export function initScene(canvas, onHotspot, opts = {}) {
       rig.legR.knee.rotation.x = mix(1.5, 0, legs);
       diner.position.z = mix(CUSTOMER_Z, tr.stageZ, u);
       diner.rotation.y = mix(tr.seatRotation, Math.PI, u);
-      if (elapsed >= tr.duration) setTurnoverPhase(tr, 'stepOut', 1.5);
+      if (elapsed >= tr.duration) setTurnoverPhase(tr, 'stepOut', TURNOVER_WALK.depthSeconds);
     } else if (tr.phase === 'stepOut') {
       applyPose(rig, standing);
-      diner.position.z = mix(tr.stageZ, 2.42, u);
-      diner.rotation.y = Math.PI;
-      walkRig(rig, elapsed * 7, 0.75);
-      if (elapsed >= tr.duration) setTurnoverPhase(tr, 'leave', 2.2);
+      // Turn away from the counter before taking the first outward step. The
+      // old version translated toward +Z while still facing -Z, so customers
+      // visibly moonwalked away from their stool.
+      const turn = ease01(u / 0.32);
+      const travel = ease01((u - 0.32) / 0.68);
+      diner.position.z = mix(tr.stageZ, 2.42, travel);
+      diner.rotation.y = mix(Math.PI, 0, turn);
+      walkRig(rig, elapsed * TURNOVER_WALK.cadence, travel * 0.75);
+      if (elapsed >= tr.duration) setTurnoverPhase(tr, 'leave', TURNOVER_WALK.lateralSeconds);
     } else if (tr.phase === 'leave') {
       applyPose(rig, standing);
-      diner.position.x = mix(tr.seatX, tr.entryX, u);
+      const exitRotation = tr.entryX < tr.seatX ? -Math.PI / 2 : Math.PI / 2;
+      const turn = ease01(u / 0.24);
+      const travel = ease01((u - 0.24) / 0.76);
+      diner.position.x = mix(tr.seatX, tr.entryX, travel);
       diner.position.z = 2.42;
-      diner.rotation.y = tr.entryX < tr.seatX ? -Math.PI / 2 : Math.PI / 2;
-      walkRig(rig, elapsed * 7, 1);
+      diner.rotation.y = mix(0, exitRotation, turn);
+      walkRig(rig, elapsed * TURNOVER_WALK.cadence, travel);
       if (elapsed >= tr.duration) {
         diner.visible = false;
         diner.userData.ai.customerGeneration++;
@@ -1525,21 +1577,21 @@ export function initScene(canvas, onHotspot, opts = {}) {
       if (elapsed >= tr.duration) {
         diner.position.set(tr.entryX, 0, 2.42);
         diner.visible = true;
-        setTurnoverPhase(tr, 'arrive', 2.2);
+        setTurnoverPhase(tr, 'arrive', TURNOVER_WALK.lateralSeconds);
       }
     } else if (tr.phase === 'arrive') {
       applyPose(rig, standing);
       diner.position.x = mix(tr.entryX, tr.seatX, u);
       diner.position.z = 2.42;
       diner.rotation.y = tr.entryX < tr.seatX ? Math.PI / 2 : -Math.PI / 2;
-      walkRig(rig, elapsed * 7, 1);
-      if (elapsed >= tr.duration) setTurnoverPhase(tr, 'stepIn', 1.5);
+      walkRig(rig, elapsed * TURNOVER_WALK.cadence, 1);
+      if (elapsed >= tr.duration) setTurnoverPhase(tr, 'stepIn', TURNOVER_WALK.depthSeconds);
     } else if (tr.phase === 'stepIn') {
       applyPose(rig, standing);
       diner.position.x = tr.seatX;
       diner.position.z = mix(2.42, tr.stageZ, u);
       diner.rotation.y = Math.PI;
-      walkRig(rig, elapsed * 7, 0.7);
+      walkRig(rig, elapsed * TURNOVER_WALK.cadence, 0.7);
       if (elapsed >= tr.duration) setTurnoverPhase(tr, 'sit', 1.2);
     } else if (tr.phase === 'sit') {
       applyPose(rig, blendPose(standing, seatedPose(diner), u));
@@ -1645,7 +1697,14 @@ export function initScene(canvas, onHotspot, opts = {}) {
     seat.userData.seatX = x;
     stoolSeats.push(seat);
     scene.add(seat);
-    scene.add(pos(cyl(0.03, 0.05, topY - 0.03, 0x2a2018, {}, 10), x, (topY - 0.03) / 2, CUSTOMER_Z));
+    const legHeight = topY - 0.03;
+    const legMatrix = new THREE.Matrix4().compose(
+      new THREE.Vector3(x, legHeight / 2, CUSTOMER_Z),
+      new THREE.Quaternion(),
+      new THREE.Vector3(1, legHeight, 1),
+    );
+    stoolLegs.setMatrixAt(stoolLegs.count++, legMatrix);
+    stoolLegs.instanceMatrix.needsUpdate = true;
     const g = new THREE.Group();
     g.position.set(x, 0, CUSTOMER_Z);
     addBlobShadow(g, 0.46, 0.75);
@@ -1655,6 +1714,13 @@ export function initScene(canvas, onHotspot, opts = {}) {
   }
 
   function buildDiners() {
+    stoolLegs = new THREE.InstancedMesh(
+      new THREE.CylinderGeometry(0.03, 0.05, 1, 10),
+      m(0x2a2018),
+      STOOL_STYLES.length,
+    );
+    stoolLegs.count = 0;
+    scene.add(stoolLegs);
     DINER_SPECS.forEach((sp, index) => {
       const seatTopY = buildStool(sp.x, STOOL_STYLES[index]);
       const bowl = ramenBowls.find((candidate) => candidate.userData.seatX === sp.x);
@@ -1669,7 +1735,14 @@ export function initScene(canvas, onHotspot, opts = {}) {
     g.position.set(SEAT.x, 0, SEAT.z);
     g.rotation.y = style.rotation;
     g.add(pos(cyl(0.17, 0.17, 0.06, style.color, { rough: 0.76 }, 18), 0, SEAT_TOP_Y - 0.03, 0));
-    g.add(pos(cyl(0.03, 0.05, SEAT_TOP_Y - 0.03, 0x2a2018, {}, 10), 0, (SEAT_TOP_Y - 0.03) / 2, 0));
+    const legHeight = SEAT_TOP_Y - 0.03;
+    const legMatrix = new THREE.Matrix4().compose(
+      new THREE.Vector3(SEAT.x, legHeight / 2, SEAT.z),
+      new THREE.Quaternion(),
+      new THREE.Vector3(1, legHeight, 1),
+    );
+    stoolLegs.setMatrixAt(stoolLegs.count++, legMatrix);
+    stoolLegs.instanceMatrix.needsUpdate = true;
     stoolStyles.push({ x: SEAT.x, topY: SEAT_TOP_Y, rotation: style.rotation, color: style.color });
     buildYou();
     // a warm ring on the ground so the open stool reads as an invitation
@@ -1746,60 +1819,143 @@ export function initScene(canvas, onHotspot, opts = {}) {
     const bld2 = bld.clone(); bld2.position.set(12, 6, -16); bld2.scale.set(0.7, 0.8, 1);
     scene.add(bld2);
 
-    const w1 = buildPerson({ shirt: 0x273044, coat: 0x1d2638, hair: 0x101010, scale: 1.04, build: 1.07, headScale: 0.96 });
-    addBlobShadow(w1, 0.36, 0.6);
-    w1.position.set(-8, 0, 3.4); w1.rotation.y = Math.PI / 2;
-    w1.userData.speed = 0.9; w1.userData.range = 8;
+    // Keep the pavement quiet: two differently built passers-by at different
+    // depths read as a street, while three abreast read as a crowd on display.
+    const w1 = buildPerson({ shirt: 0x222a38, coat: 0x18202d, cap: 0x141922, hair: 0x101010, scale: 0.96, build: 1.05, headScale: 0.97 });
+    addBlobShadow(w1, 0.34, 0.46);
+    w1.position.set(-7.2, 0.02, 3.72); w1.rotation.y = Math.PI / 2;
+    w1.userData.speed = 0.62; w1.userData.range = 8.4;
+    w1.userData.baseZ = 3.46;
+    w1.userData.avoid = [{ x: -5.48, radius: 1.0, offset: -0.52 }, { x: 4.18, radius: 1.0, offset: -0.52 }];
     walkers.push(w1); scene.add(w1);
-    const w2 = buildPerson({ shirt: 0x583a48, coat: 0x3f2936, hair: 0x241713, longHair: true, scale: 0.95, build: 0.92, headScale: 1.02 });
-    addBlobShadow(w2, 0.34, 0.6);
-    w2.position.set(7, 0, 4.1); w2.rotation.y = -Math.PI / 2;
-    w2.userData.speed = -0.65; w2.userData.range = 7;
+    const w2 = buildPerson({ shirt: 0x49343f, coat: 0x30242e, bag: 0x6d4936, hair: 0x241713, longHair: true, scale: 0.86, build: 0.88, headScale: 1.03 });
+    addBlobShadow(w2, 0.31, 0.42);
+    w2.position.set(6.5, 0.02, 3.08); w2.rotation.y = -Math.PI / 2;
+    w2.userData.speed = -0.48; w2.userData.range = 7.2;
+    w2.userData.baseZ = 2.68;
+    w2.userData.avoid = [{ x: -4.2, radius: 1.25, offset: 0.42 }, { x: 4.25, radius: 1.2, offset: 0.42 }];
     walkers.push(w2); scene.add(w2);
 
-    const w3 = buildPerson({ shirt: 0x46513e, coat: 0x30382d, hair: 0x3a2518, scale: 0.89, build: 0.86, headScale: 1.04 });
-    addBlobShadow(w3, 0.32, 0.5);
-    w3.position.set(-4.5, 0, 4.55); w3.rotation.y = Math.PI / 2;
-    w3.userData.speed = 0.48; w3.userData.range = 9;
-    walkers.push(w3); scene.add(w3);
-
-    const tree = (x, z, scale, lean = 0) => {
+    const tree = (x, z, scale, mirror = 1) => {
       const g = new THREE.Group();
-      const trunk = pos(cyl(0.09, 0.14, 1.45, 0x4a3327, { rough: 1 }, 8), 0, 0.72, 0);
-      trunk.rotation.z = lean;
+      // Street trees belong in planters and grow unevenly. A cluster of flat
+      // low-poly crowns catches both the cool sky and the shop spill without
+      // turning into the bright cone row from the first pass.
+      g.add(pos(cyl(0.26, 0.31, 0.32, 0x343238, { rough: 1 }, 8), 0, 0.16, 0));
+      const trunk = pos(cyl(0.055, 0.085, 1.28, 0x3c2c27, { rough: 1 }, 7), 0, 0.89, 0);
+      trunk.rotation.z = mirror * 0.035;
       g.add(trunk);
-      // A basic material keeps the trees readable as quiet silhouettes even
-      // outside the stall lights. They should frame the street, not disappear.
-      const crownMat = new THREE.MeshBasicMaterial({ color: 0x24443a });
-      for (const [y, r] of [[1.35, 0.54], [1.72, 0.45], [2.03, 0.32]]) {
-        const crown = new THREE.Mesh(new THREE.ConeGeometry(r, 0.9, 9), crownMat);
-        crown.position.y = y;
-        g.add(crown);
-      }
+      const crownMat = new THREE.MeshStandardMaterial({ color: 0x18352f, roughness: 1, flatShading: true });
+      const clusters = [
+        [0, 1.52, 0, 0.43],
+        [-0.30 * mirror, 1.65, 0.02, 0.32],
+        [0.27 * mirror, 1.74, -0.03, 0.36],
+        [-0.08 * mirror, 1.98, 0, 0.34],
+        [0.13 * mirror, 2.18, 0.02, 0.25],
+      ];
+      const crowns = new THREE.InstancedMesh(
+        new THREE.IcosahedronGeometry(1, 1), crownMat, clusters.length,
+      );
+      const crownTransform = new THREE.Object3D();
+      clusters.forEach(([cx, cy, cz, r], index) => {
+        crownTransform.position.set(cx, cy, cz);
+        crownTransform.scale.set(r, r * 0.84, r);
+        crownTransform.updateMatrix();
+        crowns.setMatrixAt(index, crownTransform.matrix);
+      });
+      g.add(crowns);
       g.position.set(x, 0, z); g.scale.setScalar(scale);
-      addBlobShadow(g, 0.58 * scale, 0.38);
+      addBlobShadow(g, 0.5 * scale, 0.32);
       streetTrees.push(g); scene.add(g);
     };
-    tree(-4.45, 4.85, 1.02, -0.03);
-    tree(4.55, 4.95, 0.9, 0.025);
-    tree(9.2, 5.2, 1.12, -0.02);
+    tree(-4.55, 1.72, 0.9, -1);
+    tree(4.86, 1.48, 0.8, 1);
+
+    // One utility pole and loose overhead lines do more for the alley context
+    // than another decorative object on the pavement.
+    const pole = pos(cyl(0.065, 0.09, 4.4, 0x20202a, { rough: 1 }, 8), -5.48, 2.2, 3.65);
+    scene.add(pole);
+    scene.add(pos(box(1.0, 0.07, 0.08, 0x20202a, { rough: 1 }), -5.25, 3.82, 3.65));
+    const wireMat = new THREE.LineBasicMaterial({ color: 0x161722, transparent: true, opacity: 0.8 });
+    const wireSegments = [];
+    for (let i = 0; i < 3; i++) {
+      const points = [];
+      for (let s = 0; s <= 20; s++) {
+        const u = s / 20;
+        points.push(new THREE.Vector3(-5.65 + u * 11.5, 3.92 - i * 0.16 - Math.sin(u * Math.PI) * 0.24, 3.64 + i * 0.04));
+      }
+      for (let s = 1; s < points.length; s++) wireSegments.push(points[s - 1], points[s]);
+    }
+    scene.add(new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(wireSegments), wireMat));
+
+    // A single warm lamp gives the sidewalk a secondary pool of light without
+    // competing with the stall.
+    const lamp = new THREE.Group();
+    lamp.add(pos(cyl(0.035, 0.05, 2.6, 0x282832, { rough: 0.9 }, 8), 0, 1.3, 0));
+    lamp.add(pos(box(0.42, 0.08, 0.08, 0x282832, { rough: 0.9 }), -0.17, 2.56, 0));
+    const shade = pos(sph(0.16, 0x252631, { rough: 0.9 }, 12), -0.37, 2.49, 0);
+    shade.scale.set(1, 0.38, 1);
+    lamp.add(shade);
+    lamp.add(pos(cyl(0.09, 0.09, 0.025, 0xffbd73, { emissive: 0xff8f45, emissiveIntensity: 2 }, 12), -0.37, 2.41, 0));
+    lamp.position.set(4.18, 0, 3.62);
+    scene.add(lamp);
+    const streetLight = new THREE.PointLight(0xffa45a, 0.82, 3.4, 2);
+    streetLight.position.set(3.81, 2.42, 3.62);
+    scene.add(streetLight);
+
+    const vending = (x, color, glow) => {
+      const machine = new THREE.Group();
+      machine.add(pos(box(0.48, 0.92, 0.34, color, { rough: 0.82 }), 0, 0.46, 0));
+      const panelTex = textTexture((ctx, w, h) => {
+        ctx.fillStyle = '#e6e2d6'; ctx.fillRect(0, 0, w, h);
+        ctx.fillStyle = `#${glow.toString(16).padStart(6, '0')}`; ctx.fillRect(8, 8, w - 16, h * 0.68);
+        ctx.fillStyle = '#b64d3c'; ctx.fillRect(8, h * 0.8, w - 16, h * 0.13);
+      }, 128, 256);
+      machine.add(pos(new THREE.Mesh(
+        new THREE.PlaneGeometry(0.39, 0.48),
+        new THREE.MeshBasicMaterial({ map: panelTex }),
+      ), 0, 0.55, 0.181));
+      machine.position.set(x, 0, 1.7);
+      scene.add(machine);
+    };
+    vending(-4.45, 0x303844, 0x6d8faf);
+    vending(-3.92, 0x4b2b2b, 0xb06b55);
+
+    const board = new THREE.Group();
+    const boardFrame = new THREE.InstancedMesh(
+      new THREE.BoxGeometry(1, 1, 1), m(0x33251f, { rough: 1 }), 3,
+    );
+    const boardPart = new THREE.Object3D();
+    [[0, 0.58, 0, 0.48, 0.56, 0.055], [-0.18, 0.25, 0, 0.045, 0.7, 0.045], [0.18, 0.25, 0, 0.045, 0.7, 0.045]]
+      .forEach(([x, y, z, sx, sy, sz], index) => {
+        boardPart.position.set(x, y, z);
+        boardPart.scale.set(sx, sy, sz);
+        boardPart.updateMatrix();
+        boardFrame.setMatrixAt(index, boardPart.matrix);
+      });
+    board.add(boardFrame);
+    board.add(pos(box(0.36, 0.32, 0.012, 0x8f3c2e, { emissive: 0x32100a, emissiveIntensity: 0.5 }), 0, 0.6, 0.035));
+    board.position.set(3.85, 0, 1.72);
+    board.rotation.y = -0.18;
+    scene.add(board);
 
     for (let i = 0; i < 2; i++) {
       const bird = new THREE.Group();
-      const mat = new THREE.MeshBasicMaterial({ color: 0x68738b, side: THREE.DoubleSide });
-      const wing = new THREE.Shape();
-      wing.moveTo(-0.01, -0.025);
-      wing.lineTo(-0.23, 0.07);
-      wing.lineTo(-0.14, -0.035);
-      wing.lineTo(-0.03, -0.055);
-      wing.closePath();
-      const left = new THREE.Mesh(new THREE.ShapeGeometry(wing), mat);
-      const right = left.clone();
-      const body = new THREE.Mesh(new THREE.SphereGeometry(0.028, 8, 6), mat);
-      body.scale.set(1.5, 0.72, 0.72);
-      right.scale.x = -1;
-      bird.add(left, right, body);
-      bird.position.set(-2.4 + i * 2.2, 4.08 + i * 0.32, 2.55 - i * 0.35);
+      const mat = new THREE.MeshBasicMaterial({ color: 0x343c52, side: THREE.DoubleSide });
+      // One symmetric silhouette per bird. The former two wing meshes plus a
+      // separate body cost six draw calls for two tiny background details.
+      const silhouette = new THREE.Shape();
+      silhouette.moveTo(0, 0.018);
+      silhouette.lineTo(-0.13, 0.038);
+      silhouette.lineTo(-0.08, -0.02);
+      silhouette.lineTo(-0.018, -0.03);
+      silhouette.lineTo(0, -0.018);
+      silhouette.lineTo(0.018, -0.03);
+      silhouette.lineTo(0.08, -0.02);
+      silhouette.lineTo(0.13, 0.038);
+      silhouette.closePath();
+      bird.add(new THREE.Mesh(new THREE.ShapeGeometry(silhouette), mat));
+      bird.position.set(-2.8 + i * 1.4, 4.32 + i * 0.24, 1.9 - i * 0.25);
       bird.userData.speed = 0.38 + i * 0.08;
       bird.userData.phase = i * 1.7;
       birds.push(bird); scene.add(bird);
@@ -1821,20 +1977,77 @@ export function initScene(canvas, onHotspot, opts = {}) {
     ground.rotation.x = -Math.PI / 2;
     scene.add(ground);
 
-    const road = pos(new THREE.Mesh(new THREE.PlaneGeometry(34, 3.6), m(0x0b0e14, { rough: 0.98 })), 0, 0.008, 5.9);
+    // Separate pavement, kerb and road. The old white dashed centre line made
+    // this intimate frontage look like it sat beside a highway.
+    const paveTex = textTexture((g, w, h) => {
+      g.fillStyle = '#24252b'; g.fillRect(0, 0, w, h);
+      g.strokeStyle = 'rgba(8,10,14,0.65)'; g.lineWidth = 2;
+      const cell = 32;
+      for (let y = 0; y <= h; y += cell) {
+        g.beginPath(); g.moveTo(0, y); g.lineTo(w, y); g.stroke();
+        const offset = (y / cell) % 2 ? cell / 2 : 0;
+        for (let x = -offset; x <= w; x += cell) {
+          g.beginPath(); g.moveTo(x, y); g.lineTo(x, y + cell); g.stroke();
+        }
+      }
+      for (let i = 0; i < 180; i++) {
+        g.fillStyle = `rgba(255,255,255,${random() * 0.025})`;
+        g.fillRect(random() * w, random() * h, 2, 2);
+      }
+    }, 256, 256);
+    paveTex.wrapS = paveTex.wrapT = THREE.RepeatWrapping; paveTex.repeat.set(7, 1.5);
+    const pavement = pos(new THREE.Mesh(
+      new THREE.PlaneGeometry(15, 2.25),
+      new THREE.MeshStandardMaterial({ map: paveTex, color: 0xb0aaa5, roughness: 0.92 })
+    ), 0, 0.009, 3.08);
+    pavement.rotation.x = -Math.PI / 2;
+    scene.add(pavement);
+
+    const roadTex = textTexture((g, w, h) => {
+      g.fillStyle = '#0d1016'; g.fillRect(0, 0, w, h);
+      for (let i = 0; i < 500; i++) {
+        const shade = 20 + Math.floor(random() * 18);
+        g.fillStyle = `rgba(${shade},${shade + 2},${shade + 7},${0.12 + random() * 0.18})`;
+        const r = 1 + random() * 2.4;
+        g.fillRect(random() * w, random() * h, r, r);
+      }
+      g.strokeStyle = 'rgba(0,0,0,0.28)'; g.lineWidth = 1;
+      for (let i = 0; i < 5; i++) {
+        g.beginPath();
+        g.moveTo(random() * w, random() * h);
+        g.quadraticCurveTo(random() * w, random() * h, random() * w, random() * h);
+        g.stroke();
+      }
+    }, 256, 256);
+    roadTex.wrapS = roadTex.wrapT = THREE.RepeatWrapping; roadTex.repeat.set(10, 2);
+    const road = pos(new THREE.Mesh(
+      new THREE.PlaneGeometry(34, 4.2),
+      new THREE.MeshStandardMaterial({ map: roadTex, color: 0x71747c, roughness: 0.84 })
+    ), 0, 0.008, 5.72);
     road.rotation.x = -Math.PI / 2;
     scene.add(road);
-    const curb = pos(box(34, 0.12, 0.22, 0x5d5e61, { rough: 1 }), 0, 0.06, 4.08);
+    const curb = pos(box(18, 0.14, 0.2, 0x4b4c52, { rough: 1 }), 0, 0.07, 4.18);
     scene.add(curb);
-    for (const x of [-8, -4, 0, 4, 8]) {
-      const dash = pos(new THREE.Mesh(new THREE.PlaneGeometry(1.8, 0.08), m(0xc4b78e, { rough: 1 })), x, 0.014, 5.9);
-      dash.rotation.x = -Math.PI / 2;
-      scene.add(dash);
-    }
 
-    const glow = new THREE.Mesh(new THREE.PlaneGeometry(8, 3.4), new THREE.MeshBasicMaterial({ color: 0xff9a4d, transparent: true, opacity: 0.06 }));
-    glow.rotation.x = -Math.PI / 2; glow.position.set(0, 0.01, 1.6);
+    const wetMat = new THREE.MeshStandardMaterial({ color: 0x8f4a32, roughness: 0.28, metalness: 0.08, transparent: true, opacity: 0.09, depthWrite: false });
+    const wet = pos(new THREE.Mesh(new THREE.CircleGeometry(1, 32), wetMat), 0.35, 0.022, 3.05);
+    wet.rotation.x = -Math.PI / 2; wet.scale.set(3.2, 0.72, 1); scene.add(wet);
+    const lampWet = pos(new THREE.Mesh(new THREE.CircleGeometry(1, 24), wetMat.clone()), 3.82, 0.022, 3.62);
+    lampWet.rotation.x = -Math.PI / 2; lampWet.scale.set(1.15, 0.42, 1); scene.add(lampWet);
+
+    const glow = new THREE.Mesh(new THREE.PlaneGeometry(8, 3.6), new THREE.MeshBasicMaterial({ color: 0xff9a4d, transparent: true, opacity: 0.105, depthWrite: false }));
+    glow.rotation.x = -Math.PI / 2; glow.position.set(0, 0.025, 2.0);
     scene.add(glow);
+  }
+
+  function walkerPathZ(walker, x = walker.position.x) {
+    const data = walker.userData;
+    let z = data.baseZ;
+    for (const avoid of data.avoid || []) {
+      const proximity = Math.max(0, 1 - Math.abs(x - avoid.x) / avoid.radius);
+      z += avoid.offset * proximity * proximity;
+    }
+    return z;
   }
 
   /* ---------- the cook: GLB if present, stand-in otherwise ---------- */
@@ -1848,9 +2061,11 @@ export function initScene(canvas, onHotspot, opts = {}) {
     // cook's head even though the hand itself was aimed at the pot.
     const ladle = new THREE.Group();
     ladle.userData.grip = new THREE.Object3D();
-    ladle.userData.grip.position.set(0.185, 0.43, 0.22);
+    ladle.userData.grip.position.set(0.185, 0.50, 0.27);
     ladle.add(ladle.userData.grip);
-    const ladleEnd = new THREE.Vector3(-0.30, 0.23, 0.35);
+    // The scoop terminates below the open rim and near the broth centre. The
+    // old endpoint sat behind the closed lid, so neither contact was readable.
+    const ladleEnd = new THREE.Vector3(-0.58, 0.36, 0.50);
     const ladleVector = ladleEnd.clone().sub(ladle.userData.grip.position);
     const handle = cyl(0.012, 0.012, ladleVector.length(), 0x9a8058, {}, 8);
     handle.position.copy(ladle.userData.grip.position).addScaledVector(ladleVector, 0.5);
@@ -1862,6 +2077,21 @@ export function initScene(canvas, onHotspot, opts = {}) {
     ladle.userData.scoop = new THREE.Object3D();
     ladle.userData.scoop.position.copy(ladleEnd);
     ladle.add(ladle.userData.scoop);
+    // Pivot the handle from the hand while the scoop traces a visible circle
+    // below the broth surface. Moving the entire utensil a centimetre made it
+    // look parked against the rim rather than actively stirring.
+    ladle.userData.setStir = (angle) => {
+      const end = ladleEnd.clone();
+      end.x += Math.cos(angle) * 0.07;
+      end.z += Math.sin(angle) * 0.055;
+      end.y += Math.sin(angle * 2) * 0.012;
+      const vector = end.clone().sub(ladle.userData.grip.position);
+      handle.position.copy(ladle.userData.grip.position).addScaledVector(vector, 0.5);
+      handle.scale.y = vector.length() / ladleVector.length();
+      handle.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), vector.clone().normalize());
+      scoop.position.copy(end);
+      ladle.userData.scoop.position.copy(end);
+    };
     guideRig.torso.add(ladle);
     const cloth = pos(box(0.16, 0.012, 0.12, 0xd7c9a6, { rough: 1 }), 0, -0.30, 0.08);
     cloth.rotation.x = 0.16;
@@ -1962,6 +2192,17 @@ export function initScene(canvas, onHotspot, opts = {}) {
   }
 
   /* ---------- camera ---------- */
+  // NightBowl is composed as a street-front diorama, not a hollow 360-degree
+  // world. Keep the orbit on the built frontage and stop zoom-out before the
+  // edge of the set becomes the subject.
+  const CAMERA_LIMITS = Object.freeze({
+    azimuthMin: 0.02,
+    azimuthMax: 0.92,
+    radiusMin: 4.6,
+    radiusMax: 7.4,
+  });
+  // The arrival begins farther out for the walk-in composition; seated input
+  // still obeys radiusMax through rT and the wheel/pinch clamps below.
   const cam = { az: 0.78, el: 0.28, r: 9.6, azT: 0.5, elT: 0.17, rT: 6.7 };
   const target = new THREE.Vector3(0, 1.2, 0.25);
   let dragging = false, movedFar = false, dnX = 0, dnY = 0, lX = 0, lY = 0, dnT = 0, userMoved = false;
@@ -2142,7 +2383,10 @@ export function initScene(canvas, onHotspot, opts = {}) {
       const [a, b] = [...activePointers.values()];
       const distance = Math.hypot(a.x - b.x, a.y - b.y);
       if (pinchDistance > 0) {
-        cam.rT = Math.max(4.6, Math.min(10, cam.rT - (distance - pinchDistance) * 0.012));
+        cam.rT = Math.max(CAMERA_LIMITS.radiusMin, Math.min(
+          CAMERA_LIMITS.radiusMax,
+          cam.rT - (distance - pinchDistance) * 0.012,
+        ));
       }
       pinchDistance = distance;
       movedFar = true;
@@ -2153,7 +2397,10 @@ export function initScene(canvas, onHotspot, opts = {}) {
     const dx = e.clientX - lX, dy = e.clientY - lY;
     lX = e.clientX; lY = e.clientY;
     if (Math.abs(e.clientX - dnX) + Math.abs(e.clientY - dnY) > 6) movedFar = true;
-    cam.azT -= dx * 0.006;
+    cam.azT = Math.max(CAMERA_LIMITS.azimuthMin, Math.min(
+      CAMERA_LIMITS.azimuthMax,
+      cam.azT - dx * 0.006,
+    ));
     cam.elT = Math.max(-0.03, Math.min(0.62, cam.elT - dy * 0.004));
   };
   const onUp = (e) => {
@@ -2167,7 +2414,10 @@ export function initScene(canvas, onHotspot, opts = {}) {
     e.preventDefault();
     if (phase !== 'seated') return;
     userMoved = true;
-    cam.rT = Math.max(4.6, Math.min(10, cam.rT + e.deltaY * 0.002));
+    cam.rT = Math.max(CAMERA_LIMITS.radiusMin, Math.min(
+      CAMERA_LIMITS.radiusMax,
+      cam.rT + e.deltaY * 0.002,
+    ));
   };
   canvas.addEventListener('pointerdown', onDown);
   canvas.addEventListener('pointermove', onMove);
@@ -2335,6 +2585,8 @@ export function initScene(canvas, onHotspot, opts = {}) {
       wk.position.x += wd.speed * dt;
       if (wk.position.x > wd.range) wk.position.x = -wd.range;
       if (wk.position.x < -wd.range) wk.position.x = wd.range;
+      const pathZ = walkerPathZ(wk);
+      wk.position.z += (pathZ - wk.position.z) * Math.min(1, dt * 4.5);
       walkRig(wk.userData.rig, t * (2.75 + i * 0.55) + i * 1.9, 1);
     }
 
@@ -2343,8 +2595,7 @@ export function initScene(canvas, onHotspot, opts = {}) {
       bird.position.x += bird.userData.speed * dt;
       if (bird.position.x > 12) bird.position.x = -12;
       bird.rotation.z = Math.sin(t * 2.2 + bird.userData.phase) * 0.06;
-      bird.children[0].rotation.y = Math.sin(t * 4 + bird.userData.phase) * 0.28;
-      bird.children[1].rotation.y = -Math.sin(t * 4 + bird.userData.phase) * 0.28;
+      bird.children[0].scale.y = 0.72 + Math.sin(t * 4 + bird.userData.phase) * 0.25;
     }
 
     for (const grp of steamGroups) {
@@ -2414,7 +2665,7 @@ export function initScene(canvas, onHotspot, opts = {}) {
     },
     auditFocus(kind, index) {
       if (!auditVisibility) return false;
-      const subject = kind === 'cook' ? guide : diners[index];
+      const subject = kind === 'cook' ? guide : kind === 'walker' ? walkers[index] : diners[index];
       for (const root of auditVisibility.keys()) root.visible = root === subject;
       return Boolean(subject);
     },
@@ -2425,6 +2676,16 @@ export function initScene(canvas, onHotspot, opts = {}) {
       }
       if (!raf) raf = requestAnimationFrame(frame);
       return true;
+    },
+
+    auditStreetWalkers(xs) {
+      walkers.forEach((walker, index) => {
+        if (!Number.isFinite(xs?.[index])) return;
+        walker.position.x = xs[index];
+        walker.position.z = walkerPathZ(walker, xs[index]);
+      });
+      scene.updateMatrixWorld(true);
+      return walkers.map((walker) => ({ x: walker.position.x, z: walker.position.z }));
     },
 
     /* Point the camera at a world position and draw one frame, so a pose the
@@ -2764,9 +3025,15 @@ export function initScene(canvas, onHotspot, opts = {}) {
           .concat(guide?.userData.ai?.tempo ?? []),
         turnover: activeTurnover ? {
           phase: activeTurnover.phase,
+          duration: activeTurnover.duration,
           index: diners.indexOf(activeTurnover.diner),
           x: activeTurnover.diner.position.x,
           z: activeTurnover.diner.position.z,
+          facingX: Math.sin(activeTurnover.diner.rotation.y),
+          facingZ: Math.cos(activeTurnover.diner.rotation.y),
+          seatX: activeTurnover.seatX,
+          entryX: activeTurnover.entryX,
+          stageZ: activeTurnover.stageZ,
           visible: activeTurnover.diner.visible,
           generation: activeTurnover.diner.userData.ai.customerGeneration,
           seatBowlVisible: !!activeTurnover.diner.userData.table.bowl.visible,
@@ -2792,7 +3059,12 @@ export function initScene(canvas, onHotspot, opts = {}) {
         // Counts, not bytes: WebGL exposes no query for texture memory.
         textures: renderer.info.memory.textures,
         geometries: renderer.info.memory.geometries,
-        camera: { azimuth: cam.azT, elevation: cam.elT, radius: cam.rT },
+        camera: {
+          azimuth: cam.azT,
+          elevation: cam.elT,
+          radius: cam.rT,
+          limits: { ...CAMERA_LIMITS },
+        },
         touchAction: getComputedStyle(canvas).touchAction,
         nonFinite,
       };

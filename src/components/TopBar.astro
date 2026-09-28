@@ -1,42 +1,23 @@
 ---
-import { NAVIGATION, SITE } from '../data/content';
+import { NAVIGATION } from '../data/content';
 ---
 
 <header class="topbar">
-  <a class="wordmark" href="/" aria-label={`${SITE.name} — home`}>
-    <b>{SITE.name}</b>
-    <span>{SITE.tagline}</span>
-  </a>
-
   <nav class="nav" aria-label="Sections">
     <button data-open="menu">{NAVIGATION.menu}</button>
     <button data-open="guide">{NAVIGATION.guide}</button>
     <button data-open="log">{NAVIGATION.log}</button>
     <button data-open="bill">{NAVIGATION.bill}</button>
-    <span class="sep" aria-hidden="true"></span>
-    <button class="icon" id="themeBtn" aria-label={NAVIGATION.theme} title={NAVIGATION.theme}>◐</button>
   </nav>
 
   <button class="menu-toggle" data-open="menu" aria-haspopup="dialog">{NAVIGATION.openMenu}</button>
 </header>
 
 <script>
-  // nav + theme toggle
   document.querySelectorAll('[data-open]').forEach((b) => {
     b.addEventListener('click', () => {
       document.dispatchEvent(new CustomEvent('nb:open', { detail: (b as HTMLElement).dataset.open }));
     });
   });
 
-  const themeBtn = document.getElementById('themeBtn');
-  function currentTheme() {
-    const t = document.documentElement.getAttribute('data-theme');
-    if (t) return t;
-    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-  }
-  themeBtn?.addEventListener('click', () => {
-    const next = currentTheme() === 'dark' ? 'light' : 'dark';
-    document.documentElement.setAttribute('data-theme', next);
-    try { localStorage.setItem('nightbowl-theme', next); } catch (e) {}
-  });
 </script>
