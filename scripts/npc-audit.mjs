@@ -178,11 +178,30 @@ await session({ width: 1440, height: 900 }, async (ctx) => {
           { gap: round(g) });
       }
     }
+    if (act === 'eat' && s.joints.chopstickGrip && s.joints.handR) {
+      const g = pointGap(s.joints.chopstickGrip, s.joints.handR);
+      if (g !== null && g > CONTACT_TOL) {
+        record(`contact:${key}:eat:hand-chopstick-grip`, 'contact miss', key, act, tl,
+          `chopstick grip is ${round(g)}m away from the hand`, { gap: round(g) });
+      }
+    }
     if (act === 'eat' && s.boxes.handL && s.boxes.ownBowl) {
       const d = overlap(s.boxes.handL, s.boxes.ownBowl);
       if (d !== null && d > CLIP_TOL) {
         record(`clip:${key}:eat:free-hand:own-bowl`, 'geometry interpenetration', key, act, tl,
           `free hand is ${round(d)}m inside its own bowl`, { depth: round(d) });
+      }
+    }
+    if (act === 'drink' && tl >= 1.2 && tl <= 1.85) {
+      for (const [name, effector, target] of [
+        ['cup-mouth', s.joints.cupRim, s.targets.mouth],
+        ['hand-cup-grip', s.joints.handL, s.joints.cupGrip],
+      ]) {
+        const g = pointGap(effector, target);
+        if (g !== null && g > CONTACT_TOL) {
+          record(`contact:${key}:drink:${name}`, 'contact miss', key, act, tl,
+            `${name} is ${round(g)}m away from its target`, { gap: round(g) });
+        }
       }
     }
     if (act === 'eat' && s.boxes.ownBowl) {

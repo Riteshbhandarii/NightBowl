@@ -264,7 +264,10 @@ await session(['--force-prefers-reduced-motion'], async (ctx) => {
   let menuParsed = false;
   for (let i = 0; i < 40 && !(sceneRequestId && menuParsed); i++) {
     await sleep(100);
-    menuParsed = await evaluate(`!!document.getElementById('book')
+    // The book's opening tag arrives before its inline controller. Let HTML
+    // parsing finish while the scene request stays held, then interact.
+    menuParsed = await evaluate(`document.readyState !== 'loading'
+      && !!document.getElementById('book')
       && !!document.querySelector('.topbar [data-open="menu"]')`);
   }
   check('scene bundle is held before it executes', !!sceneRequestId);

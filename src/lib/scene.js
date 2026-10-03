@@ -138,12 +138,27 @@ export function initScene(canvas, onHotspot, opts = {}) {
     { height: -0.004, rotation: 0.07, color: 0x9e3b35 },
     { height: 0, rotation: -0.025, color: 0xad433a },
   ];
-  // Where an idle seated hand goes: on the counter in front of the diner, in
-  // the arm solver's local frame. Tuned against scripts/npc-audit.mjs.
-  const REST_ON_COUNTER = { y: 0.57, z: 0.30 };
-  // Where the cook's hand goes when it should be above the counter rather than
-  // in it, in his arm solver's local frame.
-  const COOK_OVER_COUNTER = { y: 0.54, z: 0.40 };
+  // Physical action targets start on the object they name, travel through
+  // world space, then land in the character's torso frame used by reachArm.
+  // The small offsets below describe grip/posture; they do not duplicate the
+  // bowl, face, pot or counter placement.
+  const _ikWorld = new THREE.Vector3();
+  const _ikBowl = new THREE.Vector3(), _ikMouth = new THREE.Vector3();
+  const _ikGrip = new THREE.Vector3(), _ikCounter = new THREE.Vector3();
+  const _ikPot = new THREE.Vector3(), _ikFreeHand = new THREE.Vector3();
+  const _potStationWorld = new THREE.Vector3(), _guideStationWorld = new THREE.Vector3();
+  const BOWL_BITE_POINT = new THREE.Vector3(0, 0.24, -0.16);
+  const MOUTH_POINT = new THREE.Vector3(0, -0.03, 0);
+  const CUP_DRINK_ROTATION = new THREE.Quaternion().setFromEuler(new THREE.Euler(0.5, Math.PI, 0));
+  const POT_BROTH_POINT = new THREE.Vector3(0, 0.575, 0);
+  const CHOPSTICK_GRIP_AT_BOWL = new THREE.Vector3(0.27, 0.12, 0.15);
+  const CHOPSTICK_GRIP_AT_MOUTH = new THREE.Vector3(0.24, 0, 0.13);
+  const POT_STIR_GRIP_OFFSET = new THREE.Vector3(0, 0.14, -0.23);
+  const POT_BRACE_OFFSET = new THREE.Vector3(0, 0.14, -0.10);
+  const LAP_HAND_POINT = new THREE.Vector3(0, 0.12, 0.08);
+  // During service the carried bowl is positioned from the two hands, so this
+  // is intentionally a body-relative carry posture rather than an object reach.
+  const SERVICE_CARRY_HAND = new THREE.Vector3(0, 0.58, 0.48);
   let seatGlowMat = null;
   let seatHitArea = null;
   let you = null;          // the figure that takes the stool once you sit
@@ -168,6 +183,33 @@ export function initScene(canvas, onHotspot, opts = {}) {
   let service = null;
   let serviceBowl = null;
   let serviceAudit = { started: false, lifted: false, filledCarry: false, completed: false };
+
+  function objectPointInTorso(npc, object, point, out) {
+    if (!npc?.userData?.rig?.torso || !object) return null;
+    out.copy(point);
+    object.localToWorld(out);
+    npc.userData.rig.torso.worldToLocal(out);
+    return out;
+  }
+
+  function mouthPointInTorso(npc, out) {
+    return objectPointInTorso(npc, npc?.userData?.rig?.face, MOUTH_POINT, out);
+  }
+
+  // Find the counter edge directly in front of this character. Geometry
+  // dimensions and transforms stay live, while clearance remains an explicit
+  // hand/prop posture choice.
+  function counterPointInTorso(npc, clearance, out) {
+    if (!counterTop || !npc?.userData?.rig?.torso) return null;
+    npc.getWorldPosition(out);
+    counterTop.worldToLocal(out);
+    const { height, depth } = counterTop.geometry.parameters;
+    out.y = height * 0.5 + clearance;
+    out.z = Math.sign(out.z || 1) * depth * 0.5;
+    counterTop.localToWorld(out);
+    npc.userData.rig.torso.worldToLocal(out);
+    return out;
+  }
 
   /* ---------- helpers ---------- */
   function m(color, o = {}) {
@@ -195,6 +237,9 @@ export function initScene(canvas, onHotspot, opts = {}) {
     handle.rotation.y = Math.PI / 2;
     handle.position.x = rt + h * 0.16;
     g.add(handle);
+    g.userData.rimPoint = new THREE.Vector3(0, h * 0.5, rt);
+    // Fingers hook over the top of the handle, not its empty centre.
+    g.userData.gripPoint = new THREE.Vector3(handle.position.x, h * 0.27, 0);
     return g;
   };
   // total height of a capsule is len + 2r; callers pass the total they want
@@ -409,7 +454,6 @@ export function initScene(canvas, onHotspot, opts = {}) {
     potG.add(garnish);
     potG.scale.setScalar(0.52);
     potG.position.set(0.1, 1.01, 0.2);
-    potG.userData.stationX = 0.1;
     cookingPot = potG;
     g.add(potG);
     addSteam(new THREE.Vector3(0.1, 1.43, 0.2), 0.2, 7);
@@ -804,10 +848,13 @@ export function initScene(canvas, onHotspot, opts = {}) {
       rWrX: 0, rWrY: 0, rWrZ: 0,
       mouth: 0,
     };
-    // The idle right arm used to be a pair of fixed joint angles that happened
-    // to put the hand inside the counter. Aim it at the counter surface instead.
-    reachArm(p, 'r', REST_ON_COUNTER.y, REST_ON_COUNTER.z, -0.06);
-    reachArm(p, 'l', REST_ON_COUNTER.y, REST_ON_COUNTER.z, 0.06);
+    // Hover the hands above the actual near edge. The clearance leaves fingers
+    // clear of the worktop and follows changes to counter height or depth.
+    const counter = counterPointInTorso(npc, 0.30, _ikCounter);
+    if (counter) {
+      reachArm(p, 'r', counter.y, counter.z, -0.06);
+      reachArm(p, 'l', counter.y, counter.z, 0.06);
+    }
     return p;
   }
   function standingPose() {
@@ -864,23 +911,28 @@ export function initScene(canvas, onHotspot, opts = {}) {
   // Two-link arm solver in the character's local Y/Z plane. Actions name a
   // physical destination (bowl, mouth, pot, counter); they never invent a
   // shoulder angle and hope the hand happens to land somewhere useful.
-  function reachArm(p, side, targetY, targetZ, shoulderZ = 0) {
+  function reachArm(p, side, targetY, targetZ, shoulderZ = 0, targetX = null, shoulderX = 0) {
     const l1 = 0.24, l2 = 0.245;
     const dy = targetY - 0.36;
     const dz = targetZ;
-    const distance = Math.min(l1 + l2 - 0.002, Math.max(0.06, Math.hypot(dy, dz)));
+    const dx = targetX == null ? 0 : targetX - shoulderX;
+    const distance = Math.min(l1 + l2 - 0.002, Math.max(0.06, Math.hypot(dx, dy, dz)));
     const elbow = -Math.acos(Math.max(-1, Math.min(1,
       (distance * distance - l1 * l1 - l2 * l2) / (2 * l1 * l2)
     )));
-    const line = Math.atan2(-dz, -dy);
-    const shoulder = line - Math.atan2(l2 * Math.sin(elbow), l1 + l2 * Math.cos(elbow));
+    const reach = l1 + l2 * Math.cos(elbow);
+    const solvedZ = targetX == null ? shoulderZ
+      : Math.asin(Math.max(-1, Math.min(1, dx / Math.max(0.001, reach))));
+    const planeY = Math.cos(solvedZ) * reach;
+    const planeZ = l2 * Math.sin(elbow);
+    const shoulder = Math.atan2(dz, dy) - Math.atan2(-planeZ, -planeY);
     p[`${side}ShX`] = Math.atan2(Math.sin(shoulder), Math.cos(shoulder));
     p[`${side}ElX`] = elbow;
-    p[`${side}ShZ`] = shoulderZ;
+    p[`${side}ShZ`] = solvedZ;
   }
 
   function restArmInLap(p, side) {
-    reachArm(p, side, 0.12, 0.08, side === 'l' ? 0.14 : -0.14);
+    reachArm(p, side, LAP_HAND_POINT.y, LAP_HAND_POINT.z, side === 'l' ? 0.14 : -0.14);
   }
 
   function updateMeal(npc, at) {
@@ -911,6 +963,31 @@ export function initScene(canvas, onHotspot, opts = {}) {
     ai.biteT = biteT;
   }
 
+  function placeHeldChopsticks(held, tip, grip) {
+    if (!held) return;
+    held.position.copy(tip);
+    held.rotation.set(0, 0, 0);
+    const direction = held.userData.direction;
+    direction.copy(grip).sub(tip);
+    const length = direction.length();
+    held.userData.normalized.copy(direction).normalize();
+    held.userData.grip.position.copy(direction);
+    for (const stick of held.userData.sticks) {
+      stick.position.copy(direction).multiplyScalar(0.5);
+      stick.position.x += stick.userData.pairOffset;
+      stick.scale.set(1, 1, length);
+      stick.quaternion.setFromUnitVectors(held.userData.axis, held.userData.normalized);
+    }
+  }
+
+  function syncChopstickGrip(npc) {
+    const table = npc.userData.table;
+    if (!table?.heldChopsticks || !table.chopstickTip) return;
+    npc.userData.rig.armR.hand.getWorldPosition(_ikWorld);
+    npc.userData.rig.torso.worldToLocal(_ikWorld);
+    placeHeldChopsticks(table.heldChopsticks, table.chopstickTip, _ikWorld);
+  }
+
   // ---- seated actions ----
   const SEATED_ACTS = {
     eat(p, _tl, npc) {
@@ -935,40 +1012,35 @@ export function initScene(canvas, onHotspot, opts = {}) {
       // shoulder. At the mouth the grip drops below the tips. The previous
       // pair pointed from the bowl farther across the counter, forcing the arm
       // to full extension and through the worktop before every bite.
-      let tipX = mix(npc.userData.table?.bowlAimX ?? 0, 0, lift);
-      let tipY = mix(0.47, 0.54, lift);
-      let tipZ = mix(0.30, 0.14, lift);
-      let gripX = mix(tipX + 0.22, 0.24, lift);
+      const bowl = npc.userData.table?.bowl;
+      const bowlTip = objectPointInTorso(npc, bowl, BOWL_BITE_POINT, _ikBowl);
+      const mouth = mouthPointInTorso(npc, _ikMouth);
+      const tip = bowlTip && mouth ? _ikWorld.copy(bowlTip).lerp(mouth, lift) : _ikWorld.set(0, 0.5, 0.3);
+      let tipX = tip.x, tipY = tip.y, tipZ = tip.z;
+      _ikGrip.copy(CHOPSTICK_GRIP_AT_BOWL).lerp(CHOPSTICK_GRIP_AT_MOUTH, lift).add(tip);
+      let gripX = _ikGrip.x;
       // The grip stays on the diner's side of the bowl throughout both strokes.
       // Dropping it toward the rim during the return was the remaining frame
       // where the hand cut through the ceramic.
-      let gripY = 0.54;
-      let gripZ = mix(0.45, 0.27, lift);
+      let gripY = _ikGrip.y;
+      let gripZ = _ikGrip.z;
       if (!ai.biting) {
-        tipX = 0.05; tipY = 0.50; tipZ = 0.34;
-        gripX = 0.24; gripY = REST_ON_COUNTER.y; gripZ = REST_ON_COUNTER.z;
-      }
-      if (held) {
-        held.position.set(tipX, tipY, tipZ);
-        held.rotation.set(0, 0, 0);
-        const direction = held.userData.direction;
-        direction.set(gripX - tipX, gripY - tipY, gripZ - tipZ);
-        const length = direction.length();
-        held.userData.normalized.copy(direction).normalize();
-        for (const stick of held.userData.sticks) {
-          stick.position.copy(direction).multiplyScalar(0.5);
-          stick.position.x += stick.userData.pairOffset;
-          stick.scale.set(1, 1, length);
-          stick.quaternion.setFromUnitVectors(held.userData.axis, held.userData.normalized);
+        const counter = counterPointInTorso(npc, 0.30, _ikCounter);
+        if (counter) {
+          gripX = counter.x; gripY = counter.y; gripZ = counter.z;
+          tipX = gripX - 0.19; tipY = gripY - 0.07; tipZ = gripZ + 0.04;
         }
       }
+      const tipPoint = npc.userData.table.chopstickTip.set(tipX, tipY, tipZ);
+      placeHeldChopsticks(held, tipPoint, _ikGrip.set(gripX, gripY, gripZ));
       // Chopstick studies show small shoulder-abduction changes: keep the elbow
       // tucked instead of flaring it sideways like a wing.
       if (ai.biting) {
-        reachArm(p, 'r', gripY, gripZ, 0.22);
+        reachArm(p, 'r', gripY, gripZ, 0, gripX, npc.userData.rig.armR.sh.position.x);
         p.rElZ = -0.34;
       } else {
-        reachArm(p, 'r', REST_ON_COUNTER.y, REST_ON_COUNTER.z, -0.06);
+        const counter = counterPointInTorso(npc, 0.30, _ikCounter);
+        if (counter) reachArm(p, 'r', counter.y, counter.z, -0.06);
       }
       p.rWrX = 0;
       p.torsoX = 0.1 - lift * 0.02;
@@ -990,10 +1062,18 @@ export function initScene(canvas, onHotspot, opts = {}) {
       const up = tl < 1.2 ? ease01((tl - 0.4) / 0.8)
         : tl < 1.85 ? 1
           : 1 - ease01((tl - 1.85) / 0.85);
-      const cup = npc.userData.table?.heldCup;
+      const table = npc.userData.table;
+      const cup = table?.heldCup;
+      const counterCup = table?.bowl?.userData.counterCup;
+      const cupStart = objectPointInTorso(npc, counterCup, _ikWorld.set(0, 0, 0), _ikBowl);
+      const mouth = mouthPointInTorso(npc, _ikMouth);
+      if (!cup || !mouth || !cupStart) return;
+      // Place the near rim at the live mouth, accounting for the tilted cup.
+      const cupEnd = _ikGrip.copy(cup.userData.rimPoint)
+        .applyQuaternion(CUP_DRINK_ROTATION).multiplyScalar(-1).add(mouth);
       if (tl >= 2.7) {
-        if (cup) {
-          cup.position.set(-0.24, 0.45, 0.29);
+        if (cup && cupStart) {
+          cup.position.copy(cupStart);
           cup.rotation.set(0, Math.PI, 0);
         }
         restArmInLap(p, 'l');
@@ -1001,17 +1081,17 @@ export function initScene(canvas, onHotspot, opts = {}) {
         return;
       }
       // Lift over the counter lip on both the outward and return strokes.
-      const cupY = mix(0.45, 0.535, up) + Math.sin(Math.PI * up) * 0.07;
-      const cupZ = mix(0.29, 0.08, up);
+      const cupPoint = _ikCounter.copy(cupStart || cupEnd).lerp(cupEnd, up);
+      cupPoint.y += Math.sin(Math.PI * up) * 0.16;
       if (cup) {
-        cup.position.set(mix(-0.24, -0.15, up), cupY, cupZ);
+        cup.position.copy(cupPoint);
         // Face the handle toward the left hand. The old orientation put the
         // handle against the diner's cheek while the fist grabbed bare ceramic.
         cup.rotation.set(mix(0, 0.5, up), Math.PI, 0);
       }
-      // The cup is stable in torso space. The hand follows its lower back edge,
-      // keeping the wrist below the face while the rim—not the fist—meets the mouth.
-      reachArm(p, 'l', cupY - 0.015, cupZ + 0.1, mix(0.08, 0.2, up));
+      const grip = _ikFreeHand.copy(cup.userData.gripPoint)
+        .applyQuaternion(cup.quaternion).add(cupPoint);
+      reachArm(p, 'l', grip.y, grip.z, 0, grip.x, npc.userData.rig.armL.sh.position.x);
       p.lWrX = 0;
       p.torsoX = 0.1 - up * 0.03;
       p.headX = -up * 0.05;
@@ -1021,8 +1101,9 @@ export function initScene(canvas, onHotspot, opts = {}) {
       p.torsoY = npc.userData.ai.face * 0.5;
       p.headY = npc.userData.ai.face * 0.7;
       p.headX = Math.sin(tl * 3.1) * 0.06;
-      reachArm(p, 'r', REST_ON_COUNTER.y + 0.06 + Math.sin(tl * 2.2) * 0.05,
-        REST_ON_COUNTER.z - 0.02 + Math.sin(tl * 2.9) * 0.03, -0.06);
+      const counter = counterPointInTorso(npc, 0.30, _ikCounter);
+      if (counter) reachArm(p, 'r', counter.y + 0.06 + Math.sin(tl * 2.2) * 0.05,
+        counter.z - 0.02 + Math.sin(tl * 2.9) * 0.03, -0.06);
       p.mouth = flap(tl, npc.userData.ai.mouthPhase);
     },
     listen(p, tl, npc) {
@@ -1044,14 +1125,17 @@ export function initScene(canvas, onHotspot, opts = {}) {
       // down into the pot. Keeping the utensil in torso space prevents the
       // bent wrist from rotating its scoop upward through the cook's face.
       const circle = tl * 2.0;
-      reachArm(p, 'r', 0.50 + Math.sin(circle) * 0.012, 0.27 + Math.cos(circle) * 0.012,
-        Math.sin(circle) * 0.04);
-      // The free hand braces the near handle instead of vanishing beside the
-      // apron. It stays outside the hot rim while remaining visible front-on.
-      reachArm(p, 'l', 0.50, 0.40, 0.28);
-      p.lElZ = -0.12;
+      const pot = objectPointInTorso(npc, cookingPot, POT_BROTH_POINT, _ikPot);
       const ladle = npc?.userData.tools?.ladle;
       if (ladle) ladle.userData.setStir(circle);
+      const grip = objectPointInTorso(npc, ladle?.userData.grip, _ikWorld.set(0, 0, 0), _ikGrip)
+        || _ikGrip.copy(pot).add(POT_STIR_GRIP_OFFSET).setX(npc.userData.rig.armR.sh.position.x);
+      reachArm(p, 'r', grip.y, grip.z, 0, grip.x, npc.userData.rig.armR.sh.position.x);
+      // The free hand braces the near handle instead of vanishing beside the
+      // apron. It stays outside the hot rim while remaining visible front-on.
+      _ikFreeHand.copy(pot).add(POT_BRACE_OFFSET);
+      reachArm(p, 'l', _ikFreeHand.y, _ikFreeHand.z, 0.28);
+      p.lElZ = -0.12;
       p.torsoX = 0.10;
       p.torsoY = -0.13;
       p.headX = 0.16;
@@ -1062,23 +1146,26 @@ export function initScene(canvas, onHotspot, opts = {}) {
       p.torsoY = Math.sin(tl * 0.7) * 0.12;
       p.headX = -0.05 + Math.sin(tl * 2.6) * 0.05;
       p.headY = Math.sin(tl * 0.9) * 0.16;
-      reachArm(p, 'r', COOK_OVER_COUNTER.y + Math.sin(tl * 2.4) * 0.05,
-        COOK_OVER_COUNTER.z + Math.sin(tl * 3.1) * 0.04, -0.2 + Math.cos(tl * 1.7) * 0.16);
+      const counter = counterPointInTorso(npc, 0.22, _ikCounter);
+      if (counter) reachArm(p, 'r', counter.y + 0.05 + Math.sin(tl * 2.4) * 0.05,
+        counter.z + 0.05 + Math.sin(tl * 3.1) * 0.04, -0.2 + Math.cos(tl * 1.7) * 0.16);
       p.mouth = flap(tl, npc.userData.ai.mouthPhase);
     },
-    wipe(p, tl) {
+    wipe(p, tl, npc) {
       p.torsoX = 0.24;
       p.torsoY = -0.12;
       p.headX = 0.34;
-      reachArm(p, 'r', 0.50, 0.41, Math.sin(tl * 1.7) * 0.18);
-      p.rWrX = 1.95;
+      const counter = counterPointInTorso(npc, 0.22, _ikCounter);
+      if (counter) reachArm(p, 'r', counter.y + 0.065, counter.z + 0.05,
+        Math.sin(tl * 1.7) * 0.18);
+      p.rWrX = 2.20;
     },
     serve(p) {
       // Keep each hand on its own side of the bowl and below the face. The old
       // pose crossed both arms onto the same point and lifted the bowl over
       // the cook's eyes.
-      reachArm(p, 'l', 0.58, 0.48, -0.32);
-      reachArm(p, 'r', 0.58, 0.48, 0.52);
+      reachArm(p, 'l', SERVICE_CARRY_HAND.y, SERVICE_CARRY_HAND.z, -0.32);
+      reachArm(p, 'r', SERVICE_CARRY_HAND.y, SERVICE_CARRY_HAND.z, 0.52);
       p.lElZ = 0.48;
       p.rElZ = -0.74;
       p.torsoX = 0.12;
@@ -1162,6 +1249,7 @@ export function initScene(canvas, onHotspot, opts = {}) {
           for (const stick of table.bowl.userData.restingChopsticks || []) stick.visible = !eating;
           if (table.bowl.userData.counterCup) table.bowl.userData.counterCup.visible = !drinking;
         }
+        if (eating) syncChopstickGrip(npc);
       }
     } else if (npc.userData.tools) {
       npc.userData.tools.ladle.visible = ai.act === 'stir';
@@ -1194,7 +1282,7 @@ export function initScene(canvas, onHotspot, opts = {}) {
     const t = nowSec() - s.startedAt;
     const dinerX = s.diner.position.x;
     const workX = dinerX + (dinerX < 0 ? 0.28 : -0.28);
-    const potX = cookingPot?.userData.stationX ?? 0.1;
+    const potX = cookingPot ? cookingPot.getWorldPosition(_potStationWorld).x : guide.position.x;
 
     // The three things that actually change state latch on elapsed time and run
     // in ascending order, so one slow frame that jumps past a whole phase still
@@ -1657,6 +1745,8 @@ export function initScene(canvas, onHotspot, opts = {}) {
     heldChopsticks.userData.direction = new THREE.Vector3();
     heldChopsticks.userData.normalized = new THREE.Vector3();
     heldChopsticks.userData.sticks = [];
+    heldChopsticks.userData.grip = new THREE.Object3D();
+    heldChopsticks.add(heldChopsticks.userData.grip);
     for (const x of [-0.01, 0.01]) {
       const stick = new THREE.Mesh(
         new THREE.BoxGeometry(0.009, 0.009, 1),
@@ -1671,11 +1761,11 @@ export function initScene(canvas, onHotspot, opts = {}) {
     heldChopsticks.add(noodleLift);
     heldChopsticks.visible = false;
     r.torso.add(heldChopsticks);
-    const heldCup = pos(mug(0.055, 0.045, 0.11, 0xd8c8a5), -0.24, 0.45, 0.29);
+    const heldCup = mug(0.055, 0.045, 0.11, 0xd8c8a5);
     heldCup.rotation.y = Math.PI;
     heldCup.visible = false;
     r.torso.add(heldCup);
-    d.userData.table = { bowl, heldChopsticks, noodleLift, heldCup, bowlAimX: 0 };
+    d.userData.table = { bowl, heldChopsticks, noodleLift, heldCup, chopstickTip: new THREE.Vector3() };
     if (autonomous) {
       initAI(d, 'diner', seatedPose);
       diners.push(d);
@@ -1683,9 +1773,7 @@ export function initScene(canvas, onHotspot, opts = {}) {
     scene.add(d);
     if (bowl) {
       scene.updateMatrixWorld(true);
-      const bowlPoint = bowl.getWorldPosition(new THREE.Vector3());
-      r.torso.worldToLocal(bowlPoint);
-      d.userData.table.bowlAimX = bowlPoint.x;
+      objectPointInTorso(d, bowl.userData.counterCup, _ikWorld.set(0, 0, 0), heldCup.position);
     }
     return d;
   }
@@ -2061,11 +2149,12 @@ export function initScene(canvas, onHotspot, opts = {}) {
     // cook's head even though the hand itself was aimed at the pot.
     const ladle = new THREE.Group();
     ladle.userData.grip = new THREE.Object3D();
-    ladle.userData.grip.position.set(0.185, 0.50, 0.27);
+    const ladleEnd = objectPointInTorso(guide, cookingPot, POT_BROTH_POINT, new THREE.Vector3());
+    ladle.userData.grip.position.copy(ladleEnd).add(POT_STIR_GRIP_OFFSET);
+    ladle.userData.grip.position.x = guideRig.armR.sh.position.x;
     ladle.add(ladle.userData.grip);
     // The scoop terminates below the open rim and near the broth centre. The
     // old endpoint sat behind the closed lid, so neither contact was readable.
-    const ladleEnd = new THREE.Vector3(-0.58, 0.36, 0.50);
     const ladleVector = ladleEnd.clone().sub(ladle.userData.grip.position);
     const handle = cyl(0.012, 0.012, ladleVector.length(), 0x9a8058, {}, 8);
     handle.position.copy(ladle.userData.grip.position).addScaledVector(ladleVector, 0.5);
@@ -2077,14 +2166,21 @@ export function initScene(canvas, onHotspot, opts = {}) {
     ladle.userData.scoop = new THREE.Object3D();
     ladle.userData.scoop.position.copy(ladleEnd);
     ladle.add(ladle.userData.scoop);
+    ladle.userData.center = new THREE.Vector3();
+    ladle.userData.end = new THREE.Vector3();
     // Pivot the handle from the hand while the scoop traces a visible circle
     // below the broth surface. Moving the entire utensil a centimetre made it
     // look parked against the rim rather than actively stirring.
     ladle.userData.setStir = (angle) => {
-      const end = ladleEnd.clone();
+      const center = objectPointInTorso(guide, cookingPot, POT_BROTH_POINT, ladle.userData.center);
+      const end = ladle.userData.end.copy(center);
       end.x += Math.cos(angle) * 0.07;
       end.z += Math.sin(angle) * 0.055;
       end.y += Math.sin(angle * 2) * 0.012;
+      ladle.userData.grip.position.copy(center).add(POT_STIR_GRIP_OFFSET);
+      ladle.userData.grip.position.x = guideRig.armR.sh.position.x;
+      ladle.userData.grip.position.y += Math.sin(angle) * 0.012;
+      ladle.userData.grip.position.z += Math.cos(angle) * 0.012;
       const vector = end.clone().sub(ladle.userData.grip.position);
       handle.position.copy(ladle.userData.grip.position).addScaledVector(vector, 0.5);
       handle.scale.y = vector.length() / ladleVector.length();
@@ -2688,6 +2784,22 @@ export function initScene(canvas, onHotspot, opts = {}) {
       return walkers.map((walker) => ({ x: walker.position.x, z: walker.position.z }));
     },
 
+    /* Test-only transform perturbations for the IK regression audit. Each call
+       is reversible by applying the opposite delta (or reciprocal scale). */
+    auditIKPerturb(target, index, delta) {
+      const diner = diners[index];
+      const object = target === 'bowl' ? diner?.userData.table?.bowl
+        : target === 'mouth' ? diner?.userData.rig?.head
+          : target === 'pot' ? cookingPot
+            : target === 'counter' ? counterTop
+              : target === 'body' ? diner : null;
+      if (!object) return false;
+      if (target === 'body') object.scale.multiplyScalar(delta.scale);
+      else object.position.add(_ikWorld.set(delta.x || 0, delta.y || 0, delta.z || 0));
+      scene.updateMatrixWorld(true);
+      return true;
+    },
+
     /* Point the camera at a world position and draw one frame, so a pose the
        audit flagged can be photographed. scripts/pose-shots.mjs uses this
        between auditBegin() and auditEnd(); nothing in the running site calls
@@ -2754,7 +2866,17 @@ export function initScene(canvas, onHotspot, opts = {}) {
       // sweep has to move that clock to see the whole reach-hold-return arc.
       if (act === 'eat') { ai.biting = true; ai.biteT = tl; }
 
-      const pose = kind === 'cook' ? standingPose() : seatedPose(npc);
+      let pose = kind === 'cook' ? standingPose() : seatedPose(npc);
+      // Object-derived targets must be sampled from this subject's own base
+      // pose, not whichever action the preceding audit sample happened to use.
+      applyPose(rig, pose);
+      scene.updateMatrixWorld(true);
+      fn(pose, tl, npc);
+      applyPose(rig, pose);
+      // Settle once after the action's torso/head transform is in place. This
+      // mirrors the next live frame without making audit order affect contact.
+      scene.updateMatrixWorld(true);
+      pose = kind === 'cook' ? standingPose() : seatedPose(npc);
       fn(pose, tl, npc);
       applyPose(rig, pose);
 
@@ -2772,9 +2894,17 @@ export function initScene(canvas, onHotspot, opts = {}) {
         npc.userData.tools.cloth.visible = act === 'wipe';
       }
 
+      if (act === 'eat') syncChopstickGrip(npc);
+
       scene.updateMatrixWorld(true);
       const v = new THREE.Vector3();
       const w = (o) => (o ? (o.getWorldPosition(v), { x: v.x, y: v.y, z: v.z }) : null);
+      const wp = (o, point) => {
+        if (!o) return null;
+        v.copy(point);
+        o.localToWorld(v);
+        return { x: v.x, y: v.y, z: v.z };
+      };
       // Box3.setFromObject walks hidden children too, so a stowed ladle would
       // count as part of the arm holding it. Walk only what is actually drawn,
       // and allow a subtree to be left out so a limb can be measured without
@@ -2824,7 +2954,17 @@ export function initScene(canvas, onHotspot, opts = {}) {
             ? w(npc.userData.tools.ladleHand === 'R' ? rig.armR.hand : rig.armL.hand)
             : null,
           toolScoop: npc.userData.tools ? w(npc.userData.tools.ladle.userData.scoop) : null,
+          chopstickGrip: table ? w(table.heldChopsticks.userData.grip) : null,
+          chopstickTip: table ? w(table.heldChopsticks) : null,
+          cupRim: table ? wp(table.heldCup, table.heldCup.userData.rimPoint) : null,
+          cupGrip: table ? wp(table.heldCup, table.heldCup.userData.gripPoint) : null,
           footL: w(rig.legL.shoe), footR: w(rig.legR.shoe),
+        },
+        targets: {
+          bowl: table?.bowl ? wp(table.bowl, BOWL_BITE_POINT) : null,
+          mouth: table ? wp(rig.face, MOUTH_POINT) : null,
+          pot: kind === 'cook' ? wp(cookingPot, POT_BROTH_POINT) : null,
+          counter: wp(counterTop, _ikWorld.set(0, 0, 0)),
         },
         boxes: {
           body: b(npc),
@@ -3015,7 +3155,8 @@ export function initScene(canvas, onHotspot, opts = {}) {
           counterCup: !!diner.userData.table?.bowl?.userData.counterCup?.visible,
         })),
         cookStationOffset: guide && cookingPot
-          ? Math.abs(guide.position.x - cookingPot.userData.stationX)
+          ? Math.abs(guide.getWorldPosition(_guideStationWorld).x
+            - cookingPot.getWorldPosition(_potStationWorld).x)
           : null,
         cookHasWorkingProps: !!guide?.userData.tools?.ladle && !!guide?.userData.tools?.cloth,
         cookAction: guide?.userData.ai?.act || null,
