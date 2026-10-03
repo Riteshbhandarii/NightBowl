@@ -250,6 +250,21 @@ that owns it. Everything on that list is reported but does not fail the build.
 That file is the list of defects we know about and have decided not to fix yet —
 it should get shorter over time, not longer.
 
+### Object-derived IK targets
+
+The scene job also moves a bowl, a mouth, the pot and the counter, then checks
+that the chopstick tip, cup rim, ladle scoop and wiping hand follow their live
+transforms. It scales a diner and checks mouth and hand-to-chopstick contact.
+The pose audit separately checks that a drinking hand grips the mug handle and
+the rim reaches the mouth. Neither check relies on copied scene coordinates.
+
+*Reproduce it:*
+```
+npm run build
+npm run preview        # one terminal
+npm run audit:ik       # another
+```
+
 ---
 
 ## Job 3: cms
