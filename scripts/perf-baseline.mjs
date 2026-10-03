@@ -19,12 +19,15 @@
        --fps-seconds N    sampling window per configuration (default 30)
        --leak-minutes N   duration of the leak run (default 5, 0 skips it)
        --quick            short sampling, for a smoke-level sanity check
+       --memory-only      skip frame-rate matrix; repeat the heap gate 3 times
+       --leak-runs N      independent heap runs (default 1, memory-only 3)
+       --heap-snapshots D write before/after .heapsnapshot files into directory D
        --out FILE         markdown destination (default docs/baseline.md)
        --json FILE        also write the raw measurements
 
    Env: CHROME_PATH, SMOKE_FLAGS
    ============================================================ */
-import { writeFileSync, readFileSync, readdirSync, statSync, existsSync } from 'node:fs';
+import { writeFileSync, readdirSync, statSync, existsSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { session, openScene, sleep, softwareRenderer } from './lib/chrome.mjs';
 
@@ -32,10 +35,18 @@ const arg = (n, d) => { const i = process.argv.indexOf(n); return i > -1 ? proce
 const has = (n) => process.argv.includes(n);
 const URL_ = arg('--url', 'http://localhost:4321');
 const QUICK = has('--quick');
+const MEMORY_ONLY = has('--memory-only');
 const FPS_SECONDS = Number(arg('--fps-seconds', QUICK ? 5 : 30));
 const LEAK_MINUTES = Number(arg('--leak-minutes', QUICK ? 0 : 5));
-const OUT = arg('--out', 'docs/baseline.md');
+const LEAK_RUNS = Number(arg('--leak-runs', MEMORY_ONLY ? 3 : 1));
+const SNAPSHOTS = arg('--heap-snapshots', '');
+const HEAP_BUDGET = 10;
+const OUT = arg('--out', MEMORY_ONLY ? 'docs/heap-retention.md' : 'docs/baseline.md');
 const JSON_OUT = arg('--json', '');
+if (!Number.isInteger(LEAK_RUNS) || LEAK_RUNS < 1 || !Number.isInteger(LEAK_MINUTES) || LEAK_MINUTES < 0
+    || (MEMORY_ONLY && LEAK_MINUTES === 0)) {
+  throw new Error('Heap runs must be positive integers and heap minutes nonnegative; --memory-only requires a heap run.');
+}
 
 /* Portrait shapes get their landscape rotation too; the desktop shapes are
    already landscape and are not rotated into a portrait no one uses. */
@@ -171,39 +182,67 @@ async function measure(viewport, cpuThrottle) {
 }
 
 /* ---------- leak run ---------- */
-async function leakRun(minutes) {
+async function leakRun(minutes, run) {
   if (!minutes) return { skipped: 'leak run disabled (--leak-minutes 0)' };
   return session({ width: 1440, height: 900, flags: ['--enable-precise-memory-info'] }, async (ctx) => {
-    const { send, evaluate } = ctx;
+    const { send, evaluate, on } = ctx;
     if (!await openScene(ctx, URL_)) return { error: 'scene did not boot' };
     await evaluate(`document.querySelector('.seat-pin')?.click()`);
-    await sleep(3000);
+    // The walk-in lasts six seconds. Sampling after only three seconds counted
+    // the seated view's first WebGL buffers/shaders as a leak. Wait for the real
+    // phase, then let one minute of acting initialise lazy renderer/V8 caches.
+    let seated = false;
+    for (let i = 0; i < 80; i++) {
+      if (await evaluate("window.__nightbowl.selfCheck().phase === 'seated'")) { seated = true; break; }
+      await sleep(250);
+    }
+    if (!seated) return { error: 'scene did not reach the seated phase' };
+    await send('HeapProfiler.enable');
+    const snapshot = async (suffix) => {
+      if (!SNAPSHOTS) return;
+      mkdirSync(SNAPSHOTS, { recursive: true });
+      const chunks = [];
+      const unsubscribe = on('HeapProfiler.addHeapSnapshotChunk', ({ chunk }) => chunks.push(chunk));
+      const reply = await send('HeapProfiler.takeHeapSnapshot', { reportProgress: false });
+      unsubscribe();
+      if (reply.error) throw new Error(reply.error.message);
+      writeFileSync(join(SNAPSHOTS, `heap-${run}-${suffix}.heapsnapshot`), chunks.join(''));
+    };
 
     const sample = async () => {
       // Force collection over the protocol: without it the number is allocation
       // noise rather than retention, and a leak verdict would be meaningless.
-      await send('HeapProfiler.enable');
       await send('HeapProfiler.collectGarbage');
-      await sleep(600);
-      return evaluate('performance.memory ? performance.memory.usedJSHeapSize : null');
+      const reply = await send('Runtime.getHeapUsage');
+      const used = reply.result?.usedSize;
+      if (!Number.isFinite(used) || used <= 0) throw new Error('DevTools could not measure JS heap usage.');
+      return used;
     };
 
+    const initial = await sample();
+    await sleep(60000);
     const start = await sample();
-    if (start == null) {
-      return { error: 'performance.memory is unavailable in this browser build, so heap growth could not be measured' };
-    }
+    await snapshot('start');
     let peak = start;
     const marks = [];
     for (let i = 1; i <= minutes; i++) {
       await sleep(60000);
       const now = await evaluate('performance.memory.usedJSHeapSize');
       peak = Math.max(peak, now);
-      marks.push({ minute: i, heapUsed: now });
+      const retained = await sample();
+      const state = await evaluate('window.__nightbowl.selfCheck()');
+      marks.push({ minute: i, heapUsed: now, heapPostGc: retained,
+        geometries: state.geometries, textures: state.textures, bubbles: state.bubbles });
+      console.log(`    run ${run}, minute ${i}: ${kib(retained)} after GC`);
     }
-    const end = await sample();
+    // The last timed minute is the endpoint. A second immediate GC measures
+    // allocations from the state query above, not another interval of acting.
+    const end = marks[marks.length - 1].heapPostGc;
+    await snapshot('end');
     return {
-      minutes, startHeapPostGc: start, endHeapPostGc: end, peakHeap: peak,
-      growthPercent: +(((end - start) / start) * 100).toFixed(1),
+      run, minutes, warmupSeconds: 60, initialHeapPostGc: initial,
+      startHeapPostGc: start, endHeapPostGc: end, peakHeap: peak,
+      growthPercent: ((end - start) / start) * 100,
       marks,
     };
   });
@@ -226,7 +265,7 @@ const renderer = await session({ width: 800, height: 600 }, async (ctx) => {
 console.log(`renderer: ${renderer}\n`);
 
 const results = [];
-for (const v of VIEWPORTS) {
+if (!MEMORY_ONLY) for (const v of VIEWPORTS) {
   for (const t of THROTTLES) {
     process.stdout.write(`  ${v.name} @ ${t}x CPU ... `);
     const r = await measure(v, t);
@@ -236,9 +275,16 @@ for (const v of VIEWPORTS) {
   }
 }
 
-console.log('\n  leak run ...');
-const leak = await leakRun(LEAK_MINUTES);
-console.log(`  ${JSON.stringify(leak.growthPercent ?? leak.error ?? leak.skipped)}\n`);
+const leaks = [];
+for (let run = 1; run <= LEAK_RUNS; run++) {
+  console.log(`\n  heap run ${run}/${LEAK_RUNS} (60s warmup, ${LEAK_MINUTES} min measurement) ...`);
+  let result;
+  try { result = { run, ...await leakRun(LEAK_MINUTES, run) }; }
+  catch (error) { result = { run, error: error.message }; }
+  leaks.push(result);
+  console.log(`  ${JSON.stringify(result.growthPercent ?? result.error ?? result.skipped)}\n`);
+}
+const leak = leaks[0];
 
 const bundle = bundleSize();
 
@@ -248,7 +294,33 @@ const row = (r) => r.error
   ? `| ${r.viewport} | ${r.cpuThrottle}x | not measured | | | | | | ${r.error} |`
   : `| ${r.viewport} | ${r.cpuThrottle}x | ${r.fps?.medianFps ?? '-'} | ${r.fps?.onePercentLowFps ?? '-'} | ${r.fps?.worstFrameMs ?? '-'} | ${Math.round(r.startup.firstInteractiveMs)} | ${r.drawCalls} | ${r.triangles} | ${r.scene.overflowX} |`;
 
-const md = `# Performance baseline
+const heapReport = `# Heap retention
+
+Measured ${new Date().toISOString().slice(0, 10)} against the production build at 1440x900.
+Renderer: \`${renderer}\`. Each independent browser waits for the six-second
+walk-in to finish and warms the seated scene for 60 seconds before its baseline.
+The warmup lets initially hidden geometry, shaders and action code initialise;
+it is reported separately from retained growth. Every minute and both endpoints
+force garbage collection, then read DevTools \`Runtime.getHeapUsage.usedSize\`.
+The unchanged budget is **at most ${HEAP_BUDGET}% growth** per run. The command
+exits with failure if any measured run exceeds it or cannot be measured.
+
+| run | minutes | before warmup | start after GC | end after GC | growth | result |
+|---|---|---|---|---|---|---|
+${leaks.map((r) => r.error || r.skipped
+  ? `| ${r.run || '-'} | - | - | - | - | - | ${r.error || r.skipped} |`
+  : `| ${r.run} | ${r.minutes} | ${kib(r.initialHeapPostGc)} | ${kib(r.startHeapPostGc)} | ${kib(r.endHeapPostGc)} | ${r.growthPercent}% | ${r.growthPercent <= HEAP_BUDGET ? 'pass' : 'FAIL'} |`).join('\n')}
+
+| run | minute | retained heap after GC | geometries | textures | speech bubbles |
+|---|---|---|---|---|---|
+${leaks.flatMap((r) => (r.marks || []).map((m) => `| ${r.run} | ${m.minute} | ${kib(m.heapPostGc)} | ${m.geometries} | ${m.textures} | ${m.bubbles} |`)).join('\n')}
+
+Snapshots: ${SNAPSHOTS ? `before/after files written to \`${SNAPSHOTS}\`` : 'not requested; use `--heap-snapshots <directory>` for retained-object comparison'}.
+This measures browser JS retention on this desktop; it does not certify a
+mobile GPU or measure GPU memory bytes.
+`;
+
+const md = MEMORY_ONLY ? heapReport : `# Performance baseline
 
 Every number here was measured by \`scripts/perf-baseline.mjs\` against the
 production build. Nothing is estimated. Where something could not be measured,
@@ -278,24 +350,7 @@ ${results.map(row).join('\n')}
 
 ## Memory
 
-${leak.error ? `Heap growth: **not measurable** — ${leak.error}`
-    : leak.skipped ? `Heap growth: **not measured** — ${leak.skipped}`
-      : `Measured over ${leak.minutes} minutes at 1440x900, seated, with garbage collection forced over the
-DevTools protocol before the first and last sample so the figure reflects
-retention rather than allocation noise.
-
-| measurement | value |
-|---|---|
-| heap after GC at start | ${kib(leak.startHeapPostGc)} |
-| heap after GC at end | ${kib(leak.endHeapPostGc)} |
-| peak heap during the run | ${kib(leak.peakHeap)} |
-| growth over ${leak.minutes} min | **${leak.growthPercent}%** |
-
-Per-minute samples (not post-GC, so these include ordinary allocation churn):
-
-| minute | heap |
-|---|---|
-${leak.marks.map((m) => `| ${m.minute} | ${kib(m.heapUsed)} |`).join('\n')}`}
+${heapReport.replace('# Heap retention\n\n', '')}
 
 ## Payload
 
@@ -341,7 +396,11 @@ harness** and needs a physical device.`}
 writeFileSync(OUT, md);
 console.log(`wrote ${OUT}`);
 if (JSON_OUT) {
-  writeFileSync(JSON_OUT, JSON.stringify({ renderer, software, results, leak, bundle }, null, 2));
+  writeFileSync(JSON_OUT, JSON.stringify({ renderer, software, results, leak, leaks, bundle }, null, 2));
   console.log(`wrote ${JSON_OUT}`);
 }
 console.log('');
+if (leaks.some((r) => r.error || (MEMORY_ONLY && r.skipped) || r.growthPercent > HEAP_BUDGET)) {
+  console.error(`Heap retention failed the ${HEAP_BUDGET}% budget. See ${OUT}.`);
+  process.exitCode = 1;
+}

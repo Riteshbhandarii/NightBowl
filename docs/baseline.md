@@ -1,5 +1,14 @@
 # Performance baseline
 
+**Heap result updated 2026-10-03:** the historical 11.1% failure below was
+measured before the six-second walk-in had finished. Repeated cold snapshots
+showed the seated view's initial WebGL buffers/shaders and V8 code being counted
+as growth. The corrected gate waits for seating and 60 seconds of warmup,
+then measures five minutes with forced GC. Four independent runs stayed below
+the unchanged 10% limit. See [heap-retention.md](heap-retention.md) for the
+measurements, snapshot findings and reproduction command. The older frame-rate
+and payload tables below remain historical measurements, not a new device pass.
+
 Every number here was measured by `scripts/perf-baseline.mjs` against the
 production build. Nothing is estimated. Where something could not be measured,
 it says so and why.
