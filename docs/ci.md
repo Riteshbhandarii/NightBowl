@@ -328,9 +328,17 @@ npm run baseline
 ```
 
 That writes `docs/baseline.md` with frame rates, startup time, memory growth and
-scene cost across six viewport shapes and three CPU speeds. It takes about
-fifteen minutes because it measures each configuration for a full thirty seconds
-and then watches memory for five more.
+scene cost across six viewport shapes and three CPU speeds. Each configuration
+is sampled for thirty seconds. The heap gate waits for the seated phase, warms
+the scene for sixty seconds, then measures five minutes after forced garbage
+collection. Growth above 10% or an unmeasurable run fails the command.
+
+To repeat just the heap gate in three independent browsers, without the frame
+matrix, run `npm run baseline -- --memory-only`. Optional
+`--heap-snapshots /tmp/nightbowl-heap` captures before/after retained-object
+snapshots. This writes `docs/heap-retention.md`; use `--out` to choose another
+report path. See that report for the corrected measurement and issue #33's
+startup-cache diagnosis.
 
 `docs/baseline.md` records what the current numbers are, and is explicit about
 what they do and do not prove — in particular that CPU throttling slows the

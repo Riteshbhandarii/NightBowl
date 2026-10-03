@@ -103,6 +103,7 @@ export async function session({ flags = [], width = 1280, height = 800 }, run) {
 
   let id = 0;
   const pending = new Map();
+  const listeners = new Map();
   const errors = [];
   ws.addEventListener('message', (e) => {
     const m = JSON.parse(e.data);
@@ -111,6 +112,7 @@ export async function session({ flags = [], width = 1280, height = 800 }, run) {
       const d = m.params.exceptionDetails;
       errors.push(d.exception?.description || d.text);
     }
+    for (const listener of listeners.get(m.method) || []) listener(m.params);
   });
 
   const send = (method, params = {}) => new Promise((res) => {
@@ -133,8 +135,15 @@ export async function session({ flags = [], width = 1280, height = 800 }, run) {
   await send('Page.enable');
   await send('Runtime.enable');
 
+  const on = (method, listener) => {
+    const callbacks = listeners.get(method) || new Set();
+    callbacks.add(listener);
+    listeners.set(method, callbacks);
+    return () => callbacks.delete(listener);
+  };
+
   try {
-    return await run({ send, evaluate, errors });
+    return await run({ send, evaluate, errors, on });
   } finally {
     ws.close();
     chrome.kill('SIGKILL');
