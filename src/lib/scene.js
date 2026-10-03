@@ -90,7 +90,8 @@ export function initScene(canvas, onHotspot, opts = {}) {
       if (n.visible === false) return;
       if (n.isMesh && n.geometry) {
         if (!n.geometry.boundingBox) n.geometry.computeBoundingBox();
-        _visBox.copy(n.geometry.boundingBox).applyMatrix4(n.matrixWorld);
+        if (n.isInstancedMesh && !n.boundingBox) n.computeBoundingBox();
+        _visBox.copy(n.isInstancedMesh ? n.boundingBox : n.geometry.boundingBox).applyMatrix4(n.matrixWorld);
         out.union(_visBox);
       }
       for (const c of n.children) walk(c);
@@ -104,6 +105,7 @@ export function initScene(canvas, onHotspot, opts = {}) {
   const steamGroups = [];
   const ramenBowls = [];
   let ramenAssetCache = null;
+  const _emptyFoodMatrix = new THREE.Matrix4().makeScale(0, 0, 0);
   let steamTexture = null;
   const lanternMats = [];
   const lanterns = [];
@@ -187,6 +189,15 @@ export function initScene(canvas, onHotspot, opts = {}) {
   let service = null;
   let serviceBowl = null;
   let serviceAudit = { started: false, lifted: false, filledCarry: false, completed: false };
+  // The visitor gets one meal, never a diner AI/refill/departure loop.
+  const visitorOrder = { status: 'choosing', dish: null, dismissed: false, firstBite: false, carrying: false, startedAt: 0, biteAt: 0 };
+  const orderPanel = document.getElementById('visitorOrder');
+  const orderTitle = document.getElementById('visitorOrderTitle');
+  const orderChoices = document.getElementById('visitorOrderChoices');
+  const orderStatus = document.getElementById('visitorOrderStatus');
+  const orderSkip = document.getElementById('visitorOrderSkip');
+  const _visitorSeat = new THREE.Vector3(SEAT.x, 1.09, 1.0);
+  const _visitorPrep = new THREE.Vector3(COOK_HOME_X, 1.09, 0.6);
 
   function objectPointInTorso(npc, object, point, out) {
     if (!npc?.userData?.rig?.torso || !object) return null;
@@ -527,6 +538,7 @@ export function initScene(canvas, onHotspot, opts = {}) {
       chashu: new THREE.CylinderGeometry(0.065, 0.065, 0.014, 18),
       onion: new THREE.TorusGeometry(0.018, 0.0045, 5, 12),
       chopstick: new THREE.BoxGeometry(0.52, 0.012, 0.012),
+      tofu: new THREE.BoxGeometry(0.065, 0.025, 0.055),
     };
     const mat = {
       ceramic: m(0xe8dfcf, { rough: 0.42 }),
@@ -538,15 +550,18 @@ export function initScene(canvas, onHotspot, opts = {}) {
       chashu: m(0xb86650, { rough: 0.72 }),
       onion: m(0x62a84f, { rough: 0.8 }),
       wood: m(0x7a4227, { rough: 0.78 }),
+      tofu: m(0xf1deb0, { rough: 0.8 }),
+      mushroom: m(0x63402a, { rough: 0.8 }),
     };
     ramenAssetCache = { geo, mat };
     return ramenAssetCache;
   }
 
-  function buildRamenBowl(hero = false, restsAcrossRim = false) {
+  function buildRamenBowl(hero = false, restsAcrossRim = false, dish = null) {
     const { geo, mat } = ramenAssets();
     const bowl = new THREE.Group();
     bowl.userData.hero = hero;
+    bowl.userData.dish = dish;
     bowl.userData.ingredients = ['bowl', 'broth', 'noodles', 'egg', 'nori', 'chashu', 'spring-onion', 'chopsticks'];
 
     const shell = new THREE.Mesh(geo.bowl, mat.ceramic);
@@ -558,24 +573,26 @@ export function initScene(canvas, onHotspot, opts = {}) {
     bowl.add(broth);
 
     const noodleCount = hero ? 4 : 3;
+    const noodles = new THREE.InstancedMesh(geo.noodle, mat.noodle, noodleCount);
+    noodles.name = 'noodles';
+    bowl.add(noodles);
     for (let i = 0; i < noodleCount; i++) {
-      const noodle = pos(new THREE.Mesh(geo.noodle, mat.noodle), (i - 1.5) * 0.018, 0.18 + i * 0.002, (i % 2) * 0.018 - 0.01);
+      const noodle = pos(new THREE.Object3D(), (i - 1.5) * 0.018, 0.18 + i * 0.002, (i % 2) * 0.018 - 0.01);
       noodle.rotation.x = Math.PI / 2;
       noodle.rotation.z = i * 0.75;
-      noodle.name = 'noodles';
-      bowl.userData.foodParts.push({ mesh: noodle, threshold: 0.12 + i * 0.13 });
-      bowl.add(noodle);
+      noodle.updateMatrix();
+      bowl.userData.foodParts.push({ mesh: noodles, index: i, matrix: noodle.matrix.clone(), threshold: 0.12 + i * 0.13 });
     }
 
     const eggWhite = pos(new THREE.Mesh(geo.eggWhite, mat.eggWhite), -0.085, 0.195, 0.035);
     eggWhite.scale.set(0.075, 0.018, 0.057);
     eggWhite.name = 'egg';
-    bowl.userData.foodParts.push({ mesh: eggWhite, threshold: 0.38 });
+    bowl.userData.foodParts.push({ mesh: eggWhite, threshold: 0.38, recipe: dish ? 'house' : null });
     bowl.add(eggWhite);
     const yolk = pos(new THREE.Mesh(geo.yolk, mat.yolk), -0.085, 0.211, 0.035);
     yolk.scale.set(0.032, 0.014, 0.027);
     yolk.name = 'egg-yolk';
-    bowl.userData.foodParts.push({ mesh: yolk, threshold: 0.38 });
+    bowl.userData.foodParts.push({ mesh: yolk, threshold: 0.38, recipe: dish ? 'house' : null });
     bowl.add(yolk);
 
     const nori = pos(new THREE.Mesh(geo.nori, mat.nori), 0.105, 0.245, -0.085);
@@ -586,28 +603,47 @@ export function initScene(canvas, onHotspot, opts = {}) {
     const pork = pos(new THREE.Mesh(geo.chashu, mat.chashu), 0.06, 0.195, 0.04);
     pork.rotation.z = 0.1;
     pork.name = 'chashu';
-    bowl.userData.foodParts.push({ mesh: pork, threshold: 0.56 });
+    bowl.userData.foodParts.push({ mesh: pork, threshold: 0.56, recipe: dish ? 'house' : null });
     bowl.add(pork);
 
-    const onionCount = hero ? 4 : 2;
+    if (dish) {
+      const tofu = pos(new THREE.Mesh(geo.tofu, mat.tofu), 0.065, 0.201, 0.04);
+      tofu.rotation.y = 0.35;
+      tofu.name = 'tofu';
+      const mushroom = pos(new THREE.Mesh(geo.eggWhite, mat.mushroom), -0.08, 0.202, 0.03);
+      mushroom.scale.set(0.07, 0.024, 0.055);
+      mushroom.name = 'mushroom';
+      for (const mesh of [tofu, mushroom]) {
+        bowl.add(mesh);
+        bowl.userData.foodParts.push({ mesh, threshold: 0.38, recipe: 'veggie' });
+      }
+    }
+
+    const onionCount = hero || dish ? 4 : 2;
+    const onions = new THREE.InstancedMesh(geo.onion, mat.onion, onionCount);
+    onions.name = 'spring-onion';
+    bowl.add(onions);
     for (let i = 0; i < onionCount; i++) {
-      const onion = pos(new THREE.Mesh(geo.onion, mat.onion), -0.01 + i * 0.023, 0.202 + i * 0.002, -0.055 + (i % 2) * 0.025);
+      const onion = pos(new THREE.Object3D(), -0.01 + i * 0.023, 0.202 + i * 0.002, -0.055 + (i % 2) * 0.025);
       onion.rotation.x = Math.PI / 2;
-      onion.name = 'spring-onion';
-      bowl.userData.foodParts.push({ mesh: onion, threshold: 0.22 + i * 0.08 });
-      bowl.add(onion);
+      onion.updateMatrix();
+      bowl.userData.foodParts.push({ mesh: onions, index: i, matrix: onion.matrix.clone(), threshold: 0.22 + i * 0.08 });
     }
 
     const chopstickAngle = restsAcrossRim ? rnd(0.2, 0.34) : rnd(-0.28, 0.08);
     const chopstickZ = rnd(-0.025, 0.025);
     const chopstickY = restsAcrossRim ? 0.255 : rnd(0.222, 0.24);
-    for (const offset of [-0.018, 0.018]) {
-      const stick = pos(new THREE.Mesh(geo.chopstick, mat.wood), 0, chopstickY, chopstickZ + offset);
+    const sticks = new THREE.InstancedMesh(geo.chopstick, mat.wood, 2);
+    sticks.name = 'chopsticks';
+    [-0.018, 0.018].forEach((offset, index) => {
+      const stick = pos(new THREE.Object3D(), 0, chopstickY, chopstickZ + offset);
       stick.rotation.y = chopstickAngle;
-      stick.name = 'chopsticks';
-      (bowl.userData.restingChopsticks ||= []).push(stick);
-      bowl.add(stick);
-    }
+      stick.updateMatrix();
+      sticks.setMatrixAt(index, stick.matrix);
+    });
+    bowl.userData.restingChopsticks = [sticks];
+    bowl.add(sticks);
+    if (dish === 'veggie') bowl.userData.ingredients = ['bowl', 'broth', 'noodles', 'tofu', 'mushroom', 'nori', 'spring-onion', 'chopsticks'];
     setBowlFill(bowl, 1);
     return bowl;
   }
@@ -621,7 +657,16 @@ export function initScene(canvas, onHotspot, opts = {}) {
       bowl.userData.broth.position.y = 0.13 + fill * 0.038;
       bowl.userData.broth.scale.setScalar(0.82 + fill * 0.18);
     }
-    for (const part of bowl.userData.foodParts || []) part.mesh.visible = fill > part.threshold;
+    for (const part of bowl.userData.foodParts || []) {
+      const visible = fill > part.threshold && (!part.recipe || part.recipe === bowl.userData.dish);
+      if (part.index === undefined) part.mesh.visible = visible;
+      else {
+        part.mesh.setMatrixAt(part.index, visible ? part.matrix : _emptyFoodMatrix);
+        part.mesh.instanceMatrix.needsUpdate = true;
+        part.mesh.computeBoundingBox();
+        part.mesh.computeBoundingSphere();
+      }
+    }
     if (bowl.userData.steam) bowl.userData.steam.visible = fill > 0.08;
   }
 
@@ -1000,7 +1045,7 @@ export function initScene(canvas, onHotspot, opts = {}) {
   // ---- seated actions ----
   const SEATED_ACTS = {
     eat(p, _tl, npc) {
-      const ai = npc.userData.ai;
+      const ai = npc.userData.ai || npc.userData.visitorMeal;
       const held = npc.userData.table?.heldChopsticks;
       const t = ai.biting ? ai.biteT : 0;
       let lift = 0;
@@ -1282,7 +1327,7 @@ export function initScene(canvas, onHotspot, opts = {}) {
 
   function tickService() {
     if (!service) {
-      if (phase !== 'seated' || beat) return;
+      if (phase !== 'seated' || beat || visitorOrder.status === 'queued') return;
       const empty = diners.find((d) => d.userData.ai?.needsService);
       if (empty) beginService(empty);
       return;
@@ -1377,6 +1422,135 @@ export function initScene(canvas, onHotspot, opts = {}) {
       serviceBowl.position.copy(_carry).lerp(_seatBowl, ease01((t - 1.4) / 0.65));
     }
   }
+
+  function updateOrderUI() {
+    if (!orderPanel) return;
+    const choiceFocused = orderChoices.contains(document.activeElement);
+    orderPanel.hidden = phase !== 'seated' || bookOpen || visitorOrder.dismissed;
+    orderTitle.textContent = visitorOrder.dish === 'house' ? LABELS.orderHouse
+      : visitorOrder.dish === 'veggie' ? LABELS.orderVeggie : LABELS.orderTitle;
+    orderChoices.hidden = visitorOrder.status !== 'choosing';
+    for (const button of orderChoices.querySelectorAll('button')) button.disabled = !!visitorOrder.dish;
+    if (choiceFocused && visitorOrder.dish) orderSkip.focus({ preventScroll: true });
+    orderStatus.textContent = visitorOrder.status === 'queued' ? LABELS.orderQueued
+      : visitorOrder.status === 'serving' ? LABELS.orderServing
+        : visitorOrder.dish ? LABELS.orderEnjoy : '';
+  }
+
+  function visitorBowl(dish) {
+    let bowl = you.userData.table.bowl;
+    if (!bowl) {
+      bowl = buildRamenBowl(false, true, dish);
+      bowl.userData.seatX = SEAT.x;
+      bowl.userData.steam = addSteam(_visitorSeat.clone().add(new THREE.Vector3(0, 0.22, 0)), 0.13, 2);
+      you.userData.table.bowl = bowl;
+      scene.add(bowl);
+      setBowlVisible(bowl, false);
+      you.userData.visitorMeal = { cur: seatedPose(you), biting: false, biteT: 0 };
+    }
+    return bowl;
+  }
+
+  function orderMeal(dish) {
+    if (phase !== 'seated' || visitorOrder.dismissed || visitorOrder.dish || !['house', 'veggie'].includes(dish)) return false;
+    visitorOrder.dish = dish;
+    visitorBowl(dish);
+    visitorOrder.status = 'queued';
+    // A display-only GLB has no serving rig yet (#79); don't strand an order.
+    if (REDUCED || !guideRig) placeVisitorMeal(true);
+    updateOrderUI();
+    return true;
+  }
+
+  function placeVisitorMeal(immediate = false) {
+    const bowl = you.userData.table.bowl;
+    bowl.position.copy(_visitorSeat);
+    bowl.userData.steam.position.copy(_visitorSeat).add(_ikWorld.set(0, 0.22, 0));
+    setBowlVisible(bowl, true);
+    visitorOrder.status = immediate ? 'done' : 'eating';
+    visitorOrder.carrying = false;
+    visitorOrder.biteAt = nowSec();
+    updateOrderUI();
+  }
+
+  function tickVisitorService() {
+    if (visitorOrder.status === 'queued') {
+      if (service || activeTurnover || beat) return;
+      visitorOrder.status = 'serving';
+      visitorOrder.startedAt = nowSec();
+      visitorOrder.homeX = guide.position.x;
+      guide.userData.ai.locked = true;
+      setAct(guide, 'serve', 6.2);
+      updateOrderUI();
+    }
+    if (visitorOrder.status !== 'serving') return;
+    const t = nowSec() - visitorOrder.startedAt;
+    const workX = SEAT.x - 0.28;
+    guide.position.x = t < 1.4 ? visitorOrder.homeX
+      : t < 3.4 ? mix(visitorOrder.homeX, workX, ease01((t - 1.4) / 2))
+        : t < 4.1 ? workX : mix(workX, visitorOrder.homeX, ease01((t - 4.1) / 1.9));
+    if (t >= 0.7) setBowlVisible(you.userData.table.bowl, true);
+    if (t >= 6) {
+      guide.position.x = visitorOrder.homeX;
+      guide.userData.ai.locked = false;
+      setAct(guide, 'stir', rnd(6, 10));
+      placeVisitorMeal();
+      nextBeatAt = nowSec() + rnd(3, 6);
+    }
+  }
+
+  function syncVisitorBowl() {
+    if (visitorOrder.status !== 'serving') return;
+    const bowl = you.userData.table.bowl;
+    const t = nowSec() - visitorOrder.startedAt;
+    visitorOrder.carrying = t >= 1.4 && t < 3.4;
+    guide.updateMatrixWorld(true);
+    guideRig.armL.hand.getWorldPosition(_handL);
+    guideRig.armR.hand.getWorldPosition(_handR);
+    _carry.copy(_handL).add(_handR).multiplyScalar(0.5);
+    _carry.y -= 0.18; // Visitor bowl's unscaled rim is 18cm above its base.
+    if (t < 1.4) bowl.position.copy(_visitorPrep).lerp(_carry, ease01((t - 0.7) / 0.7));
+    else if (t < 3.4) bowl.position.copy(_carry);
+    else bowl.position.copy(_carry).lerp(_visitorSeat, ease01((t - 3.4) / 0.7));
+    bowl.userData.steam.position.copy(bowl.position).add(_ikWorld.set(0, 0.22, 0));
+  }
+
+  function tickVisitorMeal(dt) {
+    const meal = you.userData.visitorMeal;
+    if (!meal || REDUCED || visitorOrder.status === 'choosing' || visitorOrder.status === 'queued' || visitorOrder.status === 'serving') return;
+    const at = nowSec();
+    if (visitorOrder.status === 'done' && (!visitorOrder.firstBite || at - visitorOrder.completedAt > 1)) return;
+    meal.biteT = Math.max(0, at - visitorOrder.biteAt);
+    meal.biting = visitorOrder.status === 'eating' && at >= visitorOrder.biteAt;
+    if (meal.biting && meal.biteT >= 4.25) {
+      meal.biting = false;
+      visitorOrder.firstBite = true;
+      const bowl = you.userData.table.bowl;
+      setBowlFill(bowl, Math.max(0, bowl.userData.fill - 0.18));
+      if (bowl.userData.fill <= 0.01) {
+        visitorOrder.status = 'done';
+        visitorOrder.completedAt = at;
+      } else {
+        visitorOrder.biteAt = at + rnd(0.8, 2.2);
+      }
+    }
+    const eating = visitorOrder.status === 'eating';
+    const pose = seatedPose(you);
+    if (eating) SEATED_ACTS.eat(pose, meal.biteT, you);
+    easePose(meal.cur, pose, 1 - Math.exp(-dt * 7));
+    applyPose(you.userData.rig, meal.cur);
+    const table = you.userData.table;
+    table.heldChopsticks.visible = eating;
+    table.noodleLift.visible = meal.biting && meal.biteT >= 0.45 && meal.biteT < 2.85;
+    for (const stick of table.bowl.userData.restingChopsticks) stick.visible = !eating;
+    if (eating) syncChopstickGrip(you);
+  }
+
+  const onOrderClick = (event) => {
+    const dish = event.target.closest('[data-visitor-dish]')?.dataset.visitorDish;
+    if (dish) orderMeal(dish);
+  };
+  const onOrderSkip = () => { visitorOrder.dismissed = true; updateOrderUI(); };
 
   /* ---------- speech ---------- */
   const bubbles = [];
@@ -1486,6 +1660,7 @@ export function initScene(canvas, onHotspot, opts = {}) {
     if (REDUCED) return;
     if (!nextBeatAt) nextBeatAt = nowSec() + 6;
     if (beat) { tickBeat(); return; }
+    if (visitorOrder.status === 'queued') return;
     if (nowSec() >= nextBeatAt) chooseBeat();
   }
 
@@ -1538,7 +1713,7 @@ export function initScene(canvas, onHotspot, opts = {}) {
 
   function beginTurnover(diner) {
     const ai = diner.userData.ai;
-    if (!ai || activeTurnover || service || beat) return false;
+    if (!ai || activeTurnover || service || beat || visitorOrder.status === 'queued') return false;
     ai.locked = true;
     ai.needsService = false;
     setAct(diner, 'pause', 60);
@@ -2452,6 +2627,7 @@ export function initScene(canvas, onHotspot, opts = {}) {
     if (hintEl) { hintEl.classList.remove('gone'); hintTimer = setTimeout(hideHint, 7000); }
     seatPin?.remove();
     seatPin = null;
+    updateOrderUI();
   }
 
   function ndc(e) {
@@ -2672,8 +2848,9 @@ export function initScene(canvas, onHotspot, opts = {}) {
     } else {
       // the director only performs for someone who is actually sitting down
       if (phase === 'seated') {
-        tickTurnover();
-        if (!activeTurnover) {
+        tickVisitorService();
+        if (visitorOrder.status !== 'serving') tickTurnover();
+        if (!activeTurnover && visitorOrder.status !== 'serving') {
           tickService();
           if (!service) tickDirector();
         }
@@ -2681,6 +2858,8 @@ export function initScene(canvas, onHotspot, opts = {}) {
       for (const d of diners) if (!d.userData.ai?.turnover) tickNPC(d, poseDt);
       if (guideRig && guide.userData.ai) tickNPC(guide, poseDt);
       syncServiceBowl();
+      syncVisitorBowl();
+      tickVisitorMeal(poseDt);
       updateBubbles();
     }
 
@@ -2730,10 +2909,14 @@ export function initScene(canvas, onHotspot, opts = {}) {
     else { updateSeatPin(t); updateYouPin(); }
     renderer.render(scene, camera);
   }
+  orderChoices?.addEventListener('click', onOrderClick);
+  orderSkip?.addEventListener('click', onOrderSkip);
+  updateOrderUI();
   frame();
 
   return {
-    setBookOpen(v) { bookOpen = v; hideHint(); },
+    setBookOpen(v) { bookOpen = v; hideHint(); updateOrderUI(); },
+    orderMeal,
     testEmptyBowl(index = 0) {
       const diner = diners[index];
       const bowl = diner?.userData.table?.bowl;
@@ -2770,7 +2953,7 @@ export function initScene(canvas, onHotspot, opts = {}) {
     },
     auditFocus(kind, index) {
       if (!auditVisibility) return false;
-      const subject = kind === 'cook' ? guide : kind === 'walker' ? walkers[index] : diners[index];
+      const subject = kind === 'cook' ? guide : kind === 'walker' ? walkers[index] : kind === 'visitor' ? you : diners[index];
       for (const root of auditVisibility.keys()) root.visible = root === subject;
       return Boolean(subject);
     },
@@ -2835,7 +3018,19 @@ export function initScene(canvas, onHotspot, opts = {}) {
         kind: 'diner', index: i, x: d.position.x, z: d.position.z, scale: d.scale.x,
       }));
       if (guide) list.push({ kind: 'cook', index: 0, x: guide.position.x, z: guide.position.z, scale: guide.scale.x });
+      if (you?.userData.table.bowl) list.push({ kind: 'visitor', index: 0, x: you.position.x, z: you.position.z, scale: you.scale.x });
       return list;
+    },
+
+    auditVisitorDish(dish) {
+      if (!TESTING || !auditVisibility || !['house', 'veggie'].includes(dish)) return false;
+      const bowl = visitorBowl(dish);
+      bowl.userData.dish = dish;
+      setBowlFill(bowl, 1);
+      bowl.position.copy(_visitorSeat);
+      setBowlVisible(bowl, true);
+      setYouReveal(1);
+      return true;
     },
 
     auditFurniture() {
@@ -2860,13 +3055,13 @@ export function initScene(canvas, onHotspot, opts = {}) {
     },
 
     auditPose(kind, index, act, tl) {
-      const npc = kind === 'cook' ? guide : diners[index];
+      const npc = kind === 'cook' ? guide : kind === 'visitor' ? you : diners[index];
       if (!npc) return null;
       const acts = kind === 'cook' ? COOK_ACTS : SEATED_ACTS;
       const fn = acts[act];
       if (!fn) return null;
       const rig = npc.userData.rig;
-      const ai = npc.userData.ai || (npc.userData.ai = {});
+      const ai = kind === 'visitor' ? npc.userData.visitorMeal : npc.userData.ai;
       const table = npc.userData.table;
       const keep = { act: ai.act, biting: ai.biting, biteT: ai.biteT, face: ai.face };
       ai.act = act;
@@ -2928,7 +3123,8 @@ export function initScene(canvas, onHotspot, opts = {}) {
           if (n === skip || n.visible === false) return;
           if (n.isMesh && n.geometry) {
             if (!n.geometry.boundingBox) n.geometry.computeBoundingBox();
-            _bb.copy(n.geometry.boundingBox).applyMatrix4(n.matrixWorld);
+            if (n.isInstancedMesh && !n.boundingBox) n.computeBoundingBox();
+            _bb.copy(n.isInstancedMesh ? n.boundingBox : n.geometry.boundingBox).applyMatrix4(n.matrixWorld);
             box.union(_bb);
             found = true;
           }
@@ -3000,7 +3196,7 @@ export function initScene(canvas, onHotspot, opts = {}) {
       const api = window.__nightbowl;
       const out = [];
       for (const sub of api.auditSubjects()) {
-        const list = sub.kind === 'cook' ? api.auditActs().cook : api.auditActs().seated;
+        const list = sub.kind === 'cook' ? api.auditActs().cook : sub.kind === 'visitor' ? ['eat', 'pause', 'lookUp'] : api.auditActs().seated;
         for (const act of list) {
           for (const tl of (plan[act] || plan.default)) {
             const s = api.auditPose(sub.kind, sub.index, act, tl);
@@ -3088,6 +3284,7 @@ export function initScene(canvas, onHotspot, opts = {}) {
         for (const v of [r.x, r.y, r.z, p.x, p.y, p.z]) if (!Number.isFinite(v)) nonFinite++;
       };
       const rigs = diners.map((d) => d.userData.rig).concat(walkers.map((w) => w.userData.rig));
+      if (you) rigs.push(you.userData.rig);
       if (guideRig) rigs.push(guideRig);
       for (const rg of rigs) {
         if (!rg) continue;
@@ -3100,6 +3297,19 @@ export function initScene(canvas, onHotspot, opts = {}) {
       scan(guide);
       scan(camera);
       let serviceCarryPose = null;
+      let visitorCarryPose = null;
+      if (visitorOrder.status === 'serving' && visitorOrder.carrying) {
+        guide.updateMatrixWorld(true);
+        guideRig.armL.hand.getWorldPosition(_handL);
+        guideRig.armR.hand.getWorldPosition(_handR);
+        guideRig.head.getWorldPosition(_carryHead);
+        visibleBox(you.userData.table.bowl.getObjectByName('bowl'), _carryBowlBox);
+        visitorCarryPose = {
+          handGap: Math.max(_carryBowlBox.distanceToPoint(_handL), _carryBowlBox.distanceToPoint(_handR)),
+          handSeparation: _handR.x - _handL.x,
+          faceClearance: _carryHead.y - _carryBowlBox.max.y,
+        };
+      }
       if (service && serviceBowl?.visible && guideRig) {
         guide.updateMatrixWorld(true);
         guideRig.armL.hand.getWorldPosition(_handL);
@@ -3120,6 +3330,17 @@ export function initScene(canvas, onHotspot, opts = {}) {
         diners: diners.length,
         visitor: !!you,
         visitorAutonomous: !!you?.userData.ai,
+        visitorOrder: {
+          ...visitorOrder,
+          carryPose: visitorCarryPose,
+          bowlVisible: !!you?.userData.table.bowl?.visible,
+          fill: you?.userData.table.bowl?.userData.fill ?? 0,
+          toppings: you?.userData.table.bowl?.userData.foodParts.filter((part) => part.index === undefined && part.mesh.visible).map((part) => part.mesh.name) || [],
+          position: you?.userData.table.bowl?.position.toArray() || null,
+          heldChopsticks: !!you?.userData.table.heldChopsticks.visible,
+          restingChopsticks: !!you?.userData.table.bowl?.userData.restingChopsticks[0].visible,
+          steam: !!you?.userData.table.bowl?.userData.steam.visible,
+        },
         walkers: walkers.length,
         streetLife: {
           trees: streetTrees.length,
@@ -3234,6 +3455,8 @@ export function initScene(canvas, onHotspot, opts = {}) {
 
     dispose() {
       cancelAnimationFrame(raf);
+      orderChoices?.removeEventListener('click', onOrderClick);
+      orderSkip?.removeEventListener('click', onOrderSkip);
       window.removeEventListener('resize', onResize);
       renderer.dispose();
     },

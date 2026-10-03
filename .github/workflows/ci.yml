@@ -165,6 +165,9 @@ jobs:
           echo "::error::A hand or utensil stopped following the object it acts on."
           echo "Reproduce with: npm run build && npm run preview, then npm run audit:ik"
 
+      - name: Visitor meal interaction
+        run: npm run audit:visitor
+
   # Catches: the admin losing its GitHub authentication, or the
   # draft-preview-publish flow breaking.
   cms:

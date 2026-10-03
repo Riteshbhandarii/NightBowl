@@ -97,6 +97,7 @@ await session({ width: 1440, height: 900 }, async (ctx) => {
   }
   await sleep(400);
   await evaluate('window.__nightbowl.auditBegin()');
+  await evaluate("window.__nightbowl.auditVisitorDish('house')");
 
   const furniture = await evaluate('window.__nightbowl.auditFurniture()');
 
@@ -111,6 +112,8 @@ await session({ width: 1440, height: 900 }, async (ctx) => {
 
   // One round trip for the whole sweep: per-sample CDP calls dominated runtime.
   const samples = await evaluate(`window.__nightbowl.auditSweep(${JSON.stringify(SWEEPS)})`);
+  await evaluate("window.__nightbowl.auditVisitorDish('veggie')");
+  samples.push(...await evaluate(`window.__nightbowl.auditSweep(${JSON.stringify(SWEEPS)}).filter(s => s.kind === 'visitor')`));
 
   for (const s of samples) {
     const sub = { kind: s.kind, index: s.index, x: s.subjectX };
@@ -123,7 +126,7 @@ await session({ width: 1440, height: 900 }, async (ctx) => {
     /* --- limbs inside solid furniture --- */
     for (const [name, box] of solids) {
       const parts = ['handL', 'handR', 'forearmL', 'forearmR'];
-      if (sub.kind === 'diner') parts.push('thighL', 'thighR', 'shinL', 'shinR');
+      if (sub.kind === 'diner' || sub.kind === 'visitor') parts.push('thighL', 'thighR', 'shinL', 'shinR');
       for (const part of parts) {
         const d = overlap(s.boxes[part], box);
         if (d !== null && d > CLIP_TOL) {
