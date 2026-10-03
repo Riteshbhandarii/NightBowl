@@ -432,6 +432,14 @@ await session([], async (ctx) => {
       && Math.max(...before.lanterns.map((lantern) => lantern.intensity))
         - Math.min(...before.lanterns.map((lantern) => lantern.intensity)) >= 0.6,
     JSON.stringify(before.lanterns));
+  const composition = before.counterComposition;
+  check('counter run is offset with a bright, cluttered working end',
+    composition.runs.every((run) => run.x < -0.15 && run.x + run.width / 2 < 2.9)
+      && composition.potX < -2 && composition.cookX < -1.5
+      && composition.condiments.every((jar) => jar.x < -2 && jar.y > 1.2)
+      && Math.abs(before.lanterns[0].x - composition.potX) < 0.3
+      && before.lanterns[0].intensity > before.lanterns[2].intensity,
+    JSON.stringify(composition));
   check('stools vary in height, colour and rotation',
     before.stoolStyles.length === 4
       && new Set(before.stoolStyles.map((stool) => stool.topY)).size >= 3

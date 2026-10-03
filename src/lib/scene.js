@@ -151,6 +151,9 @@ export function initScene(canvas, onHotspot, opts = {}) {
   const MOUTH_POINT = new THREE.Vector3(0, -0.03, 0);
   const CUP_DRINK_ROTATION = new THREE.Quaternion().setFromEuler(new THREE.Euler(0.5, Math.PI, 0));
   const POT_BROTH_POINT = new THREE.Vector3(0, 0.575, 0);
+  // The bright left end is the working station; the right end stays quieter.
+  const WORK_POT_X = -2.52;
+  const COOK_HOME_X = WORK_POT_X + 0.58;
   const CHOPSTICK_GRIP_AT_BOWL = new THREE.Vector3(0.27, 0.12, 0.15);
   const CHOPSTICK_GRIP_AT_MOUTH = new THREE.Vector3(0.24, 0, 0.13);
   const POT_STIR_GRIP_OFFSET = new THREE.Vector3(0, 0.14, -0.23);
@@ -176,6 +179,7 @@ export function initScene(canvas, onHotspot, opts = {}) {
   // Kept so the audit can measure against the furniture that is actually in the
   // scene rather than against numbers copied out of this file.
   let counterTop = null, counterFront = null, counterShelf = null;
+  let counterCondiments = null;
   const stoolSeats = [];
   const stoolStyles = [];
   let stoolLegs = null;
@@ -415,11 +419,13 @@ export function initScene(canvas, onHotspot, opts = {}) {
 
   function buildCounterItems() {
     const g = new THREE.Group();
-    counterTop = pos(box(6.4, 0.14, 1.05, 0x7a5334, { rough: 0.66 }), 0, 1.02, 0.6);
+    // Leave the right wall a breathing gap while keeping every seat and bowl
+    // on the run. Move furniture, not its group of independently placed props.
+    counterTop = pos(box(6.0, 0.14, 1.05, 0x7a5334, { rough: 0.66 }), -0.22, 1.02, 0.6);
     // Recess the solid cabinet behind the counter overhang so seated knees have
     // real clearance instead of being forced through the front panel.
-    counterFront = pos(box(6.4, 0.95, 0.12, 0x5c3d26, { rough: 0.86 }), 0, 0.52, 0.82);
-    counterShelf = pos(box(6.1, 0.08, 0.9, 0x452f1f, { rough: 0.9 }), 0, 0.55, 0.2);
+    counterFront = pos(box(6.0, 0.95, 0.12, 0x5c3d26, { rough: 0.86 }), -0.22, 0.52, 0.82);
+    counterShelf = pos(box(5.7, 0.08, 0.9, 0x452f1f, { rough: 0.9 }), -0.22, 0.55, 0.2);
     g.add(counterTop);
     g.add(counterFront);
     g.add(counterShelf);
@@ -453,11 +459,11 @@ export function initScene(canvas, onHotspot, opts = {}) {
       });
     potG.add(garnish);
     potG.scale.setScalar(0.52);
-    potG.position.set(0.1, 1.01, 0.2);
+    potG.position.set(WORK_POT_X, 1.01, 0.2);
     cookingPot = potG;
     g.add(potG);
-    addSteam(new THREE.Vector3(0.1, 1.43, 0.2), 0.2, 7);
-    registerHotspot('menu', LABELS.specialsHotspot, potG, new THREE.Vector3(0.1, 1.64, 0.2));
+    addSteam(new THREE.Vector3(WORK_POT_X, 1.43, 0.2), 0.2, 7);
+    registerHotspot('menu', LABELS.specialsHotspot, potG, new THREE.Vector3(WORK_POT_X, 1.64, 0.2));
 
     DINER_SPECS.forEach(({ x }, k) => {
       const z = 1.0 + rnd(-0.025, 0.025);
@@ -495,9 +501,12 @@ export function initScene(canvas, onHotspot, opts = {}) {
       m(0x2f6f5e, { rough: 0.4, metal: 0.1 }),
       3,
     );
-    [-2.7, -2.4, 2.75].forEach((x, index) => {
-      condiments.setMatrixAt(index, new THREE.Matrix4().makeTranslation(x, 0.72, 0.15));
+    // Keep the existing instanced jars, now on the worktop rather than hidden
+    // below it. Irregular positions collect the clutter around the hot pot.
+    [[-3.03, 0.18], [-2.84, 0.43], [-2.28, 0.55]].forEach(([x, z], index) => {
+      condiments.setMatrixAt(index, new THREE.Matrix4().makeTranslation(x, 1.26, z));
     });
+    counterCondiments = condiments;
     g.add(condiments);
 
     scene.add(g);
@@ -2141,7 +2150,7 @@ export function initScene(canvas, onHotspot, opts = {}) {
   /* ---------- the cook: GLB if present, stand-in otherwise ---------- */
   function useStandInCook() {
     guide = buildPerson({ shirt: 0xffffff, apron: true, toque: true, skin: 0xd7a173, hair: 0x241a12 });
-    guide.position.set(0.68, 0, -0.3);
+    guide.position.set(COOK_HOME_X, 0, -0.3);
     guide.rotation.y = -0.08;
     guideRig = guide.userData.rig;
     // Build the tool in torso space from its grip to its scoop. A wrist child
@@ -2197,7 +2206,7 @@ export function initScene(canvas, onHotspot, opts = {}) {
     addBlobShadow(guide, 0.4, 0.7);
     initAI(guide, 'cook', standingPose);
     scene.add(guide);
-    registerHotspot('guide', LABELS.navigation.guide, guide, new THREE.Vector3(0.45, 1.7, -0.3));
+    registerHotspot('guide', LABELS.navigation.guide, guide, new THREE.Vector3(COOK_HOME_X - 0.23, 1.7, -0.3));
     buildPins();
   }
 
@@ -2212,7 +2221,7 @@ export function initScene(canvas, onHotspot, opts = {}) {
         const size = new THREE.Vector3(); bb.getSize(size);
         const s = 1.7 / (size.y || 1.7);
         guide.scale.setScalar(s);
-        guide.position.set(0.68, 0, -0.5);
+        guide.position.set(COOK_HOME_X, 0, -0.5);
         guide.rotation.y = -0.22;
         guide.traverse((n) => { if (n.isMesh) { n.castShadow = false; n.frustumCulled = false; } });
         scene.add(guide);
@@ -2222,7 +2231,7 @@ export function initScene(canvas, onHotspot, opts = {}) {
             gltf.animations.find((a) => /idle|breath/i.test(a.name)) || gltf.animations[0];
           guideMixer.clipAction(clip).play();
         }
-        registerHotspot('guide', LABELS.navigation.guide, guide, new THREE.Vector3(0.55, 1.9, -0.5));
+        registerHotspot('guide', LABELS.navigation.guide, guide, new THREE.Vector3(COOK_HOME_X - 0.13, 1.9, -0.5));
         buildPins();
       },
       undefined,
@@ -3134,6 +3143,18 @@ export function initScene(canvas, onHotspot, opts = {}) {
           color: light.color.getHex(),
         })),
         stoolStyles,
+        counterComposition: {
+          runs: [counterTop, counterFront, counterShelf].map((part) => ({
+            x: part.position.x, width: part.geometry.parameters.width,
+          })),
+          condiments: Array.from({ length: counterCondiments.count }, (_, index) => {
+            const matrix = new THREE.Matrix4();
+            counterCondiments.getMatrixAt(index, matrix);
+            return { x: matrix.elements[12], y: matrix.elements[13], z: matrix.elements[14] };
+          }),
+          cookX: guide?.position.x,
+          potX: cookingPot?.position.x,
+        },
         dinerStations: diners.map((diner) => ({
           seatX: diner.position.x,
           bowlX: diner.userData.table?.bowl?.position.x,
