@@ -49,12 +49,15 @@ const sceneContent = {
       canvas.hidden = true;
       return;
     }
-    // only reachable when explicitly asked for, so normal loads stay clean
-    if (location.search.includes('nbtest')) (window as any).__nightbowl = controls;
-    loading?.classList.add('gone');
     document.addEventListener('nb:bookstate', (e) => {
       controls?.setBookOpen((e as CustomEvent).detail);
     });
+    // The menu controller runs while the HTML is parsed, before this module.
+    // Synchronise events that fired while the scene bundle was still loading.
+    controls.setBookOpen(document.getElementById('book')?.classList.contains('open') ?? false);
+    // only reachable when explicitly asked for, so normal loads stay clean
+    if (location.search.includes('nbtest')) (window as any).__nightbowl = controls;
+    loading?.classList.add('gone');
   }
 
   if ('fonts' in document) {

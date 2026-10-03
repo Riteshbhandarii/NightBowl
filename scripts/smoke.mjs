@@ -181,10 +181,12 @@ async function session(flags, run) {
 
   let id = 0;
   const pending = new Map();
+  const eventHandlers = new Map();
   const errors = [];
   ws.addEventListener('message', (e) => {
     const m = JSON.parse(e.data);
     if (m.id && pending.has(m.id)) { pending.get(m.id)(m); pending.delete(m.id); }
+    for (const handler of eventHandlers.get(m.method) || []) handler(m.params);
     if (m.method === 'Runtime.exceptionThrown') {
       const d = m.params.exceptionDetails;
       errors.push(d.exception?.description || d.text);
@@ -192,6 +194,11 @@ async function session(flags, run) {
   });
   const send = (method, params = {}) =>
     new Promise((res) => { const i = ++id; pending.set(i, res); ws.send(JSON.stringify({ id: i, method, params })); });
+  const on = (method, handler) => {
+    const handlers = eventHandlers.get(method) || [];
+    handlers.push(handler);
+    eventHandlers.set(method, handlers);
+  };
   const evaluate = async (expr) => {
     const r = await send('Runtime.evaluate', { expression: expr, returnByValue: true, awaitPromise: true });
     if (r.result?.exceptionDetails) {
@@ -205,7 +212,7 @@ async function session(flags, run) {
   await send('Runtime.enable');
 
   try {
-    await run({ send, evaluate, errors });
+    await run({ send, evaluate, on, errors });
   } finally {
     ws.close();
     chrome.kill('SIGKILL');
@@ -242,6 +249,117 @@ async function loadPage({ send, evaluate }, path, readySelector) {
 }
 
 console.log(`\nnightbowl smoke test → ${URL_}\n`);
+
+// ---- pass 0: the menu must not wait for the scene module ----
+console.log('menu before scene');
+await session(['--force-prefers-reduced-motion'], async (ctx) => {
+  const { send, evaluate, on, errors } = ctx;
+  let sceneRequestId = null;
+  on('Fetch.requestPaused', ({ requestId }) => { sceneRequestId = requestId; });
+  await send('Fetch.enable', {
+    patterns: [{ urlPattern: '*Scene.astro*', requestStage: 'Request' }],
+  });
+  await send('Page.navigate', { url: `${URL_}/?nbtest=1&delayed-scene=1` });
+
+  let menuParsed = false;
+  for (let i = 0; i < 40 && !(sceneRequestId && menuParsed); i++) {
+    await sleep(100);
+    menuParsed = await evaluate(`!!document.getElementById('book')
+      && !!document.querySelector('.topbar [data-open="menu"]')`);
+  }
+  check('scene bundle is held before it executes', !!sceneRequestId);
+  check('menu markup arrives while the scene bundle is held', menuParsed);
+
+  if (sceneRequestId && menuParsed) {
+    const opened = await evaluate(`(() => {
+      const opener = document.querySelector('.topbar [data-open="menu"]');
+      opener.focus();
+      opener.click();
+      const book = document.getElementById('book');
+      return {
+        open: book.classList.contains('open') && book.classList.contains('flipped'),
+        active: document.querySelector('#tabs .active')?.dataset.tab,
+        content: document.getElementById('pageLeft').textContent.trim().length
+          + document.getElementById('pageRight').textContent.trim().length,
+        openerText: opener.textContent.trim(),
+      };
+    })()`);
+    await sleep(300);
+    opened.focused = await evaluate(`document.activeElement?.id === 'bookClose'`);
+    check('menu opens with content before the scene executes',
+      opened.open && opened.active === 'menu' && opened.content > 0,
+      JSON.stringify(opened));
+    check('early menu moves focus into the dialog', opened.focused);
+
+    const controls = await evaluate(`(() => {
+      const page = document.getElementById('pageRight');
+      const before = page.textContent.trim();
+      page.querySelector('.pageflip-hint')?.click();
+      const turned = page.textContent.trim() !== before;
+      document.querySelector('#tabs [data-tab="bill"]').click();
+      const tab = document.querySelector('#tabs .active')?.dataset.tab;
+      const content = page.textContent.trim();
+      const focusable = document.getElementById('book')
+        .querySelectorAll('button, a[href], [tabindex]');
+      focusable[focusable.length - 1].focus();
+      document.getElementById('book').dispatchEvent(new KeyboardEvent('keydown', {
+        key: 'Tab', bubbles: true, cancelable: true,
+      }));
+      return {
+        turned,
+        tab,
+        content: content.length,
+        focusWrapped: document.activeElement?.id === 'bookClose',
+      };
+    })()`);
+    check('early menu tabs and page turn work',
+      controls.turned && controls.tab === 'bill' && controls.content > 0,
+      JSON.stringify(controls));
+    check('early menu traps keyboard focus', controls.focusWrapped);
+
+    const closed = await evaluate(`(() => {
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      return {
+        closed: !document.getElementById('book').classList.contains('open'),
+        focusRestored: document.activeElement === document.querySelector('.topbar [data-open="menu"]'),
+      };
+    })()`);
+    check('early menu closes and restores focus', closed.closed && closed.focusRestored,
+      JSON.stringify(closed));
+
+    await evaluate(`document.querySelector('.topbar [data-open="menu"]').click()`);
+    await send('Fetch.continueRequest', { requestId: sceneRequestId });
+    await send('Fetch.disable');
+    let booted = false;
+    for (let i = 0; i < 40 && !booted; i++) {
+      await sleep(500);
+      booted = await evaluate(`!!window.__nightbowl`);
+    }
+    check('scene still initialises after the early menu interaction', booted);
+    let synced = null;
+    for (let i = 0; i < 20 && !synced?.pinsHidden; i++) {
+      await sleep(100);
+      synced = await evaluate(`(() => {
+        const pins = window.__nightbowl?.auditPins().pins || [];
+        return {
+          bookOpen: document.getElementById('book').classList.contains('open'),
+          pinsHidden: pins.length > 0 && pins.every((pin) => !pin.shown),
+        };
+      })()`);
+    }
+    check('late scene boot inherits the open book state', synced.bookOpen && synced.pinsHidden,
+      JSON.stringify(synced));
+    await evaluate(`document.getElementById('bookClose').click()`);
+    let pinsVisible = false;
+    for (let i = 0; i < 20 && !pinsVisible; i++) {
+      await sleep(100);
+      pinsVisible = await evaluate(`window.__nightbowl.auditPins().pins.some((pin) => pin.shown)`);
+    }
+    check('scene observes early controller close events', pinsVisible);
+    check('early menu path has no uncaught exceptions', errors.length === 0,
+      errors.slice(0, 2).join(' | '));
+  }
+});
 
 // ---- pass 1: the normal path ----
 console.log('normal load');
@@ -797,22 +915,9 @@ await session(['--disable-webgl', '--disable-gpu'], async (ctx) => {
 // ---- pass 7: repeatable throttled-load budget (FCP is the supported paint metric) ----
 console.log('\nthrottled 4G load');
 
-// Two budgets for the same assertion, because the same page genuinely takes
-// longer without a GPU, and because the software path is noisy.
-//
-//   hardware GPU, local          ~1670ms
-//   software rasteriser, local    3215ms
-//   software rasteriser, runner   2748ms and 4143ms on two runs
-//
-// 2500ms is the product target and hardware meets it. The software numbers
-// spread by 1.4s across runs on the same commit, so a bound set just above the
-// worst one would go red on runner load rather than on a regression, which is
-// worse than no bound at all. 6000ms sits clear of that spread and still
-// catches a real doubling. It is a coarse guard, not the product target, and
-// on this path it lands close to the scene-ready bound below: issue #27 is
-// what makes this check sharp again. Which bound applied is printed with it.
-const SOFTWARE_GPU = /swiftshader/i.test(process.env.SMOKE_FLAGS || '');
-const USABLE_BUDGET = SOFTWARE_GPU ? 6000 : 2500;
+// Menu usability is independent of WebGL and uses the same product budget on
+// hardware and software renderers.
+const USABLE_BUDGET = 2500;
 
 await session(['--force-prefers-reduced-motion'], async (ctx) => {
   const { send, evaluate, errors } = ctx;
@@ -861,12 +966,9 @@ await session(['--force-prefers-reduced-motion'], async (ctx) => {
   check('4G: first contentful paint stays under 2.5s',
     measurement?.fcp > 0 && measurement.fcp <= 2500,
     `FCP=${Math.round(measurement?.fcp || 0)}ms`);
-  // This times the menu becoming openable, which waits on the MenuBook island
-  // hydrating, not on WebGL. The scene is covered by the next check.
   check(`4G: menu content is usable inside ${USABLE_BUDGET}ms`,
     usableAt > 0 && usableAt <= USABLE_BUDGET,
-    `usable=${Math.round(usableAt)}ms budget=${USABLE_BUDGET}ms`
-    + ` (${SOFTWARE_GPU ? 'software renderer' : 'hardware GPU'})`);
+    `usable=${Math.round(usableAt)}ms budget=${USABLE_BUDGET}ms`);
   check('4G: interactive scene is ready inside 6s',
     measurement?.sceneReady && measurement.elapsed <= 6000,
     `ready=${measurement?.sceneReady} elapsed=${Math.round(measurement?.elapsed || 0)}ms`);

@@ -184,23 +184,27 @@ const anyDraft =
   {anyDraft && <p class="draft" data-draft>{SITE.draftStamp}</p>}
 </div>
 
-<script>
-  const book = document.getElementById('book')!;
-  const backdrop = document.getElementById('backdrop')!;
-  const pageLeft = document.getElementById('pageLeft')!;
-  const pageRight = document.getElementById('pageRight')!;
-  const pageTurn = document.getElementById('pageTurn')!;
-  const tabsEl = document.getElementById('tabs')!;
-  const closeBtn = document.getElementById('bookClose')!;
-  const cover = book.querySelector('.cover')!;
+<!-- This controller must run while the HTML is parsed. A module here is ordered
+     behind the much larger scene module, leaving the painted menu inert while
+     that bundle downloads and executes. Keep this script dependency-free. -->
+<script is:inline>
+(() => {
+  const book = document.getElementById('book');
+  const backdrop = document.getElementById('backdrop');
+  const pageLeft = document.getElementById('pageLeft');
+  const pageRight = document.getElementById('pageRight');
+  const pageTurn = document.getElementById('pageTurn');
+  const tabsEl = document.getElementById('tabs');
+  const closeBtn = document.getElementById('bookClose');
+  const cover = book.querySelector('.cover');
   const REDUCED = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   const draftHtml = document.querySelector('#sectionData [data-draft]')?.outerHTML ?? '';
 
   // parse the pre-rendered content into { key: [ {l, r}, ... ] }
-  const SECTIONS: Record<string, { l: string; r: string }[]> = {};
+  const SECTIONS = {};
   document.querySelectorAll('#sectionData section[data-sec]').forEach((sec) => {
-    const key = (sec as HTMLElement).dataset.sec!;
+    const key = sec.dataset.sec;
     SECTIONS[key] = [...sec.querySelectorAll(':scope > .pg')].map((pg) => ({
       l: pg.querySelector('[data-side="l"]')?.innerHTML ?? '',
       r: pg.querySelector('[data-side="r"]')?.innerHTML ?? '',
@@ -208,12 +212,12 @@ const anyDraft =
   });
 
   let isOpen = false;
-  let curTab: string | null = null;
+  let curTab = null;
   let curPage = 0;
-  let lastFocus: HTMLElement | null = null;
+  let lastFocus = null;
 
-  function render(withTurn: boolean) {
-    const pages = SECTIONS[curTab!] || [];
+  function render(withTurn) {
+    const pages = SECTIONS[curTab] || [];
     const pg = pages[curPage] || { l: '', r: '' };
     const multi = pages.length > 1;
     const mobile = window.matchMedia('(max-width: 860px)').matches;
@@ -237,8 +241,8 @@ const anyDraft =
       pageLeft.innerHTML = pg.l;
       pageRight.innerHTML = pg.r + stamp;
     }
-    pageLeft.dataset.section = curTab!;
-    pageRight.dataset.section = curTab!;
+    pageLeft.dataset.section = curTab;
+    pageRight.dataset.section = curTab;
     pageLeft.scrollTop = 0;
     pageRight.scrollTop = 0;
 
@@ -254,18 +258,18 @@ const anyDraft =
     }
   }
 
-  function setTab(tab: string, fromClick: boolean) {
+  function setTab(tab, fromClick) {
     if (!SECTIONS[tab]) return;
     curTab = tab;
     curPage = 0;
     [...tabsEl.children].forEach((c) =>
-      c.classList.toggle('active', (c as HTMLElement).dataset.tab === tab)
+      c.classList.toggle('active', c.dataset.tab === tab)
     );
     render(fromClick && isOpen);
   }
 
-  function open(tab: string) {
-    lastFocus = document.activeElement as HTMLElement;
+  function open(tab) {
+    lastFocus = document.activeElement;
     setTab(tab || 'menu', false);
     backdrop.classList.add('open');
     book.classList.add('open');
@@ -293,17 +297,18 @@ const anyDraft =
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && isOpen) close(); });
   cover.addEventListener('click', () => book.classList.add('flipped'));
   tabsEl.addEventListener('click', (e) => {
-    const b = (e.target as HTMLElement).closest('button[data-tab]') as HTMLElement | null;
-    if (b) setTab(b.dataset.tab!, true);
+    const b = e.target instanceof Element ? e.target.closest('button[data-tab]') : null;
+    if (b) setTab(b.dataset.tab, true);
   });
-  document.addEventListener('nb:open', (e) => open((e as CustomEvent).detail));
+  document.addEventListener('nb:open', (e) => open(e.detail));
 
   book.addEventListener('keydown', (e) => {
-    if ((e as KeyboardEvent).key !== 'Tab' || !isOpen) return;
-    const f = book.querySelectorAll<HTMLElement>('button, a[href], [tabindex]');
+    if (e.key !== 'Tab' || !isOpen) return;
+    const f = book.querySelectorAll('button, a[href], [tabindex]');
     if (!f.length) return;
     const first = f[0], last = f[f.length - 1];
-    if ((e as KeyboardEvent).shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
-    else if (!(e as KeyboardEvent).shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+    if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+    else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
   });
+})();
 </script>
