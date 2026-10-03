@@ -191,6 +191,23 @@ frame-counted version would have taken, so the three are directly comparable.
 There is also a separate check that the starvation really did slow the frames
 down, so this cannot pass by failing to load the machine.
 
+### Visitor meal interaction
+
+`npm run audit:visitor` exercises both dishes through real seating, cook delivery
+and repeated bites until the bowl is empty, with the visitor staying seated afterward.
+It checks one order per visit, busy-service/turnover queues,
+hand-to-bowl contact, portfolio access throughout, keyboard activation,
+dismissal, reduced motion and five viewport layouts. The NPC sweep also samples
+the visitor's eating/idle poses with both topping sets without giving them diner AI.
+
+Use `npm run audit:visitor -- --out /tmp/nightbowl-visitor-review` to capture live
+choice, carry, placement and bite frames for visual review.
+
+The existing cost gates remain unchanged: 250 startup draw calls and 50,000
+triangles in the reduced-motion phone-landscape view. Animated peaks are printed
+separately, not passed off as meeting that static-view cap; the pre-feature live
+animated scene already exceeds it. Physical phone performance remains #34.
+
 ### NPC pose audit
 
 This one is worth understanding, because it is the check that stops the

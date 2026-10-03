@@ -135,7 +135,16 @@
     "seatHotspot": "Take a seat",
     "seatPrompt": "take a seat",
     "seatAria": "Take the empty seat at the counter",
-    "youLabel": "you"
+    "youLabel": "you",
+    "orderTitle": "What’ll it be?",
+    "orderHouse": "House ramen",
+    "orderHouseNote": "Egg, chashu & spring onion",
+    "orderVeggie": "Veggie ramen",
+    "orderVeggieNote": "Tofu, mushrooms & greens",
+    "orderSkip": "Just browsing",
+    "orderQueued": "Your bowl’s next. Keep looking around.",
+    "orderServing": "One hot bowl, coming over.",
+    "orderEnjoy": "Enjoy your bowl."
   },
   "chatter": {
     "cook": [

@@ -22,6 +22,15 @@ const sceneContent = {
 <canvas id="scene" aria-label={SCENE.canvasLabel}></canvas>
 <div class="loading" id="loading" data-error={SCENE.error}>{SCENE.loading}</div>
 <div class="pins" id="pins"></div>
+<aside class="visitor-order" id="visitorOrder" aria-labelledby="visitorOrderTitle" hidden>
+  <h2 id="visitorOrderTitle">{SCENE.orderTitle}</h2>
+  <div id="visitorOrderChoices" class="visitor-order-choices">
+    <button type="button" data-visitor-dish="house"><span>{SCENE.orderHouse}</span><small>{SCENE.orderHouseNote}</small></button>
+    <button type="button" data-visitor-dish="veggie"><span>{SCENE.orderVeggie}</span><small>{SCENE.orderVeggieNote}</small></button>
+  </div>
+  <p id="visitorOrderStatus" role="status" aria-live="polite" aria-atomic="true"></p>
+  <button type="button" class="visitor-order-skip" id="visitorOrderSkip">{SCENE.orderSkip}</button>
+</aside>
 <div class="hint" id="hint">{SCENE.hint}</div>
 <div class="credit">{SCENE.credit}</div>
 
