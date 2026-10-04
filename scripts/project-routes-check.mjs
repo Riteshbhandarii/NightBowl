@@ -83,7 +83,9 @@ const outputRoot = () => {
   const dist = join(root, 'dist');
   return existsSync(join(dist, 'client')) ? join(dist, 'client') : dist;
 };
-const build = () => execFileSync('npm', ['run', 'build'], { cwd: root, stdio: 'inherit' });
+const build = (origin) => execFileSync('npm', ['run', 'build'], {
+  cwd: root, stdio: 'inherit', env: { ...process.env, ...(origin ? { NIGHTBOWL_SITE_URL: origin } : {}) },
+});
 
 console.log('\nproject source contract');
 for (const file of projectFiles) {
@@ -162,7 +164,7 @@ try {
       && !html.includes('PROJECT_ROUTE_FIXTURE_STACK'));
   }
   writeFileSync(draftFile, draftFixture.replace(/^status:\s*["']?draft["']?$/m, 'status: "published"'));
-  build();
+  build('https://nightbowl-fixture.dev');
 
   const dist = outputRoot();
   const menuHtml = readFileSync(join(dist, 'menu/index.html'), 'utf8');
@@ -171,6 +173,8 @@ try {
 
   if (existsSync(detailPath)) {
     const detailHtml = readFileSync(detailPath, 'utf8');
+    check('owned case study has its configured route-specific canonical', detailHtml.includes(`rel="canonical" href="https://nightbowl-fixture.dev/menu/${slug}/"`));
+    check('owned case study shares its actual title and image', detailHtml.includes('Publication test fixture') && detailHtml.includes('https://nightbowl-fixture.dev/images/nightbowl-share.png'));
     check('detail renders a heading', detailHtml.includes('PROJECT_ROUTE_FIXTURE_HEADING'));
     check('detail renders a list', detailHtml.includes('PROJECT_ROUTE_FIXTURE_LIST'));
     check('detail renders inline code', detailHtml.includes('PROJECT_ROUTE_FIXTURE_INLINE_CODE'));
