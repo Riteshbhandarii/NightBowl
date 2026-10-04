@@ -1409,6 +1409,14 @@ export function initScene(canvas, onHotspot, opts = {}) {
   const _handL = new THREE.Vector3(), _handR = new THREE.Vector3();
   const _carry = new THREE.Vector3(), _seatBowl = new THREE.Vector3();
   const _carryHead = new THREE.Vector3(), _carryBowlBox = new THREE.Box3();
+  const _carryAxis = new THREE.Vector3(), _carryHands = new THREE.Vector3();
+  function carryHandSeparation() {
+    // Signed separation along the cook's lateral axis stays meaningful while
+    // turning. World-X projection collapses sideways grips to zero and can
+    // label two correctly separated hands as crossed.
+    _carryAxis.set(1, 0, 0).transformDirection(guide.matrixWorld);
+    return _carryHands.copy(_handR).sub(_handL).dot(_carryAxis);
+  }
   const SERVICE_BOWL_DROP = 0.33;
   function syncServiceBowl() {
     if (!serviceBowl?.visible || !guideRig) return;
@@ -3489,7 +3497,7 @@ export function initScene(canvas, onHotspot, opts = {}) {
         visibleBox(you.userData.table.bowl.getObjectByName('bowl'), _carryBowlBox);
         visitorCarryPose = {
           handGap: Math.max(_carryBowlBox.distanceToPoint(_handL), _carryBowlBox.distanceToPoint(_handR)),
-          handSeparation: _handR.x - _handL.x,
+          handSeparation: carryHandSeparation(),
           faceClearance: _carryHead.y - _carryBowlBox.max.y,
         };
       }
@@ -3502,7 +3510,7 @@ export function initScene(canvas, onHotspot, opts = {}) {
         const serviceTime = nowSec() - service.startedAt;
         serviceCarryPose = {
           carrying: serviceTime >= 1.65 && serviceTime < 4.15,
-          handSeparation: _handR.x - _handL.x,
+          handSeparation: carryHandSeparation(),
           bowlTop: _carryBowlBox.max.y,
           headY: _carryHead.y,
           faceClearance: _carryHead.y - _carryBowlBox.max.y,

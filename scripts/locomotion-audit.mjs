@@ -45,6 +45,13 @@ async function sample(evaluate, kind, index, count, delay = 70) {
   const frames = [];
   for (let i = 0; i < count; i++) {
     frames.push(await evaluate(`window.__nightbowl.auditLocomotion('${kind}', ${index})`));
+    if (kind === 'cook') {
+      const carry = await evaluate('window.__nightbowl.selfCheck().service?.carryPose');
+      if (carry?.carrying) {
+        assert.ok(carry.handSeparation >= 0.25, `walking cook crossed hands: ${JSON.stringify(carry)}`);
+        assert.ok(carry.faceClearance >= 0.07, `walking cook bowl covers face: ${JSON.stringify(carry)}`);
+      }
+    }
     await sleep(delay);
   }
   return frames;
