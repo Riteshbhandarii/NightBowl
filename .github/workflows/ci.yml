@@ -168,6 +168,9 @@ jobs:
       - name: Visitor meal interaction
         run: npm run audit:visitor
 
+      - name: Menu accessibility and responsive interactions
+        run: npm run audit:menu
+
   # Catches: the admin losing its GitHub authentication, or the
   # draft-preview-publish flow breaking.
   cms:

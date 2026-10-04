@@ -191,6 +191,19 @@ frame-counted version would have taken, so the three are directly comparable.
 There is also a separate check that the starvation really did slow the frames
 down, so this cannot pass by failing to load the machine.
 
+### Menu accessibility and responsive interactions
+
+`npm run audit:menu` covers the states missed by the original layout smoke checks:
+an open book crossing the 860px breakpoint in either direction, all sections and
+both Menu spreads retaining their content, native Tab traversal and accessibility
+tree exclusion while closed, and rapid Enter/Escape races preserving opener focus.
+It also measures descendant text bounds and reading-text/control overlap at
+280/320/390/844px, then uses real pointer clicks on the draft-preview tabs and
+checks that Close, Open menu and Back to admin stay reachable.
+
+Use `npm run audit:menu -- --out /tmp/nightbowl-menu-review` for screenshots.
+Zero document overflow alone does not certify readable, unclipped child content.
+
 ### Visitor meal interaction
 
 `npm run audit:visitor` exercises both dishes through real seating, cook delivery
