@@ -12,6 +12,7 @@ ramen stall. Built with Astro + three.js, with a GitHub-backed Keystatic admin.
 npm install
 npm run dev        # http://localhost:4321
 npm run check
+npm run check:security
 npm run build      # -> dist/ (standalone Node server + static assets)
 npm run check:build
 npm run check:perf
@@ -86,6 +87,11 @@ PUBLIC_KEYSTATIC_GITHUB_APP_SLUG
 Add the deployed `/api/keystatic/github/oauth/callback` URL to the GitHub App's
 callback URLs. Never commit `.env`; it is ignored.
 
+CMS API responses carry `Cache-Control: private, no-store`, including auth
+redirects and errors. Preserve that policy at the production host/CDN.
+See [the dependency and caching review](docs/security.md) for the current
+advisory findings, regression checks and limits of the audit result.
+
 ## Where the content lives (currently draft copy)
 
 | What | File |
@@ -101,9 +107,12 @@ the content is portable and reviewable in Git.
 
 ## The cook
 
-The scene loads `public/models/chef.glb` if it exists, otherwise it uses a
-hand-built stand-in. See `public/models/PUT-CHEF-GLB-HERE.md` for the Mixamo
-steps to get a free rigged one.
+The production asset track is an original Blender cook and at least ten distinct
+NPC looks (#79). Start with one cook; see [the character handoff](public/models/PUT-CHEF-GLB-HERE.md).
+The legacy `chef.glb` loader can display a model and play one idle clip, but
+does **not** connect it to cook AI, tools, serving or turnover. Dropping in a
+GLB is not a completed replacement. Keep the tested procedural cook until the
+original rig is integrated and the interaction/performance gates pass.
 
 ## Deploy
 

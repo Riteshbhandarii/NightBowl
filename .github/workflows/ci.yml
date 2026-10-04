@@ -56,6 +56,11 @@ jobs:
       - name: Install
         run: npm ci
 
+      - name: Dependency advisories and security regressions
+        run: |
+          npm audit --audit-level=moderate
+          npm run check:security
+
       - name: Type check
         run: npm run check
       - if: failure()
