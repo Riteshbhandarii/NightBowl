@@ -224,6 +224,7 @@ async function session(flags, run) {
 }
 
 async function load({ send, evaluate }) {
+  await evaluate(`(() => { try { sessionStorage.removeItem('nightbowl:seated-this-visit'); } catch {} })()`);
   await send('Page.navigate', { url: `${URL_}/?nbtest=1` });
   for (let i = 0; i < 40; i++) {
     await sleep(500);

@@ -15,6 +15,7 @@
     "check:launch": "node scripts/launch-check.mjs",
     "audit:access": "node scripts/content-access-audit.mjs",
     "audit:pause": "node scripts/scene-motion-audit.mjs",
+    "audit:visit": "node scripts/visit-continuity-audit.mjs",
     "preview": "node ./scripts/serve.mjs",
     "astro": "astro",
     "smoke": "node scripts/smoke.mjs",

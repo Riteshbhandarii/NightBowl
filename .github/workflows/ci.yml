@@ -179,7 +179,7 @@ jobs:
     name: interactions - menu, repeat meals, grounded walking
     needs: build
     runs-on: ubuntu-latest
-    timeout-minutes: 12
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -210,6 +210,8 @@ jobs:
         run: npm run audit:locomotion
       - name: Native content access and browser history
         run: npm run audit:access
+      - name: Seating survives content-page round trips
+        run: npm run audit:visit
       - name: Persistent pause and lifecycle continuity
         run: npm run audit:pause
       - if: failure()

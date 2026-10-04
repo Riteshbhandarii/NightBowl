@@ -159,7 +159,8 @@ export function initScene(canvas, onHotspot, opts = {}) {
   const SEAT = { x: 0.1, z: 1.52 };
   const CUSTOMER_Z = 1.52;
   const TURNOVER_WALK = { depthSeconds: 2.4, lateralSeconds: 4 };
-  const WALK_STRIDE = 0.56;
+  // A complete left/right cycle: each planted step covers half this distance.
+  const WALK_STRIDE = 1.12;
   // Top face of a stool seat. buildStool and the seated pose both read this, so
   // the two cannot drift apart.
   const SEAT_TOP_Y = 0.69;
@@ -201,8 +202,13 @@ export function initScene(canvas, onHotspot, opts = {}) {
   let youPin = null;       // the small "you" tag over their head
   // intro state: 'street' = first person on the pavement, 'sitting' = the walk-in
   // and sit move, 'seated' = the scene exactly as it has always behaved.
-  // the walk in plays on every load; only reduced motion skips it.
+  // Content pages replace this document. Remember completed seating in this
+  // tab so returning to the stall does not demand another entrance.
+  const seatVisitKey = 'nightbowl:seated-this-visit';
   let phase = motionState().paused ? 'seated' : 'street';
+  try {
+    if (sessionStorage.getItem(seatVisitKey) === 'seated') phase = 'seated';
+  } catch { /* blocked storage: the current scene still works */ }
   let guide = null;
   let guideMixer = null;
   let guideRig = null;
@@ -1754,9 +1760,9 @@ export function initScene(canvas, onHotspot, opts = {}) {
     if (nowSec() >= nextBeatAt) chooseBeat();
   }
 
-  function solveWalkingLeg(leg, footZ, lift, amt) {
+  function solveWalkingLeg(leg, footZ, lift, amt, hipDrop = 0) {
     const upper = 0.4, lower = Math.hypot(0.375, 0.03);
-    const targetY = -0.755 + lift * amt;
+    const targetY = -0.755 + hipDrop + lift * amt;
     const targetZ = footZ * amt;
     const reach = Math.min(upper + lower - 0.001, Math.hypot(targetY, targetZ));
     const knee = Math.acos(Math.max(-1, Math.min(1,
@@ -1786,10 +1792,14 @@ export function initScene(canvas, onHotspot, opts = {}) {
       };
     };
     const left = foot(0.25), right = foot(0.75);
-    solveWalkingLeg(rig.legL, left.z, left.lift, amt);
-    solveWalkingLeg(rig.legR, right.z, right.lift, amt);
+    // Lower the pelvis as the planted leg extends. Without this compensation,
+    // longer steps exceed leg reach and the IK clamp makes the feet slide.
+    const stanceZ = (left.lift === 0 ? left.z : right.z) * amt;
+    const hipDrop = Math.max(0, 0.755 - Math.sqrt(0.765 ** 2 - stanceZ ** 2));
+    solveWalkingLeg(rig.legL, left.z, left.lift, amt, hipDrop);
+    solveWalkingLeg(rig.legR, right.z, right.lift, amt, hipDrop);
     // Roots have different heights; keep the stance sole on the same ground.
-    rig.hip.position.y = 0.8 - npc.position.y / npc.scale.y;
+    rig.hip.position.y = 0.8 - npc.position.y / npc.scale.y - hipDrop;
     if (!swingArms) return;
     const phase = distance / WALK_STRIDE * Math.PI * 2;
     rig.armL.sh.rotation.x = Math.sin(phase + Math.PI) * 0.32 * amt;
@@ -2722,6 +2732,7 @@ export function initScene(canvas, onHotspot, opts = {}) {
   let restPos = null; // the orbit rest pose, captured on click
 
   if (phase === 'seated') {
+    try { sessionStorage.setItem(seatVisitKey, 'seated'); } catch { /* visit-only scene state */ }
     cam.az = cam.azT; cam.el = cam.elT; cam.r = cam.rT;
     setYouReveal(1); // reduced motion: you are simply already sitting there
     buildYouPin();
@@ -2821,6 +2832,7 @@ export function initScene(canvas, onHotspot, opts = {}) {
 
   function seated() {
     phase = 'seated';
+    try { sessionStorage.setItem(seatVisitKey, 'seated'); } catch { /* visit-only scene state */ }
     cam.az = cam.azT; cam.el = cam.elT; cam.r = cam.rT;
     if (seatGlowMat) seatGlowMat.visible = false;
     setYouReveal(1);

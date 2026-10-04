@@ -102,6 +102,12 @@ hash/history navigation and modifier clicks. `npm run audit:pause` verifies
 keyboard activation, saved and blocked storage, static ordering, paired rendered
 frames, service/departure clock continuity, reduced motion and WebGL fallback.
 Both audits accept `-- --url http://127.0.0.1:4321 --out /tmp/nightbowl-review`.
+`npm run audit:visit` adds native Menu → Bill → stall round trips and same-tab
+reloads at 1400/390px, book/Back/Escape meal continuity, a fresh-tab entrance and
+blocked-session-storage behavior. Fresh-room test helpers deliberately clear
+only the seated-visit marker; native navigation/reload tests retain it. The
+interaction job allows 15 minutes for these lifecycle checks; app performance,
+geometry and pose limits are unchanged.
 
 ---
 
@@ -323,6 +329,9 @@ animated scene already exceeds it. Physical phone performance remains #34.
 departure directions, an arriving customer and the serving cook. Precise shoe
 mesh bounds also reject soles below the ground or floating above it; checking
 only the shoe origin misses ankle rotation driving the sole through the floor.
+Both street walkers, departing/arriving diners and the serving cook must reach
+0.46–0.68m forward foot separation normalized to their body scale, measured
+from actual shoe transforms rather than a copied stride constant.
 It compares
 actual street-root travel with gait distance under normal and starved frames,
 checks a cook displacement over half a metre after a skipped render, verifies
