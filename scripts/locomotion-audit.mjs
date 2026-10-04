@@ -148,6 +148,11 @@ await session(viewport, async (ctx) => {
   // A skipped render can advance the service root by more than half a metre.
   // Only an explicit street-loop wrap may reset gait tracking: a legitimate
   // sparse-frame displacement must still advance the cook's feet.
+  // Start a fresh room: after two complete turnovers a natural second-meal
+  // departure can legitimately take priority over a manually emptied bowl.
+  assert.ok(await openScene(ctx, url), 'sparse cook scene did not boot');
+  await evaluate("document.querySelector('.seat-pin')?.click()");
+  await waitFor(evaluate, "window.__nightbowl.selfCheck().phase === 'seated'", 'sparse cook seating');
   assert.ok(await evaluate('window.__nightbowl.testEmptyBowl(2)'));
   await waitFor(evaluate, 'window.__nightbowl.selfCheck().service?.dinerX > 0', 'right-side cook service');
   const beforeSparse = await evaluate("(() => { window.__nightbowl.auditBegin(); return window.__nightbowl.auditLocomotion('cook'); })()");
