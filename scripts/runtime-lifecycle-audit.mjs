@@ -211,8 +211,7 @@ await scenario('real tab switching preserves entrance, meal and turnover', {}, a
   assert.equal(reading.before.sceneTime, reading.after.sceneTime);
   await click(ctx, '#bookClose');
   const time = (await check(ctx)).sceneTime;
-  await sleep(350);
-  assert.ok((await check(ctx)).sceneTime > time, 'visible unpaused clock resumes');
+  await wait(ctx, `window.__nightbowl.selfCheck().sceneTime > ${time}`, 'visible unpaused clock resumes');
 });
 
 // A real background target, not a mocked document.hidden property. Relay CDP
@@ -249,8 +248,7 @@ await scenario('initially hidden tab does not auto-seat', {}, async ctx => {
     assert.equal(state.sceneTime, 0, 'background load starts frozen');
     await ctx.send('Target.activateTarget', { targetId });
     await wait({ evaluate }, '!document.hidden', 'activate initially hidden tab');
-    await sleep(350);
-    assert.ok(await evaluate('window.__nightbowl.selfCheck().sceneTime > 0'), 'first visible interval starts clock');
+    await wait({ evaluate }, 'window.__nightbowl.selfCheck().sceneTime > 0', 'first visible interval starts clock');
     assert.equal(await evaluate('window.__nightbowl.selfCheck().phase'), 'street');
   } finally {
     off();
