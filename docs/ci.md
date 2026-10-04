@@ -33,8 +33,16 @@ job's time allowance, and every suite still runs before merge.
 **What it catches:** code that no longer compiles, a page that silently stops
 being generated, and a JavaScript download that has quietly grown.
 
-It runs the type check, builds the site, tests publication/launch fixtures,
+It audits dependency advisories, runs security regressions and the type check,
+builds the site, tests publication/launch fixtures,
 then checks generated routes and payload size.
+
+`npm audit --audit-level=moderate` checks the registry's current advisories;
+`npm run check:security` independently checks the reviewed lockfile versions
+and Buffer serialization, host normalization and nested-brace behavior.
+See [the security review](security.md) for the cache advisory's disputed upstream
+status and the actual application boundary. Do not treat a clean audit as proof
+that every reported library behavior was fixed.
 
 `npm run check:projects` temporarily gives a draft extended Markdown and private
 structured fields. It verifies those stay out of public pages, publishes the
@@ -164,10 +172,8 @@ written against. It fails if a pin stops
 overlapping its object, if two pins land on top of each other so one cannot be
 clicked, or if a pin hides while its anchor is plainly on screen.
 
-One pin does not pass today: **The Bill** floats between 3 and 35 pixels above
-the tip box depending on viewport. It is listed by name in `PIN_DRIFT` in
-`scripts/smoke.mjs` and tracked by issue #45, so the other three cannot quietly
-join it. When #45 is fixed, delete that entry.
+All four pins must pass today. The Bill-pin defect (#45) is fixed and
+`PIN_DRIFT` in `scripts/smoke.mjs` is empty; there are no accepted pin misses.
 
 ### The walk-in intro under load
 
@@ -268,11 +274,11 @@ the limb in question and writes photographs to `docs/pose-shots/`, one per
 issue, from two angles. A measurement in millimetres is enough to fail a build
 and not enough to fix a pose.
 
-*If the new pose is actually correct* and the audit is the thing that is wrong,
-add the printed `id` to `scripts/npc-audit-accepted.json` along with the issue
-that owns it. Everything on that list is reported but does not fail the build.
-That file is the list of defects we know about and have decided not to fix yet —
-it should get shorter over time, not longer.
+`scripts/npc-audit-accepted.json` is empty: there are no accepted pose defects.
+If an assertion is genuinely wrong, reproduce it, inspect rendered evidence
+and correct the measurement under an issue. Do not add an exception just to
+make the build pass. Numeric pose checks and rendered visual review are both
+required for character changes.
 
 ### Object-derived IK targets
 
@@ -360,6 +366,12 @@ let anyone edit the site.
 
 **Local editing works.** Starts the development server and confirms you can
 actually open `/admin`, edit, and save.
+
+Both modes also check `private, no-store` on CMS API responses, including
+requests with `max-stale`. Production checks preserve auth redirects and both
+logout cookie expirations, and ensure public pages/assets do not inherit the
+private API policy. The GitHub credentials used by CI are fake; an actual
+production GitHub App setup remains a launch requirement.
 
 *Reproduce them:*
 ```

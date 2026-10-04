@@ -13,6 +13,7 @@
     "check:perf": "node scripts/perf-budget.mjs",
     "check:projects": "node scripts/project-routes-check.mjs",
     "check:launch": "node scripts/launch-check.mjs",
+    "check:security": "node --test scripts/security-check.mjs",
     "audit:access": "node scripts/content-access-audit.mjs",
     "audit:pause": "node scripts/scene-motion-audit.mjs",
     "audit:visit": "node scripts/visit-continuity-audit.mjs",

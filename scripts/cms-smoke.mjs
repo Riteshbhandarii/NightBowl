@@ -93,6 +93,55 @@ await send('Runtime.enable');
 
 try {
   console.log(`\nNightBowl CMS smoke (${mode}) → ${base}\n`);
+  for (const path of ['/api/keystatic/github/login', '/api/keystatic/github/logout', '/api/keystatic/tree']) {
+    for (const maxStale of [false, true]) {
+      const response = await fetch(new URL(path, base), {
+        redirect: 'manual',
+        headers: maxStale ? { 'cache-control': 'max-stale=999999' } : {},
+      });
+      const cacheControl = response.headers.get('cache-control') || '';
+      check(`CMS API cannot be cached: ${path}${maxStale ? ' (max-stale)' : ''}`,
+        /(?:^|,)\s*private\s*(?:,|$)/i.test(cacheControl)
+          && /(?:^|,)\s*no-store\s*(?:,|$)/i.test(cacheControl),
+        `status=${response.status} cache-control=${cacheControl}`);
+      if (mode === 'production' && path.endsWith('/logout')) {
+        const cookies = response.headers.getSetCookie();
+        check(`logout preserves both cookie expirations${maxStale ? ' (max-stale)' : ''}`,
+          cookies.some((cookie) => cookie.startsWith('keystatic-gh-access-token='))
+            && cookies.some((cookie) => cookie.startsWith('keystatic-gh-refresh-token=')));
+        check('logout preserves its redirect', response.status === 307
+          && response.headers.get('location') === '/keystatic');
+      }
+    }
+  }
+  const tree = await fetch(new URL('/api/keystatic/tree', base), {
+    headers: { 'no-cors': '1' },
+  });
+  check('local file-read API exists only in development',
+    tree.status === (mode === 'production' ? 404 : 200), `status=${tree.status}`);
+  check('successful local reads and denied production reads remain non-cacheable',
+    tree.headers.get('cache-control') === 'private, no-store');
+  if (mode === 'production') {
+    const update = await fetch(new URL('/api/keystatic/update', base), {
+      method: 'POST',
+      headers: { 'no-cors': '1', 'content-type': 'application/json' },
+      body: JSON.stringify({ additions: [], deletions: [] }),
+    });
+    check('production does not expose the local file-write API', update.status === 404);
+    check('denied production writes remain non-cacheable',
+      update.headers.get('cache-control') === 'private, no-store');
+    const home = await fetch(new URL('/', base));
+    const homeHtml = await home.text();
+    const assetPath = homeHtml.match(/(?:src|href)="([^" ]*\/_astro\/[^" ]+\.js)"/)?.[1];
+    check('public page is not forced into private API caching',
+      !/private|no-store/i.test(home.headers.get('cache-control') || ''));
+    check('public JavaScript asset is discoverable', !!assetPath);
+    if (assetPath) {
+      const asset = await fetch(new URL(assetPath, base));
+      check('public asset caching remains separate from CMS APIs', asset.ok
+        && !/private|no-store/i.test(asset.headers.get('cache-control') || ''));
+    }
+  }
   if (mode === 'production') {
     const auth = await fetch(new URL('/api/keystatic/github/login', base), {
       redirect: 'manual',
@@ -106,6 +155,22 @@ try {
       check('production auth redirect uses the configured client',
         new URL(authLocation).searchParams.get('client_id') === process.env.KEYSTATIC_GITHUB_CLIENT_ID);
     }
+    const states = [];
+    for (let client = 0; client < 2; client++) {
+      const login = await fetch(new URL('/api/keystatic/github/login?from=branch/main/collection/posts', base), {
+        redirect: 'manual',
+        headers: { 'cache-control': 'max-stale=999999' },
+      });
+      const location = login.headers.get('location');
+      const state = location ? new URL(location, base).searchParams.get('state') : null;
+      states.push(state);
+      check(`independent login ${client + 1} preserves its state cookie`, !!state
+        && login.headers.getSetCookie().some((cookie) => cookie.startsWith(`ks-${state}=`)));
+      check(`independent login ${client + 1} stays non-cacheable`,
+        login.headers.get('cache-control') === 'private, no-store');
+    }
+    check('independent login clients receive distinct OAuth states',
+      !!states[0] && !!states[1] && states[0] !== states[1]);
   }
 
   let body = '';

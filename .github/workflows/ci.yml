@@ -56,6 +56,11 @@ jobs:
       - name: Install
         run: npm ci
 
+      - name: Dependency advisories and security regressions
+        run: |
+          npm audit --audit-level=moderate
+          npm run check:security
+
       - name: Type check
         run: npm run check
       - if: failure()
@@ -162,8 +167,8 @@ jobs:
           echo "  npm run build"
           echo "  npm run preview          # in one terminal"
           echo "  npm run audit:npc        # in another"
-          echo "If the new pose is correct and the old assertion was wrong, add the"
-          echo "printed id to scripts/npc-audit-accepted.json with the issue that owns it."
+          echo "Inspect the rendered pose and fix the geometry or a proven measurement bug."
+          echo "The pose allowlist is empty; do not add an exception just to pass CI."
 
       - name: Object-derived IK targets
         run: npm run audit:ik
