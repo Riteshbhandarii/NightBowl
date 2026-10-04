@@ -30,7 +30,14 @@ const sceneContent = {
   </div>
   <p id="visitorOrderStatus" role="status" aria-live="polite" aria-atomic="true"></p>
   <button type="button" class="visitor-order-skip" id="visitorOrderSkip">{SCENE.orderSkip}</button>
+  <div id="visitorOrderComplete" class="visitor-order-choices" hidden>
+    <button type="button" id="visitorOrderAgain">{SCENE.orderEatAgain}</button>
+    <button type="button" id="visitorOrderDone">{SCENE.orderDone}</button>
+  </div>
 </aside>
+<div class="visitor-order" id="visitorOrderReopenPanel" hidden>
+  <button type="button" id="visitorOrderReopen">{SCENE.orderReopen}</button>
+</div>
 <div class="hint" id="hint">{SCENE.hint}</div>
 <div class="credit">{SCENE.credit}</div>
 

@@ -189,13 +189,18 @@ export function initScene(canvas, onHotspot, opts = {}) {
   let service = null;
   let serviceBowl = null;
   let serviceAudit = { started: false, lifted: false, filledCarry: false, completed: false };
-  // The visitor gets one meal, never a diner AI/refill/departure loop.
+  // Visitor meals stay outside the diner AI/refill/departure loop.
   const visitorOrder = { status: 'choosing', dish: null, dismissed: false, firstBite: false, carrying: false, startedAt: 0, biteAt: 0 };
   const orderPanel = document.getElementById('visitorOrder');
   const orderTitle = document.getElementById('visitorOrderTitle');
   const orderChoices = document.getElementById('visitorOrderChoices');
   const orderStatus = document.getElementById('visitorOrderStatus');
   const orderSkip = document.getElementById('visitorOrderSkip');
+  const orderComplete = document.getElementById('visitorOrderComplete');
+  const orderAgain = document.getElementById('visitorOrderAgain');
+  const orderDone = document.getElementById('visitorOrderDone');
+  const orderReopenPanel = document.getElementById('visitorOrderReopenPanel');
+  const orderReopen = document.getElementById('visitorOrderReopen');
   const _visitorSeat = new THREE.Vector3(SEAT.x, 1.09, 1.0);
   const _visitorPrep = new THREE.Vector3(COOK_HOME_X, 1.09, 0.6);
 
@@ -1425,16 +1430,18 @@ export function initScene(canvas, onHotspot, opts = {}) {
 
   function updateOrderUI() {
     if (!orderPanel) return;
-    const choiceFocused = orderChoices.contains(document.activeElement);
     orderPanel.hidden = phase !== 'seated' || bookOpen || visitorOrder.dismissed;
+    if (orderReopenPanel) orderReopenPanel.hidden = phase !== 'seated' || bookOpen || !visitorOrder.dismissed;
     orderTitle.textContent = visitorOrder.dish === 'house' ? LABELS.orderHouse
       : visitorOrder.dish === 'veggie' ? LABELS.orderVeggie : LABELS.orderTitle;
     orderChoices.hidden = visitorOrder.status !== 'choosing';
     for (const button of orderChoices.querySelectorAll('button')) button.disabled = !!visitorOrder.dish;
-    if (choiceFocused && visitorOrder.dish) orderSkip.focus({ preventScroll: true });
+    orderSkip.hidden = visitorOrder.status !== 'choosing';
+    if (orderComplete) orderComplete.hidden = visitorOrder.status !== 'done';
     orderStatus.textContent = visitorOrder.status === 'queued' ? LABELS.orderQueued
       : visitorOrder.status === 'serving' ? LABELS.orderServing
-        : visitorOrder.dish ? LABELS.orderEnjoy : '';
+        : visitorOrder.status === 'done' ? LABELS.orderComplete
+          : visitorOrder.dish ? LABELS.orderEnjoy : '';
   }
 
   function visitorBowl(dish) {
@@ -1454,7 +1461,15 @@ export function initScene(canvas, onHotspot, opts = {}) {
   function orderMeal(dish) {
     if (phase !== 'seated' || visitorOrder.dismissed || visitorOrder.dish || !['house', 'veggie'].includes(dish)) return false;
     visitorOrder.dish = dish;
-    visitorBowl(dish);
+    visitorOrder.firstBite = false;
+    delete visitorOrder.completedAt;
+    const bowl = visitorBowl(dish);
+    bowl.userData.dish = dish;
+    bowl.userData.ingredients = dish === 'veggie'
+      ? ['bowl', 'broth', 'noodles', 'tofu', 'mushroom', 'nori', 'spring-onion', 'chopsticks']
+      : ['bowl', 'broth', 'noodles', 'egg', 'nori', 'chashu', 'spring-onion', 'chopsticks'];
+    setBowlFill(bowl, 1);
+    setBowlVisible(bowl, false);
     visitorOrder.status = 'queued';
     // A display-only GLB has no serving rig yet (#79); don't strand an order.
     if (REDUCED || !guideRig) placeVisitorMeal(true);
@@ -1530,6 +1545,7 @@ export function initScene(canvas, onHotspot, opts = {}) {
       if (bowl.userData.fill <= 0.01) {
         visitorOrder.status = 'done';
         visitorOrder.completedAt = at;
+        updateOrderUI();
       } else {
         visitorOrder.biteAt = at + rnd(0.8, 2.2);
       }
@@ -1550,7 +1566,27 @@ export function initScene(canvas, onHotspot, opts = {}) {
     const dish = event.target.closest('[data-visitor-dish]')?.dataset.visitorDish;
     if (dish) orderMeal(dish);
   };
-  const onOrderSkip = () => { visitorOrder.dismissed = true; updateOrderUI(); };
+  const chooseAnotherMeal = () => {
+    if (visitorOrder.status !== 'done') return;
+    visitorOrder.status = 'choosing';
+    visitorOrder.dish = null;
+    updateOrderUI();
+  };
+  const onOrderSkip = () => {
+    if (visitorOrder.status !== 'choosing') return;
+    visitorOrder.dismissed = true;
+    updateOrderUI();
+  };
+  const onOrderDone = () => {
+    if (visitorOrder.status !== 'done') return;
+    visitorOrder.dismissed = true;
+    updateOrderUI();
+  };
+  const onOrderReopen = () => {
+    visitorOrder.dismissed = false;
+    if (visitorOrder.status === 'done') chooseAnotherMeal();
+    else updateOrderUI();
+  };
 
   /* ---------- speech ---------- */
   const bubbles = [];
@@ -2911,6 +2947,9 @@ export function initScene(canvas, onHotspot, opts = {}) {
   }
   orderChoices?.addEventListener('click', onOrderClick);
   orderSkip?.addEventListener('click', onOrderSkip);
+  orderAgain?.addEventListener('click', chooseAnotherMeal);
+  orderDone?.addEventListener('click', onOrderDone);
+  orderReopen?.addEventListener('click', onOrderReopen);
   updateOrderUI();
   frame();
 
@@ -3457,6 +3496,9 @@ export function initScene(canvas, onHotspot, opts = {}) {
       cancelAnimationFrame(raf);
       orderChoices?.removeEventListener('click', onOrderClick);
       orderSkip?.removeEventListener('click', onOrderSkip);
+      orderAgain?.removeEventListener('click', chooseAnotherMeal);
+      orderDone?.removeEventListener('click', onOrderDone);
+      orderReopen?.removeEventListener('click', onOrderReopen);
       window.removeEventListener('resize', onResize);
       renderer.dispose();
     },
