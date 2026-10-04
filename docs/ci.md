@@ -26,6 +26,20 @@ all took.
 reusing that same build. The longer meal lifecycle tests don't consume the scene
 job's time allowance, and every suite still runs before merge.
 
+### Runner and action versions
+
+All five jobs use `ubuntu-24.04`, not the moving `ubuntu-latest` label.
+The first-party checkout, setup-node and artifact actions are pinned to reviewed
+release commits; version comments in the workflow identify the releases.
+Their internal action runtime is Node 24. The application and test scripts
+still use Node 22 through setup-node; those are separate runtime choices.
+
+Artifact upload retains its zipped-directory default and download extracts the
+same `dist` artifact into `dist/`. Download's default digest-mismatch policy is
+an error. Review upstream release notes and rerun all five jobs before changing
+the action pins or OS image; do not enable unsafe fork checkout or weaken gates
+to accommodate a migration. This does not certify real-phone performance.
+
 ---
 
 ## Job 1: build
