@@ -240,6 +240,10 @@ export default config({
           orderQueued: requiredText('Order waiting message'),
           orderServing: requiredText('Order serving message'),
           orderEnjoy: requiredText('First bite message'),
+          orderComplete: requiredText('Finished meal message'),
+          orderEatAgain: requiredText('Repeat meal action'),
+          orderDone: requiredText('Finish meal action'),
+          orderReopen: requiredText('Reopen visitor order'),
         }, { label: '3D scene signs and prompts' }),
         chatter: fields.object({
           cook: fields.array(requiredText('Cook line'), { label: 'Cook lines', itemLabel: ({ value }) => value || 'New line' }),

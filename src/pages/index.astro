@@ -17,6 +17,7 @@ import { SITE } from '../data/content';
 
 <script>
   if (new URLSearchParams(window.location.search).get('preview') === 'menu') {
+    document.body.classList.add('menu-preview');
     const banner = document.getElementById('previewBanner');
     if (banner) banner.hidden = false;
     const openPreview = () =>

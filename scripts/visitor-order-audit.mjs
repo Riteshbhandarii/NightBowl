@@ -49,20 +49,65 @@ async function waitFor(ctx, predicate, label, timeout = 40000) {
 
 async function shot(ctx, name) {
   if (!out) return;
+  await ctx.evaluate('new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))');
   const r = await ctx.send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false });
   writeFileSync(join(out, `${name}.png`), Buffer.from(r.result.data, 'base64'));
 }
 
-async function menuRoundTrip(ctx, restore = true) {
+async function menuRoundTrip(ctx, restore = 'order') {
   await ctx.evaluate("document.querySelector('.menu-toggle').click()");
   assert.equal(await ctx.evaluate("document.getElementById('book').classList.contains('open')"), true, 'portfolio opens during order');
   assert.equal(await ctx.evaluate("document.getElementById('visitorOrder').hidden"), true, 'order panel hides behind book');
+  assert.equal(await ctx.evaluate("document.getElementById('visitorOrderReopenPanel').hidden"), true, 'reopen control hides behind book');
   await ctx.evaluate("document.dispatchEvent(new KeyboardEvent('keydown', {key:'Escape', bubbles:true}))");
-  assert.equal(await ctx.evaluate("document.getElementById('visitorOrder').hidden"), !restore, 'closing book restores correct order state');
+  assert.equal(await ctx.evaluate("document.getElementById('visitorOrder').hidden"), restore !== 'order', 'closing book restores correct order state');
+  assert.equal(await ctx.evaluate("document.getElementById('visitorOrderReopenPanel').hidden"), restore !== 'reopen', 'closing book restores the reopen control');
+}
+
+async function finishMeal(ctx, dish, label) {
+  await ctx.evaluate(`document.querySelector('[data-visitor-dish="${dish}"]').click()`);
+  assert.deepEqual(await ctx.evaluate("[window.__nightbowl.orderMeal('house'),window.__nightbowl.orderMeal('veggie')]"), [false, false], 'one meal despite duplicate choices');
+  const queued = await ctx.evaluate('window.__nightbowl.selfCheck()');
+  assert.equal(queued.visitorOrder.status, 'queued');
+  assert.equal(queued.visitorOrder.bowlVisible, false, 'queued repeat starts with the bowl offstage');
+  await waitFor(ctx, (s) => s.visitorOrder.status === 'serving', `${label} cook starts visitor order`);
+  const firstBite = await waitFor(ctx, (s) => {
+    assert.ok(!(s.visitorOrder.status === 'serving' && (s.service || s.turnover)), 'cook never overlaps services or turnover');
+    return s.visitorOrder.firstBite;
+  }, `${label} serve and first bite`, 30000);
+  assert.equal(firstBite.visitorOrder.status, 'eating', 'visitor continues after the first bite');
+  assert.ok(Math.abs(firstBite.visitorOrder.fill - 0.82) < 0.001);
+  assert.equal(firstBite.visitorOrder.heldChopsticks, true, 'keep chopsticks between bites');
+  assert.equal(firstBite.visitorOrder.restingChopsticks, false);
+  assert.equal(firstBite.visitorOrder.steam, true);
+  assert.ok(firstBite.visitorOrder.toppings.includes(dish === 'house' ? 'chashu' : 'tofu'));
+  assert.ok(!firstBite.visitorOrder.toppings.includes(dish === 'house' ? 'tofu' : 'chashu'));
+  const secondBite = await waitFor(ctx, (s) => s.visitorOrder.fill < 0.7, `${label} visitor takes another bite`);
+  assert.equal(secondBite.visitorOrder.status, 'eating');
+  const finished = await waitFor(ctx, (s) => s.visitorOrder.status === 'done', `${label} visitor finishes the bowl`, 60000);
+  assert.equal(finished.visitorOrder.dish, dish);
+  assert.equal(finished.visitorOrder.firstBite, true);
+  assert.equal(finished.visitorOrder.fill, 0);
+  assert.equal(finished.visitorOrder.bowlVisible, true);
+  assert.equal(finished.visitorOrder.steam, false);
+  assert.equal(finished.visitorOrder.heldChopsticks, false);
+  assert.equal(finished.visitorOrder.restingChopsticks, true);
+  assert.deepEqual(finished.visitorOrder.position, [0.1, 1.09, 1]);
+  assert.equal(await ctx.evaluate("document.getElementById('visitorOrderStatus').textContent"), 'Bowl finished. Another round?');
+  assert.equal(await ctx.evaluate("document.getElementById('visitorOrderComplete').hidden"), false, 'completion actions are announced and visible');
+  return finished;
+}
+
+async function holdNativeKey(ctx, key) {
+  const isEnter = key === 'Enter';
+  const event = { key: isEnter ? 'Enter' : ' ', code: isEnter ? 'Enter' : 'Space', windowsVirtualKeyCode: isEnter ? 13 : 32 };
+  await ctx.send('Input.dispatchKeyEvent', { type: 'keyDown', ...event, ...(isEnter ? { text: '\r', unmodifiedText: '\r' } : {}) });
+  await ctx.send('Input.dispatchKeyEvent', { type: 'keyDown', ...event, autoRepeat: true });
+  await ctx.send('Input.dispatchKeyEvent', { type: 'keyUp', ...event });
 }
 
 await session({ width: 1440, height: 900 }, async (ctx) => {
-  for (const dish of ['house', 'veggie']) {
+  for (const [dish, repeatDish] of [['house', 'veggie'], ['veggie', 'veggie']]) {
     await ctx.send('Emulation.setDeviceMetricsOverride', { width: dish === 'house' ? 1440 : 844, height: dish === 'house' ? 900 : 390, deviceScaleFactor: 1, mobile: false });
     assert.ok(await openScene(ctx, url), 'scene boots');
     await waitFor(ctx, (s) => s.phase === 'street', 'street startup budget');
@@ -73,51 +118,36 @@ await session({ width: 1440, height: 900 }, async (ctx) => {
     await shot(ctx, `${dish}-01-choice`);
     await menuRoundTrip(ctx);
     assert.equal(await ctx.evaluate("window.__nightbowl.orderMeal('not-a-dish')"), false);
+    await ctx.evaluate("document.getElementById('visitorOrderSkip').click()");
+    assert.equal(await ctx.evaluate("document.getElementById('visitorOrder').hidden"), true, 'Just browsing hides the meal prompt');
+    assert.equal(await ctx.evaluate("document.getElementById('visitorOrderReopenPanel').hidden"), false, 'dismissal leaves a discoverable reopen control');
+    assert.equal(await ctx.evaluate("window.__nightbowl.orderMeal('house')"), false, 'dismissal never orders behind the hidden prompt');
+    await menuRoundTrip(ctx, 'reopen');
+    await shot(ctx, `${dish}-02-dismissed`);
+    await ctx.evaluate("document.getElementById('visitorOrderReopen').click()");
+    assert.equal(await ctx.evaluate("document.getElementById('visitorOrderChoices').hidden"), false, 'reopen restores both recipes without ordering');
+    assert.equal(await ctx.evaluate("window.__nightbowl.selfCheck().visitorOrder.dish"), null);
+    await shot(ctx, `${dish}-03-reopened`);
     if (dish === 'house') {
       assert.ok(await ctx.evaluate('window.__nightbowl.testEmptyBowl(0)'));
       await waitFor(ctx, (s) => !!s.service, 'existing diner service starts');
     }
-    await ctx.evaluate(`document.querySelector('[data-visitor-dish="${dish}"]').click()`);
-    assert.deepEqual(await ctx.evaluate("[window.__nightbowl.orderMeal('house'),window.__nightbowl.orderMeal('veggie')]"), [false, false], 'one meal despite duplicate choices');
-    if (dish === 'house') {
-      const queued = await ctx.evaluate('window.__nightbowl.selfCheck()');
-      assert.equal(queued.visitorOrder.status, 'queued', 'busy cook finishes diner before visitor');
-      assert.equal(queued.visitorOrder.bowlVisible, false);
-      await menuRoundTrip(ctx);
-    }
-    await waitFor(ctx, (s) => s.visitorOrder.status === 'serving', 'cook starts visitor order');
-    const captured = new Set();
-    const firstBite = await waitFor(ctx, (s) => {
-      assert.ok(!(s.visitorOrder.status === 'serving' && (s.service || s.turnover)), 'cook never overlaps services or turnover');
-      return s.visitorOrder.firstBite;
-    }, 'serve and first bite', 25000);
-    assert.equal(firstBite.visitorOrder.status, 'eating', 'visitor continues after the first bite');
-    assert.ok(Math.abs(firstBite.visitorOrder.fill - 0.82) < 0.001);
-    assert.equal(firstBite.visitorOrder.heldChopsticks, true, 'keep chopsticks between bites');
-    assert.equal(firstBite.visitorOrder.restingChopsticks, false);
-    assert.equal(firstBite.visitorOrder.steam, true);
-    assert.ok(firstBite.visitorOrder.toppings.includes(dish === 'house' ? 'chashu' : 'tofu'));
-    assert.ok(!firstBite.visitorOrder.toppings.includes(dish === 'house' ? 'tofu' : 'chashu'));
+    await finishMeal(ctx, dish, `${dish} first meal`);
     await menuRoundTrip(ctx);
-    const secondBite = await waitFor(ctx, (s) => s.visitorOrder.fill < 0.7, 'visitor takes another bite');
-    assert.equal(secondBite.visitorOrder.status, 'eating');
-    const finished = await waitFor(ctx, (s) => s.visitorOrder.status === 'done', 'visitor finishes the bowl', 60000);
-    // Screenshots need live intermediate frames, so the capture run below uses
-    // a fresh visit; this assertion run never stops or forces the animation.
-    assert.equal(finished.visitorOrder.dish, dish);
-    assert.equal(finished.visitorOrder.firstBite, true);
-    assert.equal(finished.visitorOrder.fill, 0);
-    assert.equal(finished.visitorOrder.bowlVisible, true);
-    assert.equal(finished.visitorOrder.steam, false);
-    assert.equal(finished.visitorOrder.heldChopsticks, false);
-    assert.equal(finished.visitorOrder.restingChopsticks, true);
-    assert.deepEqual(finished.visitorOrder.position, [0.1, 1.09, 1]);
-    await menuRoundTrip(ctx);
-    await ctx.evaluate("document.getElementById('visitorOrderSkip').click()");
-    await menuRoundTrip(ctx, false);
-    assert.equal(await ctx.evaluate("window.__nightbowl.orderMeal('house')"), false, 'completed meal cannot reorder');
-    await shot(ctx, `${dish}-05-served`);
-    console.log(`PASS ${dish}: selected bowl, serialized delivery, repeated bites until empty, portfolio navigation`);
+    await shot(ctx, `${dish}-04-complete`);
+    await ctx.evaluate("document.getElementById('visitorOrderAgain').click()");
+    assert.equal(await ctx.evaluate("document.getElementById('visitorOrderChoices').hidden"), false, 'Eat again reopens both recipes');
+    await finishMeal(ctx, repeatDish, `${dish} repeat ${repeatDish}`);
+    await shot(ctx, `${dish}-05-repeat-complete`);
+    await ctx.evaluate("document.getElementById('visitorOrderDone').click()");
+    assert.equal(await ctx.evaluate("document.getElementById('visitorOrder').hidden"), true, 'Done hides the meal prompt');
+    assert.equal(await ctx.evaluate("document.getElementById('visitorOrderReopenPanel').hidden"), false, 'Done keeps ordering recoverable');
+    assert.equal(await ctx.evaluate("window.__nightbowl.orderMeal('house')"), false, 'Done does not auto-order');
+    await menuRoundTrip(ctx, 'reopen');
+    await ctx.evaluate("document.getElementById('visitorOrderReopen').click()");
+    assert.equal(await ctx.evaluate("window.__nightbowl.selfCheck().visitorOrder.status"), 'choosing', 'reopen after Done offers a fresh explicit choice');
+    assert.equal(await ctx.evaluate("window.__nightbowl.selfCheck().visitorOrder.dish"), null);
+    console.log(`PASS ${dish} -> ${repeatDish}: full meals, ${dish === repeatDish ? 'same' : 'different'} repeat, dismiss/reopen, Done, portfolio navigation`);
 
     if (out) {
       assert.ok(await openScene(ctx, url));
@@ -125,6 +155,7 @@ await session({ width: 1440, height: 900 }, async (ctx) => {
       await waitFor(ctx, (s) => s.phase === 'seated', 'screenshot seating');
       await ctx.evaluate(`document.querySelector('[data-visitor-dish="${dish}"]').click()`);
       await waitFor(ctx, (s) => s.visitorOrder.status === 'serving', 'screenshot serving');
+      const captured = new Set();
       const start = Date.now();
       while (Date.now() - start < 18000) {
         const s = await ctx.evaluate('window.__nightbowl.selfCheck()');
@@ -166,37 +197,51 @@ await session({ width: 1440, height: 900 }, async (ctx) => {
 
 await session({ width: 390, height: 844 }, async (ctx) => {
   await ctx.send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'reduce' }] });
-  for (const [width, height] of [[280, 640], [390, 844], [844, 390], [1366, 768], [1920, 1080]]) {
+  const viewports = [[280, 640], [390, 844], [844, 390], [1366, 768], [1920, 1080]];
+  for (let index = 0; index < viewports.length; index++) {
+    const [width, height] = viewports[index];
+    const key = index % 2 ? ' ' : 'Enter';
+    const dish = index % 2 ? 'house' : 'veggie';
     await ctx.send('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 1, mobile: true });
     assert.ok(await openScene(ctx, url));
+    await sleep(800); // Let the loader's fade finish before input or screenshots.
     const layout = await ctx.evaluate(`(() => {
       const p = document.getElementById('visitorOrder'), r = p.getBoundingClientRect();
       return {shown: !p.hidden, left:r.left, right:r.right, top:r.top, bottom:r.bottom,
-        targets:[...p.querySelectorAll('button')].map(b => b.getBoundingClientRect().height),
+        targets:[...p.querySelectorAll('button')].filter(b => b.offsetParent).map(b => b.getBoundingClientRect().height),
         overflow:document.documentElement.scrollWidth > innerWidth};
     })()`);
     assert.ok(layout.shown && layout.left >= 0 && layout.right <= width && layout.top >= 0 && layout.bottom <= height);
     assert.ok(layout.targets.every((h) => h >= 44), '44px touch targets');
     assert.equal(layout.overflow, false);
     await menuRoundTrip(ctx);
-    // Real key events activate the native button, not a test-only order call.
-    await ctx.evaluate("document.querySelector('[data-visitor-dish=veggie]').focus()");
-    await ctx.send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13, text: '\r', unmodifiedText: '\r' });
-    await ctx.send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13 });
+    // Real held/repeated key events activate the native button, not a test-only order call.
+    await ctx.evaluate(`document.querySelector('[data-visitor-dish=${dish}]').focus()`);
+    await holdNativeKey(ctx, key);
     await ctx.evaluate('new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))');
     const s = await waitFor(ctx, (s) => s.visitorOrder.status === 'done', 'immediate reduced-motion meal', 3000);
-    assert.equal(s.visitorOrder.dish, 'veggie');
+    assert.equal(s.visitorOrder.dish, dish);
+    assert.equal(s.visitorOrder.dismissed, false, `held ${key === 'Enter' ? 'Enter' : 'Space'} cannot transfer into dismissal`);
     assert.equal(s.visitorOrder.fill, 1);
     assert.equal(s.visitorOrder.firstBite, false, 'reduced motion skips bite animation');
+    assert.equal(await ctx.evaluate("document.getElementById('visitorOrderStatus').textContent"), 'Enjoy your bowl.', 'static delivery must not claim an uneaten bowl was finished');
     assert.equal(s.visitorOrder.bowlVisible, true);
+    assert.equal(s.visitorAutonomous, false);
+    assert.equal(await ctx.evaluate("document.getElementById('visitorOrderComplete').hidden"), false);
     await shot(ctx, `reduced-${width}x${height}`);
   }
   assert.ok(await openScene(ctx, url));
   await ctx.evaluate("document.getElementById('visitorOrderSkip').click()");
   assert.equal(await ctx.evaluate("window.__nightbowl.orderMeal('house')"), false, 'dismissed choice stays dismissed');
-  await menuRoundTrip(ctx, false);
+  assert.equal(await ctx.evaluate("document.getElementById('visitorOrderReopenPanel').hidden"), false);
+  await menuRoundTrip(ctx, 'reopen');
+  await ctx.evaluate("document.getElementById('visitorOrderReopen').click()");
+  assert.ok(await ctx.evaluate("window.__nightbowl.orderMeal('house')"), 'reopened reduced-motion visitor can order without reload');
+  const reopened = await waitFor(ctx, (s) => s.visitorOrder.status === 'done', 'reopened reduced meal', 3000);
+  assert.equal(reopened.visitorOrder.fill, 1);
+  assert.equal(reopened.visitorAutonomous, false);
   assert.deepEqual(ctx.errors, []);
-  console.log('PASS reduced motion, keyboard, dismissal and five viewport layouts');
+  console.log('PASS reduced motion, held Enter/Space, dismissal/reopen and five viewport layouts');
 });
 console.log(`PASS budgets: startup ${maxStreetCalls}/250 calls, reduced phone landscape ${maxLandscapeTriangles}/50000 triangles`);
 console.log(`Animated cost (informational): peak ${maxCalls} calls / ${maxAnimatedTriangles} triangles`);

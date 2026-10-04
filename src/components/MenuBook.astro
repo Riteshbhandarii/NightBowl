@@ -22,13 +22,13 @@ const anyDraft =
 
 <div class="backdrop" id="backdrop"></div>
 <div class="book-wrap">
-  <div class="book" id="book" role="dialog" aria-modal="true" aria-label={`${SITE.name} menu`}>
+  <div class="book" id="book" role="dialog" aria-modal="false" aria-hidden="true" inert aria-label={`${SITE.name} menu`}>
     <button class="book-close" id="bookClose" aria-label="Close menu">×</button>
     <div class="book-inner">
       <div class="page left" id="pageLeft"></div>
       <div class="page right" id="pageRight"></div>
     </div>
-    <div class="page-turn" id="pageTurn"></div>
+    <div class="page-turn" id="pageTurn" aria-hidden="true" inert></div>
     <div class="cover" aria-hidden="true">
       <div class="seal">{SITE.name.charAt(0).toUpperCase()}</div>
       <h1>{SITE.name}</h1>
@@ -198,6 +198,7 @@ const anyDraft =
   const closeBtn = document.getElementById('bookClose');
   const cover = book.querySelector('.cover');
   const REDUCED = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const mobileLayout = window.matchMedia('(max-width: 860px)');
 
   const draftHtml = document.querySelector('#sectionData [data-draft]')?.outerHTML ?? '';
 
@@ -215,12 +216,19 @@ const anyDraft =
   let curTab = null;
   let curPage = 0;
   let lastFocus = null;
+  let flipTimer = null;
+  let focusTimer = null;
+
+  function cancelOpenTimers() {
+    clearTimeout(flipTimer);
+    clearTimeout(focusTimer);
+  }
 
   function render(withTurn) {
     const pages = SECTIONS[curTab] || [];
     const pg = pages[curPage] || { l: '', r: '' };
     const multi = pages.length > 1;
-    const mobile = window.matchMedia('(max-width: 860px)').matches;
+    const mobile = mobileLayout.matches;
     const lastPage = curPage >= pages.length - 1;
 
     if (withTurn && !REDUCED && !mobile) {
@@ -269,8 +277,12 @@ const anyDraft =
   }
 
   function open(tab) {
-    lastFocus = document.activeElement;
+    cancelOpenTimers();
+    if (!isOpen) lastFocus = document.activeElement;
     setTab(tab || 'menu', false);
+    book.inert = false;
+    book.removeAttribute('aria-hidden');
+    book.setAttribute('aria-modal', 'true');
     backdrop.classList.add('open');
     book.classList.add('open');
     isOpen = true;
@@ -278,19 +290,37 @@ const anyDraft =
     if (REDUCED) {
       book.classList.add('flipped');
     } else {
-      setTimeout(() => book.classList.add('flipped'), 180);
-      setTimeout(() => { if (isOpen) book.classList.add('flipped'); }, 1400);
+      flipTimer = setTimeout(() => { if (isOpen) book.classList.add('flipped'); }, 180);
     }
-    setTimeout(() => closeBtn.focus(), 260);
+    focusTimer = setTimeout(() => { if (isOpen) closeBtn.focus(); }, 260);
   }
 
   function close() {
+    cancelOpenTimers();
     book.classList.remove('open', 'flipped');
     backdrop.classList.remove('open');
     isOpen = false;
     document.dispatchEvent(new CustomEvent('nb:bookstate', { detail: false }));
-    lastFocus?.focus();
+    const opener = lastFocus?.isConnected && lastFocus.getClientRects().length ? lastFocus
+      : [...document.querySelectorAll('.topbar [data-open]')].find((el) => el.getClientRects().length);
+    opener?.focus();
+    book.inert = true;
+    book.setAttribute('aria-hidden', 'true');
+    book.setAttribute('aria-modal', 'false');
   }
+
+  mobileLayout.addEventListener('change', () => {
+    if (!curTab) return;
+    const focused = document.activeElement;
+    const href = focused?.getAttribute('href');
+    const pageControl = focused?.classList.contains('pageflip-hint');
+    render(false);
+    if (isOpen && focused && !focused.isConnected) {
+      const replacement = pageControl ? pageRight.querySelector('.pageflip-hint')
+        : [...book.querySelectorAll('a[href]')].find((a) => a.getAttribute('href') === href);
+      (replacement || closeBtn).focus({ preventScroll: true });
+    }
+  });
 
   closeBtn.addEventListener('click', close);
   backdrop.addEventListener('click', close);
@@ -304,7 +334,8 @@ const anyDraft =
 
   book.addEventListener('keydown', (e) => {
     if (e.key !== 'Tab' || !isOpen) return;
-    const f = book.querySelectorAll('button, a[href], [tabindex]');
+    const f = [...book.querySelectorAll('button, a[href], [tabindex]')]
+      .filter((el) => !el.closest('[inert]') && !el.disabled && el.tabIndex >= 0 && el.getClientRects().length);
     if (!f.length) return;
     const first = f[0], last = f[f.length - 1];
     if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }

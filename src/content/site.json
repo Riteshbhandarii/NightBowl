@@ -144,7 +144,11 @@
     "orderSkip": "Just browsing",
     "orderQueued": "Your bowl’s next. Keep looking around.",
     "orderServing": "One hot bowl, coming over.",
-    "orderEnjoy": "Enjoy your bowl."
+    "orderEnjoy": "Enjoy your bowl.",
+    "orderComplete": "Bowl finished. Another round?",
+    "orderEatAgain": "Eat again",
+    "orderDone": "Done",
+    "orderReopen": "Order food"
   },
   "chatter": {
     "cook": [

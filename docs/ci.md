@@ -11,19 +11,20 @@ is a bug in this page. Say so.
 
 ## The short version
 
-Four jobs run. Three of them test something; the fourth just reports how long it
+Five jobs run. Four of them test something; the fifth just reports how long it
 all took.
 
 | job | one-line purpose |
 |---|---|
 | **build** | the code compiles, every page is generated, the download stays small |
 | **scene** | the 3D stall starts, nobody's hand is inside the counter, it works on phones |
+| **interactions** | menu content/focus, repeat meals and planted walking remain correct |
 | **cms** | you can still log into `/admin` and publish |
 | **summary** | how long CI took |
 
-`build` runs first. `scene` and `cms` then run at the same time, reusing the
-build rather than each doing their own. That is why the whole thing finishes in
-a few minutes rather than three times that.
+`build` runs first. `scene`, `interactions` and `cms` then run at the same time,
+reusing that same build. The longer meal lifecycle tests don't consume the scene
+job's time allowance, and every suite still runs before merge.
 
 ---
 
@@ -92,7 +93,7 @@ The limit itself is in `scripts/perf-budget.mjs`.
 **What it catches:** the 3D stall failing to start, a character posed somewhere
 physically impossible, and the site breaking on a phone.
 
-It starts the real production server, then runs two suites against it.
+It starts the real production server, then runs browser, NPC and IK suites.
 
 ### Browser smoke test
 
@@ -191,23 +192,6 @@ frame-counted version would have taken, so the three are directly comparable.
 There is also a separate check that the starvation really did slow the frames
 down, so this cannot pass by failing to load the machine.
 
-### Visitor meal interaction
-
-`npm run audit:visitor` exercises both dishes through real seating, cook delivery
-and repeated bites until the bowl is empty, with the visitor staying seated afterward.
-It checks one order per visit, busy-service/turnover queues,
-hand-to-bowl contact, portfolio access throughout, keyboard activation,
-dismissal, reduced motion and five viewport layouts. The NPC sweep also samples
-the visitor's eating/idle poses with both topping sets without giving them diner AI.
-
-Use `npm run audit:visitor -- --out /tmp/nightbowl-visitor-review` to capture live
-choice, carry, placement and bite frames for visual review.
-
-The existing cost gates remain unchanged: 250 startup draw calls and 50,000
-triangles in the reduced-motion phone-landscape view. Animated peaks are printed
-separately, not passed off as meeting that static-view cap; the pre-feature live
-animated scene already exceeds it. Physical phone performance remains #34.
-
 ### NPC pose audit
 
 This one is worth understanding, because it is the check that stops the
@@ -284,7 +268,60 @@ npm run audit:ik       # another
 
 ---
 
-## Job 3: cms
+## Job 3: interactions
+
+### Menu accessibility and responsive interactions
+
+`npm run audit:menu` covers the states missed by the original layout smoke checks:
+an open book crossing the 860px breakpoint in either direction, all sections and
+both Menu spreads retaining their content, native Tab traversal and accessibility
+tree exclusion while closed, and rapid Enter/Escape races preserving opener focus.
+It also measures descendant text bounds and reading-text/control overlap at
+280/320/390/844px, then uses real pointer clicks on the draft-preview tabs and
+checks that Close, Open menu and Back to admin stay reachable.
+
+Use `npm run audit:menu -- --out /tmp/nightbowl-menu-review` for screenshots.
+Zero document overflow alone does not certify readable, unclipped child content.
+
+### Visitor meal interaction
+
+`npm run audit:visitor` exercises House → Veggie and Veggie → Veggie through
+seating, cook delivery and repeated bites until each bowl is empty. It checks
+Eat again/Done, Just browsing and recoverable Order food, native held Enter/Space,
+busy-service/turnover queues, hand-to-bowl contact and portfolio access throughout.
+Five reduced-motion layouts get static immediate delivery without falsely claiming
+the full bowl has been eaten. The visitor stays separate from diner AI/turnover.
+
+Use `npm run audit:visitor -- --out /tmp/nightbowl-visitor-review` to capture live
+choice, carry, placement, bite and completion frames for visual review.
+
+The existing cost gates remain unchanged: 250 startup draw calls and 50,000
+triangles in the reduced-motion phone-landscape view. Animated peaks are printed
+separately, not passed off as meeting that static-view cap; the pre-feature live
+animated scene already exceeds it. Physical phone performance remains #34.
+
+### Grounded locomotion and sparse frames
+
+`npm run audit:locomotion` measures world-space stance-foot drift on both diner
+departure directions, an arriving customer and the serving cook. Precise shoe
+mesh bounds also reject soles below the ground or floating above it; checking
+only the shoe origin misses ankle rotation driving the sole through the floor.
+It compares
+actual street-root travel with gait distance under normal and starved frames,
+checks a cook displacement over half a metre after a skipped render, verifies
+service ordering and ensures reduced-motion walkers stay still. Sparse walker
+checks keep actual rendering. No-GPU contact checks suppress continuous raster
+while the real director/pose/gait loop keeps updating, so a walk cannot finish
+before enough stance intervals are observable. The rendered scene is still
+covered by smoke; screenshots explicitly draw the live pose. This is not an FPS gate.
+
+Use `npm run audit:locomotion -- --out /tmp/nightbowl-locomotion-review` for live
+full-body screenshots and a JSON measurement report. These photos preserve the
+running gait pose; the frozen NPC pose sweep alone cannot prove walking contact.
+
+---
+
+## Job 4: cms
 
 **What it catches:** the admin losing its GitHub login, or publishing breaking.
 
@@ -322,7 +359,7 @@ lsof -nP -iTCP:4322 -sTCP:LISTEN
 
 ---
 
-## Job 4: summary
+## Job 5: summary
 
 Prints a table of how long each job took and the total wall clock, into the run
 summary page on GitHub. It does not test anything. It exists so the cost of

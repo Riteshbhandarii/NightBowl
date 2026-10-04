@@ -100,6 +100,7 @@ export function initScene(canvas, onHotspot, opts = {}) {
     return out;
   }
   const clock = new THREE.Clock();
+  let auditSkipRender = false;
 
   const hotspots = [];
   const steamGroups = [];
@@ -130,7 +131,8 @@ export function initScene(canvas, onHotspot, opts = {}) {
   // the one stool that is never taken, and the ring that advertises it
   const SEAT = { x: 0.1, z: 1.52 };
   const CUSTOMER_Z = 1.52;
-  const TURNOVER_WALK = { depthSeconds: 2.4, lateralSeconds: 4, cadence: 5 };
+  const TURNOVER_WALK = { depthSeconds: 2.4, lateralSeconds: 4 };
+  const WALK_STRIDE = 0.56;
   // Top face of a stool seat. buildStool and the seated pose both read this, so
   // the two cannot drift apart.
   const SEAT_TOP_Y = 0.69;
@@ -189,13 +191,18 @@ export function initScene(canvas, onHotspot, opts = {}) {
   let service = null;
   let serviceBowl = null;
   let serviceAudit = { started: false, lifted: false, filledCarry: false, completed: false };
-  // The visitor gets one meal, never a diner AI/refill/departure loop.
+  // Visitor meals stay outside the diner AI/refill/departure loop.
   const visitorOrder = { status: 'choosing', dish: null, dismissed: false, firstBite: false, carrying: false, startedAt: 0, biteAt: 0 };
   const orderPanel = document.getElementById('visitorOrder');
   const orderTitle = document.getElementById('visitorOrderTitle');
   const orderChoices = document.getElementById('visitorOrderChoices');
   const orderStatus = document.getElementById('visitorOrderStatus');
   const orderSkip = document.getElementById('visitorOrderSkip');
+  const orderComplete = document.getElementById('visitorOrderComplete');
+  const orderAgain = document.getElementById('visitorOrderAgain');
+  const orderDone = document.getElementById('visitorOrderDone');
+  const orderReopenPanel = document.getElementById('visitorOrderReopenPanel');
+  const orderReopen = document.getElementById('visitorOrderReopen');
   const _visitorSeat = new THREE.Vector3(SEAT.x, 1.09, 1.0);
   const _visitorPrep = new THREE.Vector3(COOK_HOME_X, 1.09, 0.6);
 
@@ -933,6 +940,8 @@ export function initScene(canvas, onHotspot, opts = {}) {
 
   function applyPose(rig, c) {
     rig.hip.position.y = c.hipY;
+    rig.legL.shoe.rotation.x = Math.PI / 2;
+    rig.legR.shoe.rotation.x = Math.PI / 2;
     rig.torso.rotation.set(c.torsoX, c.torsoY, c.torsoZ);
     rig.head.rotation.set(c.headX, c.headY, c.headZ);
     rig.armL.sh.rotation.x = c.lShX; rig.armL.sh.rotation.z = c.lShZ;
@@ -1323,6 +1332,8 @@ export function initScene(canvas, onHotspot, opts = {}) {
     setAct(diner, 'lookUp', 6.2);
     setBowlFill(serviceBowl, 0);
     serviceBowl.visible = false;
+    guide.userData.walkHomeRotation = guide.rotation.y;
+    beginWalk(guide);
   }
 
   function tickService() {
@@ -1364,14 +1375,22 @@ export function initScene(canvas, onHotspot, opts = {}) {
       s.placed = true;
     }
 
-    // Position is a continuous function of t, so it self-corrects after a skip.
-    if (t < 1.0) guide.position.x = mix(s.homeX, workX, ease01(t));
-    else if (t < 1.65) guide.position.x = workX;
-    else if (t < 2.55) guide.position.x = mix(workX, potX + 0.7, ease01((t - 1.65) / 0.9));
-    else if (t < 3.25) guide.position.x = potX + 0.7;
-    else if (t < 4.15) guide.position.x = mix(potX + 0.7, workX, ease01((t - 3.25) / 0.9));
-    else if (t < 4.8) guide.position.x = workX;
-    else guide.position.x = mix(workX, s.homeX, ease01((t - 4.8) / 1.2));
+    // Each translation spends its opening beat turning, then advances a gait
+    // from the distance actually covered. At a station the cook turns back to
+    // the counter before lifting, filling or placing the bowl.
+    if (t < 1.0) cookTravelX(s.homeX, workX, t);
+    else if (t < 1.65) {
+      guide.position.x = workX;
+      faceCookAtStation(s.homeX, workX, t - 1.0);
+    } else if (t < 2.55) cookTravelX(workX, potX + 0.7, (t - 1.65) / 0.9);
+    else if (t < 3.25) {
+      guide.position.x = potX + 0.7;
+      faceCookAtStation(workX, potX + 0.7, t - 2.55);
+    } else if (t < 4.15) cookTravelX(potX + 0.7, workX, (t - 3.25) / 0.9);
+    else if (t < 4.8) {
+      guide.position.x = workX;
+      faceCookAtStation(potX + 0.7, workX, t - 4.15);
+    } else cookTravelX(workX, s.homeX, (t - 4.8) / 1.2);
 
     if (t >= 6.0) {
       guide.position.x = s.homeX;
@@ -1380,6 +1399,7 @@ export function initScene(canvas, onHotspot, opts = {}) {
       guide.userData.ai.locked = false;
       setAct(s.diner, 'eat', rnd(12, 18));
       setAct(guide, 'stir', rnd(6, 10));
+      finishCookWalk();
       serviceAudit.completed = true;
       service = null;
       // Resume the room promptly after service. On a software renderer the old
@@ -1392,6 +1412,14 @@ export function initScene(canvas, onHotspot, opts = {}) {
   const _handL = new THREE.Vector3(), _handR = new THREE.Vector3();
   const _carry = new THREE.Vector3(), _seatBowl = new THREE.Vector3();
   const _carryHead = new THREE.Vector3(), _carryBowlBox = new THREE.Box3();
+  const _carryAxis = new THREE.Vector3(), _carryHands = new THREE.Vector3();
+  function carryHandSeparation() {
+    // Signed separation along the cook's lateral axis stays meaningful while
+    // turning. World-X projection collapses sideways grips to zero and can
+    // label two correctly separated hands as crossed.
+    _carryAxis.set(1, 0, 0).transformDirection(guide.matrixWorld);
+    return _carryHands.copy(_handR).sub(_handL).dot(_carryAxis);
+  }
   const SERVICE_BOWL_DROP = 0.33;
   function syncServiceBowl() {
     if (!serviceBowl?.visible || !guideRig) return;
@@ -1425,16 +1453,18 @@ export function initScene(canvas, onHotspot, opts = {}) {
 
   function updateOrderUI() {
     if (!orderPanel) return;
-    const choiceFocused = orderChoices.contains(document.activeElement);
     orderPanel.hidden = phase !== 'seated' || bookOpen || visitorOrder.dismissed;
+    if (orderReopenPanel) orderReopenPanel.hidden = phase !== 'seated' || bookOpen || !visitorOrder.dismissed;
     orderTitle.textContent = visitorOrder.dish === 'house' ? LABELS.orderHouse
       : visitorOrder.dish === 'veggie' ? LABELS.orderVeggie : LABELS.orderTitle;
     orderChoices.hidden = visitorOrder.status !== 'choosing';
     for (const button of orderChoices.querySelectorAll('button')) button.disabled = !!visitorOrder.dish;
-    if (choiceFocused && visitorOrder.dish) orderSkip.focus({ preventScroll: true });
+    orderSkip.hidden = visitorOrder.status !== 'choosing';
+    if (orderComplete) orderComplete.hidden = visitorOrder.status !== 'done';
     orderStatus.textContent = visitorOrder.status === 'queued' ? LABELS.orderQueued
       : visitorOrder.status === 'serving' ? LABELS.orderServing
-        : visitorOrder.dish ? LABELS.orderEnjoy : '';
+        : visitorOrder.status === 'done' && visitorOrder.firstBite ? LABELS.orderComplete
+          : visitorOrder.dish ? LABELS.orderEnjoy : '';
   }
 
   function visitorBowl(dish) {
@@ -1454,7 +1484,15 @@ export function initScene(canvas, onHotspot, opts = {}) {
   function orderMeal(dish) {
     if (phase !== 'seated' || visitorOrder.dismissed || visitorOrder.dish || !['house', 'veggie'].includes(dish)) return false;
     visitorOrder.dish = dish;
-    visitorBowl(dish);
+    visitorOrder.firstBite = false;
+    delete visitorOrder.completedAt;
+    const bowl = visitorBowl(dish);
+    bowl.userData.dish = dish;
+    bowl.userData.ingredients = dish === 'veggie'
+      ? ['bowl', 'broth', 'noodles', 'tofu', 'mushroom', 'nori', 'spring-onion', 'chopsticks']
+      : ['bowl', 'broth', 'noodles', 'egg', 'nori', 'chashu', 'spring-onion', 'chopsticks'];
+    setBowlFill(bowl, 1);
+    setBowlVisible(bowl, false);
     visitorOrder.status = 'queued';
     // A display-only GLB has no serving rig yet (#79); don't strand an order.
     if (REDUCED || !guideRig) placeVisitorMeal(true);
@@ -1481,19 +1519,25 @@ export function initScene(canvas, onHotspot, opts = {}) {
       visitorOrder.homeX = guide.position.x;
       guide.userData.ai.locked = true;
       setAct(guide, 'serve', 6.2);
+      guide.userData.walkHomeRotation = guide.rotation.y;
+      beginWalk(guide);
       updateOrderUI();
     }
     if (visitorOrder.status !== 'serving') return;
     const t = nowSec() - visitorOrder.startedAt;
     const workX = SEAT.x - 0.28;
-    guide.position.x = t < 1.4 ? visitorOrder.homeX
-      : t < 3.4 ? mix(visitorOrder.homeX, workX, ease01((t - 1.4) / 2))
-        : t < 4.1 ? workX : mix(workX, visitorOrder.homeX, ease01((t - 4.1) / 1.9));
+    if (t < 1.4) guide.position.x = visitorOrder.homeX;
+    else if (t < 3.4) cookTravelX(visitorOrder.homeX, workX, (t - 1.4) / 2);
+    else if (t < 4.1) {
+      guide.position.x = workX;
+      faceCookAtStation(visitorOrder.homeX, workX, t - 3.4);
+    } else cookTravelX(workX, visitorOrder.homeX, (t - 4.1) / 1.9);
     if (t >= 0.7) setBowlVisible(you.userData.table.bowl, true);
     if (t >= 6) {
       guide.position.x = visitorOrder.homeX;
       guide.userData.ai.locked = false;
       setAct(guide, 'stir', rnd(6, 10));
+      finishCookWalk();
       placeVisitorMeal();
       nextBeatAt = nowSec() + rnd(3, 6);
     }
@@ -1530,6 +1574,7 @@ export function initScene(canvas, onHotspot, opts = {}) {
       if (bowl.userData.fill <= 0.01) {
         visitorOrder.status = 'done';
         visitorOrder.completedAt = at;
+        updateOrderUI();
       } else {
         visitorOrder.biteAt = at + rnd(0.8, 2.2);
       }
@@ -1550,7 +1595,27 @@ export function initScene(canvas, onHotspot, opts = {}) {
     const dish = event.target.closest('[data-visitor-dish]')?.dataset.visitorDish;
     if (dish) orderMeal(dish);
   };
-  const onOrderSkip = () => { visitorOrder.dismissed = true; updateOrderUI(); };
+  const chooseAnotherMeal = () => {
+    if (visitorOrder.status !== 'done') return;
+    visitorOrder.status = 'choosing';
+    visitorOrder.dish = null;
+    updateOrderUI();
+  };
+  const onOrderSkip = () => {
+    if (visitorOrder.status !== 'choosing') return;
+    visitorOrder.dismissed = true;
+    updateOrderUI();
+  };
+  const onOrderDone = () => {
+    if (visitorOrder.status !== 'done') return;
+    visitorOrder.dismissed = true;
+    updateOrderUI();
+  };
+  const onOrderReopen = () => {
+    visitorOrder.dismissed = false;
+    if (visitorOrder.status === 'done') chooseAnotherMeal();
+    else updateOrderUI();
+  };
 
   /* ---------- speech ---------- */
   const bubbles = [];
@@ -1664,19 +1729,115 @@ export function initScene(canvas, onHotspot, opts = {}) {
     if (nowSec() >= nextBeatAt) chooseBeat();
   }
 
-  function walkRig(rig, phase, amt) {
-    rig.legL.hp.rotation.x = Math.sin(phase) * 0.55 * amt;
-    rig.legR.hp.rotation.x = Math.sin(phase + Math.PI) * 0.55 * amt;
-    rig.legL.knee.rotation.x = Math.max(0, -Math.cos(phase)) * 0.7 * amt;
-    rig.legR.knee.rotation.x = Math.max(0, -Math.cos(phase + Math.PI)) * 0.7 * amt;
-    rig.armL.sh.rotation.x = Math.sin(phase + Math.PI) * 0.4 * amt;
-    rig.armR.sh.rotation.x = Math.sin(phase) * 0.4 * amt;
-    rig.armL.elbow.rotation.x = -0.3 * amt;
-    rig.armR.elbow.rotation.x = -0.3 * amt;
+  function solveWalkingLeg(leg, footZ, lift, amt) {
+    const upper = 0.4, lower = Math.hypot(0.375, 0.03);
+    const targetY = -0.755 + lift * amt;
+    const targetZ = footZ * amt;
+    const reach = Math.min(upper + lower - 0.001, Math.hypot(targetY, targetZ));
+    const knee = Math.acos(Math.max(-1, Math.min(1,
+      (reach * reach - upper * upper - lower * lower) / (2 * upper * lower)
+    )));
+    const targetAngle = Math.atan2(-targetZ, -targetY);
+    const hip = targetAngle - Math.atan2(lower * Math.sin(knee), upper + lower * Math.cos(knee));
+    leg.hp.rotation.x = hip;
+    // Solve for the actual shoe origin, including its 3cm forward offset.
+    leg.knee.rotation.x = knee + Math.atan2(0.03, 0.375);
+    // Ankle compensation keeps the sole horizontal through the planted stroke.
+    leg.shoe.rotation.x = Math.PI / 2 - hip - leg.knee.rotation.x;
+  }
+
+  // Distance, not wall time, drives this gait. During each half-stride the
+  // stance foot moves backward by exactly the root's forward displacement;
+  // its world position therefore stays planted until the other foot lands.
+  function walkRig(npc, distance, amt = 1, swingArms = true) {
+    const rig = npc.userData.rig;
+    const foot = (offset) => {
+      const cycle = ((distance / WALK_STRIDE + offset) % 1 + 1) % 1;
+      if (cycle < 0.5) return { z: WALK_STRIDE * (0.25 - cycle), lift: 0 };
+      const u = (cycle - 0.5) * 2;
+      return {
+        z: mix(-WALK_STRIDE * 0.25, WALK_STRIDE * 0.25, ease01(u)),
+        lift: Math.sin(u * Math.PI) * 0.09,
+      };
+    };
+    const left = foot(0.25), right = foot(0.75);
+    solveWalkingLeg(rig.legL, left.z, left.lift, amt);
+    solveWalkingLeg(rig.legR, right.z, right.lift, amt);
+    // Roots have different heights; keep the stance sole on the same ground.
+    rig.hip.position.y = 0.8 - npc.position.y / npc.scale.y;
+    if (!swingArms) return;
+    const phase = distance / WALK_STRIDE * Math.PI * 2;
+    rig.armL.sh.rotation.x = Math.sin(phase + Math.PI) * 0.32 * amt;
+    rig.armR.sh.rotation.x = Math.sin(phase) * 0.32 * amt;
+    rig.armL.elbow.rotation.x = -0.25 * amt;
+    rig.armR.elbow.rotation.x = -0.25 * amt;
     rig.armL.elbow.rotation.z = 0;
     rig.armR.elbow.rotation.z = 0;
-    rig.hip.position.y = 0.8 - Math.abs(Math.sin(phase)) * 0.03 * amt;
-    rig.torso.rotation.z = Math.sin(phase) * 0.03 * amt;
+    rig.torso.rotation.z = Math.sin(phase) * 0.025 * amt;
+  }
+
+  function beginWalk(npc) {
+    npc.userData.walk = {
+      distance: npc.userData.walk?.distance || 0,
+      x: npc.position.x,
+      z: npc.position.z,
+      moving: false,
+    };
+  }
+
+  function applyWalkFromTravel(npc, amt = 1, swingArms = true) {
+    const walk = npc.userData.walk || (beginWalk(npc), npc.userData.walk);
+    const dx = npc.position.x - walk.x;
+    const dz = npc.position.z - walk.z;
+    const step = Math.hypot(dx, dz);
+    walk.distance += step / Math.max(0.001, npc.scale.x);
+    walk.x = npc.position.x;
+    walk.z = npc.position.z;
+    walk.moving = step > 0.00001;
+    if (walk.moving) walkRig(npc, walk.distance, amt, swingArms);
+  }
+
+  function cookTravelX(from, to, u) {
+    const homeRotation = guide.userData.walkHomeRotation ?? guide.rotation.y;
+    guide.userData.walkHomeRotation = homeRotation;
+    const direction = Math.sign(to - from);
+    const travelRotation = direction < 0 ? -Math.PI / 2 : direction > 0 ? Math.PI / 2 : homeRotation;
+    const turn = ease01(u / 0.18);
+    const travel = ease01((u - 0.18) / 0.82);
+    guide.position.x = mix(from, to, travel);
+    guide.rotation.y = mix(homeRotation, travelRotation, turn);
+    guide.userData.serviceWalking = true;
+    guide.userData.walkAmount = ease01(travel / 0.12);
+  }
+
+  function faceCookAtStation(from, to, elapsed, duration = 0.22) {
+    const homeRotation = guide.userData.walkHomeRotation ?? guide.rotation.y;
+    const direction = Math.sign(to - from);
+    const travelRotation = direction < 0 ? -Math.PI / 2 : direction > 0 ? Math.PI / 2 : homeRotation;
+    guide.rotation.y = mix(travelRotation, homeRotation, ease01(elapsed / duration));
+  }
+
+  function applyCookWalk() {
+    if (!guideRig) return;
+    // Stations and turn-only beats are standing poses, not a frozen last step.
+    for (const leg of [guideRig.legL, guideRig.legR]) {
+      solveWalkingLeg(leg, 0, 0, 0);
+    }
+    if (!guide?.userData.serviceWalking) {
+      if (guide.userData.walk?.moving) beginWalk(guide);
+      return;
+    }
+    applyWalkFromTravel(guide, guide.userData.walkAmount, false);
+  }
+
+  function finishCookWalk() {
+    if (!guideRig) return;
+    guide.userData.serviceWalking = false;
+    guide.rotation.y = guide.userData.walkHomeRotation ?? guide.rotation.y;
+    solveWalkingLeg(guideRig.legL, 0, 0, 0);
+    solveWalkingLeg(guideRig.legR, 0, 0, 0);
+    guideRig.hip.position.y = 0.8;
+    beginWalk(guide);
   }
 
   function standingCustomerPose(npc) {
@@ -1709,6 +1870,7 @@ export function initScene(canvas, onHotspot, opts = {}) {
     turnover.phaseAt = nowSec();
     turnover.duration = duration;
     turnover.diner.userData.ai.turnover = phase;
+    if (['stepOut', 'leave', 'arrive', 'stepIn'].includes(phase)) beginWalk(turnover.diner);
   }
 
   function beginTurnover(diner) {
@@ -1775,6 +1937,7 @@ export function initScene(canvas, onHotspot, opts = {}) {
     guide.userData.ai.locked = false;
     setAct(guide, 'stir', rnd(6, 10));
     serviceBowl.visible = false;
+    finishCookWalk();
   }
 
   function tickTurnover() {
@@ -1807,21 +1970,21 @@ export function initScene(canvas, onHotspot, opts = {}) {
       // Turn away from the counter before taking the first outward step. The
       // old version translated toward +Z while still facing -Z, so customers
       // visibly moonwalked away from their stool.
-      const turn = ease01(u / 0.32);
-      const travel = ease01((u - 0.32) / 0.68);
+      const turn = ease01(u / 0.18);
+      const travel = ease01((u - 0.18) / 0.82);
       diner.position.z = mix(tr.stageZ, 2.42, travel);
       diner.rotation.y = mix(Math.PI, 0, turn);
-      walkRig(rig, elapsed * TURNOVER_WALK.cadence, travel * 0.75);
+      applyWalkFromTravel(diner, ease01(travel / 0.14));
       if (elapsed >= tr.duration) setTurnoverPhase(tr, 'leave', TURNOVER_WALK.lateralSeconds);
     } else if (tr.phase === 'leave') {
       applyPose(rig, standing);
       const exitRotation = tr.entryX < tr.seatX ? -Math.PI / 2 : Math.PI / 2;
-      const turn = ease01(u / 0.24);
-      const travel = ease01((u - 0.24) / 0.76);
+      const turn = ease01(u / 0.04);
+      const travel = ease01((u - 0.04) / 0.96);
       diner.position.x = mix(tr.seatX, tr.entryX, travel);
       diner.position.z = 2.42;
       diner.rotation.y = mix(0, exitRotation, turn);
-      walkRig(rig, elapsed * TURNOVER_WALK.cadence, travel);
+      applyWalkFromTravel(diner, ease01(travel / 0.1));
       if (elapsed >= tr.duration) {
         diner.visible = false;
         diner.userData.ai.customerGeneration++;
@@ -1829,13 +1992,17 @@ export function initScene(canvas, onHotspot, opts = {}) {
         guide.position.x = tr.guideHomeX;
         setAct(guide, 'serve', 4);
         guide.userData.ai.locked = true;
+        guide.userData.walkHomeRotation = guide.rotation.y;
+        beginWalk(guide);
         setTurnoverPhase(tr, 'clear', 2.6);
       }
     } else if (tr.phase === 'clear') {
       const workX = tr.seatX + (tr.seatX < 0 ? 0.28 : -0.28);
-      if (elapsed < 0.7) guide.position.x = mix(tr.guideHomeX, workX, ease01(elapsed / 0.7));
-      else if (elapsed < 1.25) guide.position.x = workX;
-      else guide.position.x = mix(workX, tr.guideHomeX, ease01((elapsed - 1.25) / 1.15));
+      if (elapsed < 0.7) cookTravelX(tr.guideHomeX, workX, elapsed / 0.7);
+      else if (elapsed < 1.25) {
+        guide.position.x = workX;
+        faceCookAtStation(tr.guideHomeX, workX, elapsed - 0.7);
+      } else cookTravelX(workX, tr.guideHomeX, (elapsed - 1.25) / 1.15);
       if (elapsed >= 0.7 && !tr.bowlCleared) {
         setBowlVisible(diner.userData.table.bowl, false);
         startTurnoverCook(0);
@@ -1848,6 +2015,7 @@ export function initScene(canvas, onHotspot, opts = {}) {
     } else if (tr.phase === 'vacant') {
       if (elapsed >= tr.duration) {
         diner.position.set(tr.entryX, 0, 2.42);
+        diner.rotation.y = tr.entryX < tr.seatX ? Math.PI / 2 : -Math.PI / 2;
         diner.visible = true;
         setTurnoverPhase(tr, 'arrive', TURNOVER_WALK.lateralSeconds);
       }
@@ -1856,14 +2024,18 @@ export function initScene(canvas, onHotspot, opts = {}) {
       diner.position.x = mix(tr.entryX, tr.seatX, u);
       diner.position.z = 2.42;
       diner.rotation.y = tr.entryX < tr.seatX ? Math.PI / 2 : -Math.PI / 2;
-      walkRig(rig, elapsed * TURNOVER_WALK.cadence, 1);
+      applyWalkFromTravel(diner, ease01(u / 0.1));
       if (elapsed >= tr.duration) setTurnoverPhase(tr, 'stepIn', TURNOVER_WALK.depthSeconds);
     } else if (tr.phase === 'stepIn') {
       applyPose(rig, standing);
+      const turn = ease01(u / 0.08);
+      const travel = ease01((u - 0.08) / 0.92);
+      const arrivalRotation = tr.entryX < tr.seatX ? Math.PI / 2 : -Math.PI / 2;
+      const inwardRotation = arrivalRotation > 0 ? Math.PI : -Math.PI;
       diner.position.x = tr.seatX;
-      diner.position.z = mix(2.42, tr.stageZ, u);
-      diner.rotation.y = Math.PI;
-      walkRig(rig, elapsed * TURNOVER_WALK.cadence, 0.7);
+      diner.position.z = mix(2.42, tr.stageZ, travel);
+      diner.rotation.y = mix(arrivalRotation, inwardRotation, turn);
+      applyWalkFromTravel(diner, ease01(travel / 0.14));
       if (elapsed >= tr.duration) setTurnoverPhase(tr, 'sit', 1.2);
     } else if (tr.phase === 'sit') {
       applyPose(rig, blendPose(standing, seatedPose(diner), u));
@@ -1881,9 +2053,11 @@ export function initScene(canvas, onHotspot, opts = {}) {
       }
     } else if (tr.phase === 'welcome') {
       const workX = tr.seatX + (tr.seatX < 0 ? 0.28 : -0.28);
-      if (elapsed < 1.2) guide.position.x = mix(tr.guideHomeX, workX, ease01(elapsed / 1.2));
-      else if (elapsed < 2.05) guide.position.x = workX;
-      else guide.position.x = mix(workX, tr.guideHomeX, ease01((elapsed - 2.05) / 0.95));
+      if (elapsed < 1.2) cookTravelX(tr.guideHomeX, workX, elapsed / 1.2);
+      else if (elapsed < 2.05) {
+        guide.position.x = workX;
+        faceCookAtStation(tr.guideHomeX, workX, elapsed - 1.2);
+      } else cookTravelX(workX, tr.guideHomeX, (elapsed - 2.05) / 0.95);
       if (elapsed >= 2.05 && !tr.bowlPlaced) {
         setBowlFill(diner.userData.table.bowl, 1);
         setBowlVisible(diner.userData.table.bowl, true);
@@ -2841,6 +3015,7 @@ export function initScene(canvas, onHotspot, opts = {}) {
     }
 
     if (guideMixer) guideMixer.update(dt);
+    if (guide) guide.userData.serviceWalking = false;
 
     if (REDUCED) {
       for (const d of diners) applyPose(d.userData.rig, d.userData.ai.cur);
@@ -2857,6 +3032,7 @@ export function initScene(canvas, onHotspot, opts = {}) {
       }
       for (const d of diners) if (!d.userData.ai?.turnover) tickNPC(d, poseDt);
       if (guideRig && guide.userData.ai) tickNPC(guide, poseDt);
+      applyCookWalk();
       syncServiceBowl();
       syncVisitorBowl();
       tickVisitorMeal(poseDt);
@@ -2867,11 +3043,15 @@ export function initScene(canvas, onHotspot, opts = {}) {
       const wk = walkers[i], wd = wk.userData;
       if (REDUCED) continue;
       wk.position.x += wd.speed * dt;
-      if (wk.position.x > wd.range) wk.position.x = -wd.range;
-      if (wk.position.x < -wd.range) wk.position.x = wd.range;
+      if (wk.position.x > wd.range || wk.position.x < -wd.range) {
+        wk.position.x = wk.position.x > wd.range ? -wd.range : wd.range;
+        wk.position.z = walkerPathZ(wk);
+        // A street-loop wrap is a teleport; a large sparse-frame step isn't.
+        beginWalk(wk);
+      }
       const pathZ = walkerPathZ(wk);
       wk.position.z += (pathZ - wk.position.z) * Math.min(1, dt * 4.5);
-      walkRig(wk.userData.rig, t * (2.75 + i * 0.55) + i * 1.9, 1);
+      applyWalkFromTravel(wk);
     }
 
     for (const bird of birds) {
@@ -2907,10 +3087,13 @@ export function initScene(canvas, onHotspot, opts = {}) {
     updateHover();
     if (phase === 'seated') { updatePins(); updateYouPin(); }
     else { updateSeatPin(t); updateYouPin(); }
-    renderer.render(scene, camera);
+    if (!auditSkipRender) renderer.render(scene, camera);
   }
   orderChoices?.addEventListener('click', onOrderClick);
   orderSkip?.addEventListener('click', onOrderSkip);
+  orderAgain?.addEventListener('click', chooseAnotherMeal);
+  orderDone?.addEventListener('click', onOrderDone);
+  orderReopen?.addEventListener('click', onOrderReopen);
   updateOrderUI();
   frame();
 
@@ -2971,10 +3154,39 @@ export function initScene(canvas, onHotspot, opts = {}) {
         if (!Number.isFinite(xs?.[index])) return;
         walker.position.x = xs[index];
         walker.position.z = walkerPathZ(walker, xs[index]);
+        beginWalk(walker);
       });
       scene.updateMatrixWorld(true);
       return walkers.map((walker) => ({ x: walker.position.x, z: walker.position.z }));
     },
+
+    auditLocomotion(kind, index = 0) {
+      const npc = kind === 'cook' ? guide : kind === 'walker' ? walkers[index] : diners[index];
+      const rig = npc?.userData.rig;
+      if (!npc || !rig) return null;
+      scene.updateMatrixWorld(true);
+      const point = (object) => {
+        const value = object.getWorldPosition(new THREE.Vector3());
+        return { x: value.x, y: value.y, z: value.z };
+      };
+      const soleBox = new THREE.Box3();
+      return {
+        root: point(npc),
+        footL: point(rig.legL.shoe),
+        footR: point(rig.legR.shoe),
+        soleL: soleBox.setFromObject(rig.legL.shoe, true).min.y,
+        soleR: soleBox.setFromObject(rig.legR.shoe, true).min.y,
+        distance: npc.userData.walk?.distance || 0,
+        moving: !!npc.userData.walk?.moving,
+        scale: npc.scale.x,
+        facingX: Math.sin(npc.rotation.y),
+        facingZ: Math.cos(npc.rotation.y),
+      };
+    },
+
+    // Test-only: keep the real live director/pose/gait updates while a no-GPU
+    // runner measures world-space contact. auditFrame still draws screenshots.
+    auditRendering(enabled) { auditSkipRender = !enabled; },
 
     /* Test-only transform perturbations for the IK regression audit. Each call
        is reversible by applying the opposite delta (or reciprocal scale). */
@@ -3306,7 +3518,7 @@ export function initScene(canvas, onHotspot, opts = {}) {
         visibleBox(you.userData.table.bowl.getObjectByName('bowl'), _carryBowlBox);
         visitorCarryPose = {
           handGap: Math.max(_carryBowlBox.distanceToPoint(_handL), _carryBowlBox.distanceToPoint(_handR)),
-          handSeparation: _handR.x - _handL.x,
+          handSeparation: carryHandSeparation(),
           faceClearance: _carryHead.y - _carryBowlBox.max.y,
         };
       }
@@ -3319,7 +3531,7 @@ export function initScene(canvas, onHotspot, opts = {}) {
         const serviceTime = nowSec() - service.startedAt;
         serviceCarryPose = {
           carrying: serviceTime >= 1.65 && serviceTime < 4.15,
-          handSeparation: _handR.x - _handL.x,
+          handSeparation: carryHandSeparation(),
           bowlTop: _carryBowlBox.max.y,
           headY: _carryHead.y,
           faceClearance: _carryHead.y - _carryBowlBox.max.y,
@@ -3457,6 +3669,9 @@ export function initScene(canvas, onHotspot, opts = {}) {
       cancelAnimationFrame(raf);
       orderChoices?.removeEventListener('click', onOrderClick);
       orderSkip?.removeEventListener('click', onOrderSkip);
+      orderAgain?.removeEventListener('click', chooseAnotherMeal);
+      orderDone?.removeEventListener('click', onOrderDone);
+      orderReopen?.removeEventListener('click', onOrderReopen);
       window.removeEventListener('resize', onResize);
       renderer.dispose();
     },
