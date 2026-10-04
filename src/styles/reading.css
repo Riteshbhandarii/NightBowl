@@ -1,0 +1,238 @@
+.reading-page {
+  min-height: 100%;
+  overflow: auto;
+  background:
+    radial-gradient(circle at 18% 0%, rgba(178, 58, 36, 0.14), transparent 34rem),
+    linear-gradient(180deg, #17111b, #0f0d13 70%);
+  color: #efe4d0;
+}
+
+.reading-header {
+  width: min(1120px, calc(100% - 40px));
+  margin: 0 auto;
+  padding: 24px 0;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 24px;
+  border-bottom: 1px solid rgba(239, 228, 208, 0.16);
+}
+
+.reading-brand {
+  flex: none;
+  font: 700 24px/1 'Zilla Slab', Georgia, serif;
+  color: #f0d9a8;
+  text-decoration: none;
+}
+
+.reading-header nav {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px 22px;
+}
+
+.reading-header nav a,
+.reading-back {
+  font: 400 10px/1.4 'Space Mono', monospace;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(239, 228, 208, 0.7);
+  text-decoration: none;
+}
+
+.reading-header nav a:hover,
+.reading-header nav a[aria-current='page'],
+.reading-back:hover {
+  color: #ef9a4c;
+}
+
+.reading-main {
+  overflow-wrap: anywhere;
+  width: min(900px, calc(100% - 40px));
+  margin: 0 auto;
+  padding: clamp(64px, 10vw, 112px) 0 120px;
+}
+
+.reading-kicker,
+.project-meta dt,
+.project-tag,
+.project-links,
+.draft-notice {
+  font-family: 'Space Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #e0b06a;
+}
+
+.reading-main > h1,
+.project-header h1 {
+  max-width: 14ch;
+  margin: 12px 0 18px;
+  font: 700 clamp(44px, 8vw, 74px)/0.98 'Zilla Slab', Georgia, serif;
+  color: #f6efe0;
+  text-wrap: balance;
+}
+
+.reading-deck {
+  max-width: 700px;
+  margin: 0;
+  font: 400 clamp(18px, 2.4vw, 22px)/1.55 'Zilla Slab', Georgia, serif;
+  color: rgba(239, 228, 208, 0.72);
+}
+
+.menu-section {
+  margin-top: 72px;
+}
+
+.menu-section h2 {
+  margin: 0 0 6px;
+  font: 700 28px/1.1 'Zilla Slab', Georgia, serif;
+  color: #f6efe0;
+}
+
+.menu-note {
+  margin: 0 0 20px;
+  color: rgba(239, 228, 208, 0.58);
+  font-style: italic;
+}
+
+.project-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.project-card {
+  padding: 26px 0 30px;
+  border-top: 1px solid rgba(239, 228, 208, 0.18);
+}
+
+.project-card-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.project-card h3 {
+  margin: 0;
+  font: 700 clamp(23px, 4vw, 31px)/1.1 'Zilla Slab', Georgia, serif;
+  color: #f6efe0;
+}
+
+.project-card p {
+  max-width: 720px;
+  margin: 10px 0 0;
+  line-height: 1.65;
+  color: rgba(239, 228, 208, 0.7);
+}
+
+.project-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 18px;
+  margin-top: 16px;
+}
+
+.project-links a,
+.project-body a,
+.reading-back {
+  color: #ef9a4c;
+}
+
+.draft-notice {
+  margin-top: 64px;
+  padding-top: 18px;
+  border-top: 1px dashed rgba(239, 228, 208, 0.24);
+  color: rgba(239, 228, 208, 0.55);
+  text-transform: none;
+}
+
+.project-header {
+  margin-top: 34px;
+}
+
+.project-summary {
+  max-width: 720px;
+  margin: 0;
+  font: 400 clamp(18px, 2.4vw, 22px)/1.55 'Zilla Slab', Georgia, serif;
+  color: rgba(239, 228, 208, 0.76);
+}
+
+.project-meta {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 24px;
+  margin: 42px 0 0;
+  padding: 24px 0;
+  border-block: 1px solid rgba(239, 228, 208, 0.16);
+}
+
+.project-meta div {
+  min-width: 0;
+}
+
+.project-meta dt {
+  margin-bottom: 7px;
+}
+
+.project-meta dd {
+  margin: 0;
+  line-height: 1.55;
+  color: rgba(239, 228, 208, 0.76);
+}
+
+.project-stack {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.project-stack li {
+  padding: 4px 8px;
+  border: 1px solid rgba(239, 228, 208, 0.18);
+  border-radius: 999px;
+  font: 400 10px/1.3 'Space Mono', monospace;
+}
+
+.project-body {
+  max-width: 720px;
+  margin-top: 52px;
+  font-size: 17px;
+  line-height: 1.75;
+  color: rgba(246, 239, 224, 0.88);
+}
+
+.project-body h2,
+.project-body h3 {
+  margin: 2em 0 0.6em;
+  font-family: 'Zilla Slab', Georgia, serif;
+  line-height: 1.15;
+  color: #f6efe0;
+}
+
+.project-body h2 { font-size: 34px; }
+.project-body h3 { font-size: 25px; }
+.project-body pre {
+  overflow-x: auto;
+  padding: 18px;
+  border: 1px solid rgba(239, 228, 208, 0.14);
+  border-radius: 5px;
+  background: #09080b;
+}
+.project-body code { font-family: 'Space Mono', monospace; font-size: 0.88em; }
+.project-body img { display: block; max-width: 100%; height: auto; margin: 32px auto; border-radius: 5px; }
+.project-body blockquote { margin: 28px 0; padding-left: 20px; border-left: 3px solid #b23a24; color: rgba(239, 228, 208, 0.68); }
+
+@media (max-width: 700px) {
+  .reading-header { align-items: flex-start; }
+  .reading-header nav { gap: 8px 14px; }
+  .reading-main { padding-top: 56px; }
+  .project-card-head { display: block; }
+  .project-tag { display: block; margin-top: 8px; }
+}

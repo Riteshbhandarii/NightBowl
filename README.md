@@ -49,7 +49,9 @@ in this checkout directly. The admin contains:
 
 - **Kitchen Log** — create and edit posts, set `Draft` or `Published`, add tags,
   write rich Markdown, and open the post preview.
-- **Menu projects** — edit every project shown in the menu book.
+- **Menu projects** — edit the short public summary and separate source/demo
+  links. Extended Markdown, contribution, context and stack appear only after
+  explicitly publishing a case study at `/menu/<existing-slug>/`.
 - **Site copy and links** — edit the Guide, specials, Bill, social links, and
   ambient character dialogue without touching source code.
 
@@ -118,8 +120,27 @@ Moving specifically to Vercel later requires swapping `@astrojs/node` for
 OAuth callback URL to the GitHub App. The posts, projects, and site copy do not
 need conversion.
 
-After picking a domain, set it in `astro.config.mjs` → `site` (fixes the sitemap
-and social-share URLs).
+Set `NIGHTBOWL_SITE_URL=https://your-approved-domain.tld` in the build environment
+after picking the real domain. It must be an HTTPS origin, without a path,
+query, credentials or placeholder host. Unconfigured builds emit no sitemap,
+canonical or absolute share URL. Configured builds use that origin for each
+public page and the original 1200×630 scene image. Admin and preview routes,
+unpublished articles and case studies, and draft Guide/Bill pages are excluded.
+Draft post previews are unlisted and `noindex`, not confidential or authenticated.
+
+In **The Bill**, add the owner-approved public email and check its approval box.
+An unapproved address creates no public link. For the CV, add the actual PDF to
+`public/`, set its local URL, then enable **Show CV download**. The build rejects
+a missing/non-PDF file or remote URL. Keep these controls off until the assets
+and publication approval exist; generated placeholders are not a finished CV.
+
+The ordinary `/menu/`, `/guide/`, `/log/` and `/bill/` pages work without JavaScript.
+With scripts enabled, the stall opens the book immediately and records its
+section in the URL hash; reload, Back and Forward restore that section.
+**Pause motion** freezes autonomous scene time, persists the choice when browser
+storage is available, and respects reduced-motion settings. Reading the book
+also pauses the scene. Static mode still allows explicit seating, ordering and
+camera interaction; it does not promise to stop GPU rendering.
 
 ## Stack
 

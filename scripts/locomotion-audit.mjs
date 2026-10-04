@@ -173,9 +173,12 @@ await session(viewport, async (ctx) => {
   await waitFor(evaluate, "window.__nightbowl.selfCheck().phase === 'seated'", 'sparse cook seating');
   assert.ok(await evaluate('window.__nightbowl.testEmptyBowl(2)'));
   await waitFor(evaluate, 'window.__nightbowl.selfCheck().service?.dinerX > 0', 'right-side cook service');
-  const beforeSparse = await evaluate("(() => { window.__nightbowl.auditBegin(); return window.__nightbowl.auditLocomotion('cook'); })()");
-  await sleep(700);
-  await evaluate('window.__nightbowl.auditEnd(); new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))');
+  const beforeSparse = await evaluate("window.__nightbowl.auditLocomotion('cook')");
+  // auditBegin/auditEnd intentionally freeze the scene clock for pose shots.
+  // A real long task starves frames without pausing time: retain the >0.5m
+  // displacement and planted-foot thresholds against that actual condition.
+  await evaluate('(() => { const end=performance.now()+700; while(performance.now()<end){} })()');
+  await evaluate('new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))');
   const afterSparse = await evaluate("window.__nightbowl.auditLocomotion('cook')");
   const rootTravel = horizontal(beforeSparse.root, afterSparse.root);
   const gaitTravel = (afterSparse.distance - beforeSparse.distance) * afterSparse.scale;

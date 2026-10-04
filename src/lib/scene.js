@@ -5,7 +5,7 @@
    if /models/chef.glb exists it is loaded and animated, otherwise
    a hand-built stand-in is used so the scene always works.
 
-   initScene(canvas, onHotspot) -> { setBookOpen, dispose }
+   initScene(canvas, onHotspot) -> { setBookOpen, setMotionPaused, dispose }
    ============================================================ */
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
@@ -31,6 +31,34 @@ export function initScene(canvas, onHotspot, opts = {}) {
   };
   const MENU_ITEMS = Array.isArray(opts.menuItems) ? opts.menuItems.slice(0, 8) : [];
   const REDUCED = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let manualMotionPaused = !!opts.motionPaused;
+  let sceneElapsed = 0;
+  let sceneClockAt = null;
+
+  function motionState() {
+    return {
+      manualPaused: manualMotionPaused,
+      systemReduced: REDUCED,
+      paused: manualMotionPaused || REDUCED || bookOpen,
+    };
+  }
+
+  // Every autonomous state machine reads this clock. Updating its wall-clock
+  // anchor while paused prevents a service, meal or turnover from jumping when
+  // motion resumes.
+  function advanceSceneClock() {
+    const at = performance.now() / 1000;
+    if (sceneClockAt === null) {
+      sceneClockAt = at;
+      return 0;
+    }
+    const delta = Math.max(0, at - sceneClockAt);
+    sceneClockAt = at;
+    if (!motionState().paused) sceneElapsed += delta;
+    return motionState().paused ? 0 : delta;
+  }
+
+  function nowSec() { return sceneElapsed; }
 
   // Under ?nbtest=1 every draw from the scene's own generator comes from a fixed
   // sequence, so a pose sampled on one machine is the pose sampled on another.
@@ -99,7 +127,6 @@ export function initScene(canvas, onHotspot, opts = {}) {
     walk(root);
     return out;
   }
-  const clock = new THREE.Clock();
   let auditSkipRender = false;
 
   const hotspots = [];
@@ -175,7 +202,7 @@ export function initScene(canvas, onHotspot, opts = {}) {
   // intro state: 'street' = first person on the pavement, 'sitting' = the walk-in
   // and sit move, 'seated' = the scene exactly as it has always behaved.
   // the walk in plays on every load; only reduced motion skips it.
-  let phase = REDUCED ? 'seated' : 'street';
+  let phase = motionState().paused ? 'seated' : 'street';
   let guide = null;
   let guideMixer = null;
   let guideRig = null;
@@ -1251,8 +1278,6 @@ export function initScene(canvas, onHotspot, opts = {}) {
   // function declaration, not a const arrow: initAI calls this during scene
   // construction, which happens above this line.
   function rnd(a, b) { return a + random() * (b - a); }
-  // wall clock in seconds, for anything that schedules rather than eases
-  function nowSec() { return performance.now() / 1000; }
   function pickPlan(plan) {
     let total = 0;
     for (const e of plan) total += e.w;
@@ -1495,7 +1520,7 @@ export function initScene(canvas, onHotspot, opts = {}) {
     setBowlVisible(bowl, false);
     visitorOrder.status = 'queued';
     // A display-only GLB has no serving rig yet (#79); don't strand an order.
-    if (REDUCED || !guideRig) placeVisitorMeal(true);
+    if (motionState().paused || !guideRig) placeVisitorMeal(true);
     updateOrderUI();
     return true;
   }
@@ -2780,11 +2805,14 @@ export function initScene(canvas, onHotspot, opts = {}) {
 
   function takeSeat() {
     if (phase !== 'street') return;
+    if (motionState().paused) {
+      seated();
+      return;
+    }
     phase = 'sitting';
-    // wall clock, not accumulated dt: dt is capped at 0.05 so on anything under
-    // 20fps the intro would stretch out well past its 6s instead of just dropping
-    // frames. a timed move should take the same time on every machine.
-    sitStart = performance.now();
+    // The uncapped scene clock keeps this move six seconds long on a slow
+    // renderer while still preserving its exact point when motion is paused.
+    sitStart = nowSec();
     introZ = streetZ();
     restPos = orbitPos(cam.azT, cam.elT, cam.rT);
     if (seatHitArea) seatHitArea.visible = false;
@@ -2802,6 +2830,18 @@ export function initScene(canvas, onHotspot, opts = {}) {
     seatPin?.remove();
     seatPin = null;
     updateOrderUI();
+  }
+
+  function setMotionPaused(paused) {
+    // Account for the active interval up to this interaction before changing
+    // the state that decides whether clock time accrues.
+    advanceSceneClock();
+    manualMotionPaused = !!paused;
+    sceneClockAt = performance.now() / 1000;
+    // Static mode must not strand someone inside the entrance animation where
+    // the menu pins and meal controls are intentionally unavailable.
+    if (motionState().paused && phase === 'sitting') seated();
+    return motionState();
   }
 
   function ndc(e) {
@@ -2966,16 +3006,14 @@ export function initScene(canvas, onHotspot, opts = {}) {
   let startT = 0;
   function frame() {
     raf = requestAnimationFrame(frame);
-    // getDelta() first: getElapsedTime() calls it internally and consumes the
-    // delta, so asking for elapsed first leaves dt at ~0 forever (which froze the
-    // street walkers and the animation mixer). elapsedTime is safe to read direct.
-    const poseDt = Math.min(clock.getDelta(), 0.5);
+    const staticScene = motionState().paused;
+    const poseDt = Math.min(advanceSceneClock(), 0.5);
     // Locomotion stays capped so one stalled frame cannot teleport a walker.
     // Pose easing uses the real elapsed interval; otherwise a 1 FPS software
     // renderer advances wall-clock actions while leaving the limbs seconds
     // behind the object they are supposed to hold.
     const dt = Math.min(poseDt, 0.05);
-    const t = clock.elapsedTime;
+    const t = nowSec();
     if (!startT) startT = t;
     const intro = REDUCED ? 1 : Math.min(1, (t - startT) / 2.6);
     const ease = 1 - Math.pow(1 - intro, 3);
@@ -2989,7 +3027,7 @@ export function initScene(canvas, onHotspot, opts = {}) {
       );
       camera.lookAt(LOOK_STREET[0], LOOK_STREET[1], LOOK_STREET[2]);
     } else if (phase === 'sitting') {
-      const sitT = (performance.now() - sitStart) / 1000;
+      const sitT = nowSec() - sitStart;
       sampleIntro(Math.min(sitT, SIT_END));
       // you appear once the camera has actually left the seat, part way through
       // the pull-out, so you never materialise inside the lens
@@ -2997,11 +3035,11 @@ export function initScene(canvas, onHotspot, opts = {}) {
       setYouReveal(Math.max(0, Math.min(1, (pu - 0.28) / 0.42)));
       if (sitT >= SIT_END) seated();
     } else {
-      if (!userMoved) {
+      if (!userMoved && !staticScene) {
         cam.az += ((cam.azT + Math.sin(t * 0.11) * 0.05) - cam.az) * (0.02 + 0.04 * ease);
         cam.el += (cam.elT - cam.el) * 0.03;
         cam.r += (cam.rT - cam.r) * 0.03;
-      } else {
+      } else if (userMoved) {
         cam.az += (cam.azT - cam.az) * 0.08;
         cam.el += (cam.elT - cam.el) * 0.08;
         cam.r += (cam.rT - cam.r) * 0.08;
@@ -3015,11 +3053,15 @@ export function initScene(canvas, onHotspot, opts = {}) {
     }
 
     if (guideMixer) guideMixer.update(dt);
-    if (guide) guide.userData.serviceWalking = false;
+    if (guide && !staticScene) guide.userData.serviceWalking = false;
 
-    if (REDUCED) {
-      for (const d of diners) applyPose(d.userData.rig, d.userData.ai.cur);
-      if (guideRig && guide.userData.ai) applyPose(guideRig, guide.userData.ai.cur);
+    if (staticScene) {
+      // System reduced motion starts in the authored resting poses. A manual
+      // pause instead preserves the exact current limb/prop transforms.
+      if (REDUCED) {
+        for (const d of diners) applyPose(d.userData.rig, d.userData.ai.cur);
+        if (guideRig && guide.userData.ai) applyPose(guideRig, guide.userData.ai.cur);
+      }
     } else {
       // the director only performs for someone who is actually sitting down
       if (phase === 'seated') {
@@ -3041,7 +3083,7 @@ export function initScene(canvas, onHotspot, opts = {}) {
 
     for (let i = 0; i < walkers.length; i++) {
       const wk = walkers[i], wd = wk.userData;
-      if (REDUCED) continue;
+      if (staticScene) continue;
       wk.position.x += wd.speed * dt;
       if (wk.position.x > wd.range || wk.position.x < -wd.range) {
         wk.position.x = wk.position.x > wd.range ? -wd.range : wd.range;
@@ -3055,7 +3097,7 @@ export function initScene(canvas, onHotspot, opts = {}) {
     }
 
     for (const bird of birds) {
-      if (REDUCED) continue;
+      if (staticScene) continue;
       bird.position.x += bird.userData.speed * dt;
       if (bird.position.x > 12) bird.position.x = -12;
       bird.rotation.z = Math.sin(t * 2.2 + bird.userData.phase) * 0.06;
@@ -3064,7 +3106,7 @@ export function initScene(canvas, onHotspot, opts = {}) {
 
     for (const grp of steamGroups) {
       for (const q of grp.children) {
-        const life = ((t * (REDUCED ? 0.05 : 0.4) + q.userData.seed) % 1);
+        const life = ((t * 0.4 + q.userData.seed) % 1);
         q.position.y = life * 0.95;
         q.position.x = Math.sin((life + q.userData.seed) * Math.PI * 2) * q.userData.spread * 0.42;
         q.position.z = Math.cos((life * 1.7 + q.userData.seed) * Math.PI * 2) * q.userData.spread * 0.12;
@@ -3076,9 +3118,10 @@ export function initScene(canvas, onHotspot, opts = {}) {
     }
 
     for (let i = 0; i < norenFlaps.length; i++) {
-      norenFlaps[i].rotation.x = REDUCED ? 0 : Math.sin(t * 1.3 + i) * 0.05;
+      if (REDUCED) norenFlaps[i].rotation.x = 0;
+      else if (!staticScene) norenFlaps[i].rotation.x = Math.sin(t * 1.3 + i) * 0.05;
     }
-    if (!REDUCED) {
+    if (!staticScene) {
       for (let i = 0; i < lanternMats.length; i++) {
         lanternMats[i].emissiveIntensity = 1.2 + Math.sin(t * (6 + i * 2.1)) * 0.12 + random() * 0.04;
       }
@@ -3098,7 +3141,14 @@ export function initScene(canvas, onHotspot, opts = {}) {
   frame();
 
   return {
-    setBookOpen(v) { bookOpen = v; hideHint(); updateOrderUI(); },
+    setBookOpen(v) {
+      advanceSceneClock();
+      bookOpen = v;
+      hideHint();
+      updateOrderUI();
+    },
+    setMotionPaused,
+    getMotionState: motionState,
     orderMeal,
     testEmptyBowl(index = 0) {
       const diner = diners[index];
@@ -3128,6 +3178,7 @@ export function initScene(canvas, onHotspot, opts = {}) {
        world space. Bounds come from the objects in the scene, never from numbers
        copied out of this file, so moving a stool moves the test with it. */
     auditBegin() {
+      advanceSceneClock();
       cancelAnimationFrame(raf);
       raf = 0;
       const roots = [...diners, ...walkers, guide, you].filter(Boolean);
@@ -3145,6 +3196,7 @@ export function initScene(canvas, onHotspot, opts = {}) {
         for (const [root, visible] of auditVisibility) root.visible = visible;
         auditVisibility = null;
       }
+      sceneClockAt = performance.now() / 1000;
       if (!raf) raf = requestAnimationFrame(frame);
       return true;
     },
@@ -3539,6 +3591,8 @@ export function initScene(canvas, onHotspot, opts = {}) {
       }
       return {
         phase,
+        sceneTime: nowSec(),
+        motion: motionState(),
         diners: diners.length,
         visitor: !!you,
         visitorAutonomous: !!you?.userData.ai,

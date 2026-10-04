@@ -1,6 +1,5 @@
 ---
-import Base from './Base.astro';
-import { LOG, SITE } from '../data/content';
+import ReadingLayout from './ReadingLayout.astro';
 import '../styles/log.css';
 
 interface Props {
@@ -12,13 +11,6 @@ interface Props {
 const { title, description, noindex = false } = Astro.props;
 ---
 
-<Base title={`${title} · ${SITE.name}`} description={description} bodyClass="reading-page" noindex={noindex}>
-  <header class="log-header">
-    <a class="log-brand" href="/">{SITE.name}</a>
-    <nav aria-label={LOG.title}>
-      <a href="/log/">{LOG.title}</a>
-      <a href="/">{LOG.backToStall}</a>
-    </nav>
-  </header>
+<ReadingLayout title={title} description={description} noindex={noindex}>
   <slot />
-</Base>
+</ReadingLayout>

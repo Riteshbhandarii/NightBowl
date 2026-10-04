@@ -749,7 +749,7 @@ await session([], async (ctx) => {
       entries: document.querySelectorAll('.log-index > li').length,
       drafts: document.querySelectorAll('.log-index > li.draft').length,
       linkedDrafts: document.querySelectorAll('.log-index > li.draft h2 a').length,
-      homeLink: document.querySelector('.log-header a[href="/"]')?.textContent.trim(),
+      homeLink: document.querySelector('.reading-header a[href="/"]')?.textContent.trim(),
       horizontalOverflow: document.documentElement.scrollWidth - innerWidth,
     }))()`);
     check(`${viewport.name}: Kitchen Log has its own index`,

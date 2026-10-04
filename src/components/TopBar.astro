@@ -4,20 +4,11 @@ import { NAVIGATION } from '../data/content';
 
 <header class="topbar">
   <nav class="nav" aria-label="Sections">
-    <button data-open="menu">{NAVIGATION.menu}</button>
-    <button data-open="guide">{NAVIGATION.guide}</button>
-    <button data-open="log">{NAVIGATION.log}</button>
-    <button data-open="bill">{NAVIGATION.bill}</button>
+    <a href="/menu/" data-open="menu" aria-haspopup="dialog">{NAVIGATION.menu}</a>
+    <a href="/guide/" data-open="guide" aria-haspopup="dialog">{NAVIGATION.guide}</a>
+    <a href="/log/" data-open="log" aria-haspopup="dialog">{NAVIGATION.log}</a>
+    <a href="/bill/" data-open="bill" aria-haspopup="dialog">{NAVIGATION.bill}</a>
   </nav>
 
-  <button class="menu-toggle" data-open="menu" aria-haspopup="dialog">{NAVIGATION.openMenu}</button>
+  <a class="menu-toggle" href="/menu/" data-open="menu" aria-haspopup="dialog">{NAVIGATION.openMenu}</a>
 </header>
-
-<script>
-  document.querySelectorAll('[data-open]').forEach((b) => {
-    b.addEventListener('click', () => {
-      document.dispatchEvent(new CustomEvent('nb:open', { detail: (b as HTMLElement).dataset.open }));
-    });
-  });
-
-</script>

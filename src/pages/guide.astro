@@ -1,0 +1,17 @@
+---
+import ReadingLayout from '../layouts/ReadingLayout.astro';
+import { GUIDE, SITE } from '../data/content';
+---
+
+<ReadingLayout title={GUIDE.title} description={GUIDE.intro} noindex={GUIDE.draftCopy}>
+  <main class="reading-main">
+    <span class="reading-kicker">{GUIDE.eyebrow}</span>
+    <h1>{GUIDE.title}</h1>
+    <p class="reading-deck">{GUIDE.intro}</p>
+    <div class="project-body">
+      {GUIDE.body.map((paragraph) => <p>{paragraph}</p>)}
+      <p><a href={SITE.github} target="_blank" rel="noopener">{GUIDE.githubLabel}</a></p>
+      {GUIDE.draftCopy && <p class="draft-notice">{SITE.draftStamp}</p>}
+    </div>
+  </main>
+</ReadingLayout>

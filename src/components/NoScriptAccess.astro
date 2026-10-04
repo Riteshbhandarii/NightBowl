@@ -1,0 +1,25 @@
+---
+import { SITE, NAVIGATION } from '../data/content';
+---
+
+<noscript>
+  <style>
+    body { overflow: auto; }
+    #scene, #loading, .pins, .hint, .credit, .book-wrap, .backdrop, .visitor-order, .scene-motion-control { display: none !important; }
+    .plain-access { max-width: 700px; margin: 0 auto; padding: 120px 24px 60px; }
+    .plain-access h1 { font: 700 48px/1.1 'Zilla Slab', Georgia, serif; }
+    .plain-access p { line-height: 1.7; }
+    .plain-access nav { display: flex; flex-wrap: wrap; gap: 16px 24px; margin-top: 32px; }
+    .plain-access a { color: var(--accent); }
+  </style>
+  <main class="plain-access">
+    <h1>{SITE.name}</h1>
+    <p>The interactive stall needs JavaScript. You can read the portfolio without it.</p>
+    <nav aria-label="Read the portfolio">
+      <a href="/menu/">{NAVIGATION.menu}</a>
+      <a href="/guide/">{NAVIGATION.guide}</a>
+      <a href="/log/">{NAVIGATION.log}</a>
+      <a href="/bill/">{NAVIGATION.bill}</a>
+    </nav>
+  </main>
+</noscript>

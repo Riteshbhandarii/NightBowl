@@ -70,6 +70,13 @@ jobs:
           echo "::error::The production build failed."
           echo "Reproduce with: npm run build"
 
+      # Fixtures rebuild sequentially and restore the real content. Browser
+      # jobs receive only the final restored artifact, never a test publication.
+      - name: Project draft and rich-publication boundary
+        run: npm run check:projects
+      - name: Contact assets and configured/unset launch metadata
+        run: npm run check:launch
+
       - name: Every expected route was generated
         run: npm run check:build
       - if: failure()
@@ -201,6 +208,10 @@ jobs:
         run: npm run audit:visitor
       - name: Grounded locomotion and sparse frames
         run: npm run audit:locomotion
+      - name: Native content access and browser history
+        run: npm run audit:access
+      - name: Persistent pause and lifecycle continuity
+        run: npm run audit:pause
       - if: failure()
         run: |
           echo "::error::An interaction regression failed. Read the named assertion above."

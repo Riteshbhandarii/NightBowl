@@ -1,6 +1,7 @@
 {
   "site": {
     "name": "NightBowl",
+    "ownerName": "Ritesh Bhandari",
     "tagline": "ritesh bhandari  portfolio & kitchen log",
     "github": "https://github.com/Riteshbhandarii",
     "linkedin": "https://www.linkedin.com/in/ritesh-bhandari-0371b5294/",
@@ -93,6 +94,8 @@
     "cvNote": "Full CV as a PDF arrives once the copy is final. Drop it at /public/cv.pdf and flip cvReady to true.",
     "emptyCvMessage": "The full CV as a PDF arrives once the copy is final. Until then the links are the source of truth.",
     "cvUrl": "/cv.pdf",
+    "email": "",
+    "emailConfirmed": false,
     "cvLinkLabel": "download PDF",
     "githubLabel": "github.com/Riteshbhandarii",
     "linkedinLabel": "ritesh-bhandari",

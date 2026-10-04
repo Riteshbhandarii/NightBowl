@@ -184,6 +184,31 @@ try {
         check('editor exposes preview action', /Preview/i.test(editorText) || previewControl);
       }
     }
+    const projectsLink = state.links.find((link) => /Menu projects/i.test(link.text));
+    check('Menu project collection is navigable', !!projectsLink);
+    if (projectsLink) {
+      await send('Page.navigate', { url: new URL(projectsLink.href, base).href });
+      for (let attempt = 0; attempt < 40; attempt++) {
+        await sleep(250);
+        if (/TEORIAT Chess Engine/.test(await evaluate('document.body.innerText'))) break;
+      }
+      const opened = await evaluate(`(() => {
+        const leaf=[...document.querySelectorAll('*')].find(e=>e.children.length===0 && /TEORIAT Chess Engine/.test(e.textContent||''));
+        if(!leaf)return false;leaf.click();return true;
+      })()`);
+      let projectEditor = '';
+      for (let attempt = 0; attempt < 40; attempt++) {
+        await sleep(250);
+        projectEditor = await evaluate(`document.body.innerText + '\\n' + [...document.querySelectorAll('[contenteditable=true]')].map(e=>e.getAttribute('aria-label')||'').join('\\n')`);
+        if (/Extended case study/.test(projectEditor)) break;
+      }
+      check('project editor opens the existing flagship', opened && /\/item\/chess-engine/.test(await evaluate('location.pathname')));
+      for (const label of ['Menu summary', 'Case-study status', 'Contribution', 'Context', 'Technology stack', 'Source-code URL', 'Live-demo URL', 'Extended case study']) {
+        check(`project editor exposes ${label}`, projectEditor.includes(label));
+      }
+      check('project editor exposes rich Markdown and save controls',
+        await evaluate(`!!document.querySelector('[contenteditable=true]') && /Save/.test(document.body.innerText)`));
+    }
   } else {
     check('production CMS requires GitHub authentication',
       /GitHub|log in|sign in/i.test(state.text),
@@ -208,7 +233,7 @@ try {
   check('draft preview is clearly marked and not indexed',
     /Draft preview/i.test(postPreview.banner) && /noindex/i.test(postPreview.robots));
 
-  await send('Page.navigate', { url: new URL('/?preview=menu', base).href });
+  await send('Page.navigate', { url: new URL('/preview/menu/', base).href });
   let menuPreview;
   for (let attempt = 0; attempt < 60; attempt++) {
     await sleep(250);

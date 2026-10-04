@@ -1,0 +1,14 @@
+---
+import Base from '../../layouts/Base.astro';
+import Stall from '../../components/Stall.astro';
+import { SITE } from '../../data/content';
+---
+<Base title={`Preview: ${SITE.name}`} description={SITE.homeDescription} bodyClass="menu-preview" noindex>
+  <aside class="preview-banner" id="previewBanner">
+    Draft preview · <a href="/keystatic">Back to admin</a>
+  </aside>
+  <Stall />
+  <script is:inline>
+    document.dispatchEvent(new CustomEvent('nb:open', { detail: 'menu' }));
+  </script>
+</Base>

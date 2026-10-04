@@ -1,0 +1,29 @@
+---
+import ReadingLayout from '../layouts/ReadingLayout.astro';
+import BillLinks from '../components/BillLinks.astro';
+import { BILL, SITE } from '../data/content';
+---
+
+<ReadingLayout title={BILL.title} description={BILL.intro} noindex={BILL.draftCopy}>
+  <main class="reading-main">
+    <span class="reading-kicker">{BILL.eyebrow}</span>
+    <h1>{BILL.title}</h1>
+    <p class="reading-deck">{BILL.intro}</p>
+    <div class="project-body">
+      {!BILL.cvReady && <p>{BILL.emptyCvMessage}</p>}
+      <dl class="plain-bill">
+        {BILL.rows.map(([label, value]) => <div><dt>{label}</dt><dd>{value}</dd></div>)}
+        <BillLinks />
+      </dl>
+      <p>{BILL.total}</p>
+      {BILL.draftCopy && <p class="draft-notice">{SITE.draftStamp}</p>}
+    </div>
+  </main>
+</ReadingLayout>
+
+<style>
+  .plain-bill :global(div) { display: grid; grid-template-columns: 100px minmax(0, 1fr); gap: 16px; padding: 14px 0; border-bottom: 1px solid var(--line); }
+  .plain-bill :global(dt) { color: var(--ink-soft); font: 11px/1.7 'Space Mono', monospace; }
+  .plain-bill :global(dd) { margin: 0; overflow-wrap: anywhere; }
+  @media (max-width: 400px) { .plain-bill :global(div) { grid-template-columns: 1fr; gap: 4px; } }
+</style>
