@@ -1,0 +1,56 @@
+---
+import { getCollection } from 'astro:content';
+import ReadingLayout from '../../layouts/ReadingLayout.astro';
+import { MENU, SITE } from '../../data/content';
+
+const projects = (await getCollection('projects')).sort((a, b) => a.data.order - b.data.order);
+const slug = (id: string) => id.replace(/\.(md|mdx)$/, '');
+const sections = [
+  { key: 'mains', title: MENU.mainsTitle, note: MENU.mainsNote },
+  { key: 'small-plates', title: MENU.smallPlatesTitle, note: MENU.smallPlatesNote },
+  { key: 'off-menu', title: MENU.offMenuTitle, note: MENU.offMenuNote },
+] as const;
+---
+
+<ReadingLayout title={MENU.title} description={MENU.intro}>
+  <main class="reading-main">
+    <div class="reading-kicker">{SITE.name} · est. {SITE.establishedYear}</div>
+    <h1>{MENU.title}</h1>
+    <p class="reading-deck">{MENU.intro}</p>
+
+    {sections.map((section) => (
+      <section class="menu-section" aria-labelledby={`menu-${section.key}`}>
+        <h2 id={`menu-${section.key}`}>{section.title}</h2>
+        <p class="menu-note">{section.note}</p>
+        <ol class="project-list">
+          {projects.filter((project) => project.data.course === section.key).map((project) => (
+            <li class="project-card">
+              <article>
+                <div class="project-card-head">
+                  <h3>{project.data.name}</h3>
+                  <span class="project-tag">{project.data.tag}</span>
+                </div>
+                <p>{project.data.summary}</p>
+                <div class="project-links" aria-label={`Links for ${project.data.name}`}>
+                  {project.data.status === 'published' && (
+                    <a href={`/menu/${slug(project.id)}/`}>Read case study</a>
+                  )}
+                  {project.data.sourceUrl && (
+                    <a href={project.data.sourceUrl} target="_blank" rel="noopener">Source code ↗</a>
+                  )}
+                  {project.data.demoUrl && (
+                    <a href={project.data.demoUrl} target="_blank" rel="noopener">Live demo ↗</a>
+                  )}
+                </div>
+              </article>
+            </li>
+          ))}
+        </ol>
+      </section>
+    ))}
+
+    {projects.some((project) => project.data.draftCopy) && (
+      <p class="draft-notice">{SITE.draftStamp}</p>
+    )}
+  </main>
+</ReadingLayout>

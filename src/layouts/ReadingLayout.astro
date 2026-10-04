@@ -1,0 +1,29 @@
+---
+import Base from './Base.astro';
+import { NAVIGATION, SITE } from '../data/content';
+import '../styles/reading.css';
+
+interface Props {
+  title: string;
+  description: string;
+  noindex?: boolean;
+}
+
+const { title, description, noindex = false } = Astro.props;
+const pathname = Astro.url.pathname;
+const isCurrent = (prefix: string) => pathname === prefix || pathname.startsWith(`${prefix}/`);
+---
+
+<Base title={`${title} · ${SITE.name}`} description={description} bodyClass="reading-page" noindex={noindex}>
+  <header class="reading-header">
+    <a class="reading-brand" href="/">{SITE.name}</a>
+    <nav aria-label="Portfolio sections">
+      <a href="/menu/" aria-current={isCurrent('/menu') ? 'page' : undefined}>{NAVIGATION.menu}</a>
+      <a href="/guide/" aria-current={isCurrent('/guide') ? 'page' : undefined}>{NAVIGATION.guide}</a>
+      <a href="/log/" aria-current={isCurrent('/log') ? 'page' : undefined}>{NAVIGATION.log}</a>
+      <a href="/bill/" aria-current={isCurrent('/bill') ? 'page' : undefined}>{NAVIGATION.bill}</a>
+      <a href="/">Back to the stall</a>
+    </nav>
+  </header>
+  <slot />
+</Base>

@@ -70,7 +70,14 @@ const anyDraft =
           {mains.map((p) => (
             <div class="item">
               <div class="row"><span class="name">{p.data.name}</span><span class="leader"></span><span class="tag">{p.data.tag}</span></div>
-              <p class="desc">{p.body?.trim()} {p.data.url && (<a href={p.data.url} target="_blank" rel="noopener">{MENU.projectLinkLabel}</a>)}</p>
+              <p class="desc">
+                {p.data.summary}{' '}
+                {p.data.status === 'published' && <a href={`/menu/${p.id.replace(/\.(md|mdx)$/, '')}/`}>Case study →</a>}
+                {p.data.status === 'published' && p.data.sourceUrl && ' · '}
+                {p.data.sourceUrl && <a href={p.data.sourceUrl} target="_blank" rel="noopener">Source code ↗</a>}
+                {(p.data.status === 'published' || p.data.sourceUrl) && p.data.demoUrl && ' · '}
+                {p.data.demoUrl && <a href={p.data.demoUrl} target="_blank" rel="noopener">Live demo ↗</a>}
+              </p>
             </div>
           ))}
         </div>
@@ -84,7 +91,14 @@ const anyDraft =
           {smallPlates.map((p) => (
             <div class="item">
               <div class="row"><span class="name">{p.data.name}</span><span class="leader"></span><span class="tag">{p.data.tag}</span></div>
-              <p class="desc">{p.body?.trim()} {p.data.url && (<a href={p.data.url} target="_blank" rel="noopener">{MENU.projectLinkLabel}</a>)}</p>
+              <p class="desc">
+                {p.data.summary}{' '}
+                {p.data.status === 'published' && <a href={`/menu/${p.id.replace(/\.(md|mdx)$/, '')}/`}>Case study →</a>}
+                {p.data.status === 'published' && p.data.sourceUrl && ' · '}
+                {p.data.sourceUrl && <a href={p.data.sourceUrl} target="_blank" rel="noopener">Source code ↗</a>}
+                {(p.data.status === 'published' || p.data.sourceUrl) && p.data.demoUrl && ' · '}
+                {p.data.demoUrl && <a href={p.data.demoUrl} target="_blank" rel="noopener">Live demo ↗</a>}
+              </p>
             </div>
           ))}
         </div>
@@ -96,7 +110,14 @@ const anyDraft =
           {offMenu.map((p) => (
             <div class="item">
               <div class="row"><span class="name">{p.data.name}</span><span class="leader"></span><span class="tag">{p.data.tag}</span></div>
-              <p class="desc">{p.body?.trim()} {p.data.url && (<a href={p.data.url} target="_blank" rel="noopener">{MENU.projectLinkLabel}</a>)}</p>
+              <p class="desc">
+                {p.data.summary}{' '}
+                {p.data.status === 'published' && <a href={`/menu/${p.id.replace(/\.(md|mdx)$/, '')}/`}>Case study →</a>}
+                {p.data.status === 'published' && p.data.sourceUrl && ' · '}
+                {p.data.sourceUrl && <a href={p.data.sourceUrl} target="_blank" rel="noopener">Source code ↗</a>}
+                {(p.data.status === 'published' || p.data.sourceUrl) && p.data.demoUrl && ' · '}
+                {p.data.demoUrl && <a href={p.data.demoUrl} target="_blank" rel="noopener">Live demo ↗</a>}
+              </p>
             </div>
           ))}
         </div>

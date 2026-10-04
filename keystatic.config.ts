@@ -83,7 +83,7 @@ export default config({
       format: { contentField: 'body' },
       entryLayout: 'content',
       previewUrl: '/?preview=menu',
-      columns: ['name', 'course', 'order'],
+      columns: ['name', 'status', 'course', 'order'],
       schema: {
         name: fields.slug({
           name: { label: 'Project name', validation: { isRequired: true } },
@@ -98,7 +98,37 @@ export default config({
           defaultValue: 'small-plates',
         }),
         tag: requiredText('Technology tag'),
-        url: fields.url({ label: 'Project URL' }),
+        summary: fields.text({
+          label: 'Menu summary',
+          description: 'Public short description shown in the menu book and plain HTML menu.',
+          multiline: true,
+          validation: { isRequired: true, length: { max: 360 } },
+        }),
+        status: fields.select({
+          label: 'Case-study status',
+          description: 'Drafts have no public detail route. Publish only after the extended story is approved.',
+          options: [
+            { label: 'Draft', value: 'draft' },
+            { label: 'Published', value: 'published' },
+          ],
+          defaultValue: 'draft',
+        }),
+        contribution: fields.text({
+          label: 'Contribution',
+          description: 'Ritesh\'s specific ownership. Shown only on a published case study.',
+          multiline: true,
+        }),
+        context: fields.text({
+          label: 'Context',
+          description: 'Short project setting or constraint. Shown only on a published case study.',
+          multiline: true,
+        }),
+        stack: fields.array(requiredText('Technology'), {
+          label: 'Technology stack',
+          itemLabel: ({ value }) => value || 'New technology',
+        }),
+        sourceUrl: fields.url({ label: 'Source-code URL' }),
+        demoUrl: fields.url({ label: 'Live-demo URL' }),
         order: fields.integer({
           label: 'Display order',
           defaultValue: 99,
@@ -109,9 +139,21 @@ export default config({
           defaultValue: true,
         }),
         body: fields.mdx({
-          label: 'Project description',
+          label: 'Extended case study',
+          description: 'Draft-only until the case-study status is explicitly set to Published.',
           extension: 'md',
-          options: { bold: true, italic: true, link: true },
+          options: {
+            heading: true,
+            bold: true,
+            italic: true,
+            link: true,
+            blockquote: true,
+            orderedList: true,
+            unorderedList: true,
+            code: true,
+            codeBlock: true,
+            image: { directory: 'public/images/projects', publicPath: '/images/projects/' },
+          },
         }),
       },
     }),

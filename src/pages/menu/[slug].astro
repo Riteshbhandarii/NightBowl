@@ -1,0 +1,66 @@
+---
+import { getCollection, render, type CollectionEntry } from 'astro:content';
+import ReadingLayout from '../../layouts/ReadingLayout.astro';
+
+export async function getStaticPaths() {
+  const projects = await getCollection('projects', ({ data }) => data.status === 'published');
+  return projects.map((project) => ({
+    params: { slug: project.id.replace(/\.(md|mdx)$/, '') },
+    props: { project },
+  }));
+}
+
+interface Props {
+  project: CollectionEntry<'projects'>;
+}
+
+const { project } = Astro.props;
+const { Content } = await render(project);
+---
+
+<ReadingLayout title={project.data.name} description={project.data.summary}>
+  <main class="reading-main">
+    <article>
+      <a class="reading-back" href="/menu/">← Back to the Menu</a>
+      <header class="project-header">
+        <div class="reading-kicker">Project case study</div>
+        <h1>{project.data.name}</h1>
+        <p class="project-summary">{project.data.summary}</p>
+
+        {(project.data.contribution || project.data.context || project.data.stack.length > 0) && (
+          <dl class="project-meta">
+            {project.data.contribution && (
+              <div><dt>Contribution</dt><dd>{project.data.contribution}</dd></div>
+            )}
+            {project.data.context && (
+              <div><dt>Context</dt><dd>{project.data.context}</dd></div>
+            )}
+            {project.data.stack.length > 0 && (
+              <div>
+                <dt>Stack</dt>
+                <dd>
+                  <ul class="project-stack">
+                    {project.data.stack.map((technology) => <li>{technology}</li>)}
+                  </ul>
+                </dd>
+              </div>
+            )}
+          </dl>
+        )}
+
+        {(project.data.sourceUrl || project.data.demoUrl) && (
+          <div class="project-links" aria-label={`Links for ${project.data.name}`}>
+            {project.data.sourceUrl && (
+              <a href={project.data.sourceUrl} target="_blank" rel="noopener">Source code ↗</a>
+            )}
+            {project.data.demoUrl && (
+              <a href={project.data.demoUrl} target="_blank" rel="noopener">Live demo ↗</a>
+            )}
+          </div>
+        )}
+      </header>
+
+      <div class="project-body"><Content /></div>
+    </article>
+  </main>
+</ReadingLayout>
