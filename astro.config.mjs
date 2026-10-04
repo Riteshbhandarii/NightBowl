@@ -6,23 +6,29 @@ import markdoc from '@astrojs/markdoc';
 import sitemap from '@astrojs/sitemap';
 import node from '@astrojs/node';
 import keystatic from '@keystatic/astro';
+import { readFileSync } from 'node:fs';
+import { siteOrigin } from './scripts/lib/site-origin.mjs';
 
-// Update `site` once the real domain is picked (needed for correct sitemap / OG URLs).
+const origin = siteOrigin();
+const copy = JSON.parse(readFileSync(new URL('./src/content/site.json', import.meta.url), 'utf8'));
+// An unconfigured local/preview build must not advertise an invented launch URL.
 export default defineConfig({
-  site: 'https://nightbowl.example',
+  ...(origin ? { site: origin } : {}),
   adapter: node({ mode: 'standalone' }),
   integrations: [
     react(),
     mdx(),
     markdoc(),
-    sitemap({
+    ...(origin ? [sitemap({
       filter: (page) => {
         const pathname = new URL(page).pathname;
         return !pathname.startsWith('/admin')
           && !pathname.startsWith('/keystatic')
-          && !pathname.startsWith('/preview');
+          && !pathname.startsWith('/preview')
+          && !(copy.guide.draftCopy && /^\/guide\/?$/.test(pathname))
+          && !(copy.bill.draftCopy && /^\/bill\/?$/.test(pathname));
       },
-    }),
+    })] : []),
     keystatic(),
   ],
   build: { inlineStylesheets: 'auto' },

@@ -1,33 +1,9 @@
 ---
 import Base from '../layouts/Base.astro';
-import TopBar from '../components/TopBar.astro';
-import Scene from '../components/Scene.astro';
-import MenuBook from '../components/MenuBook.astro';
-import NoScriptAccess from '../components/NoScriptAccess.astro';
+import Stall from '../components/Stall.astro';
 import { SITE } from '../data/content';
 ---
 
 <Base title={SITE.name} description={SITE.homeDescription}>
-  <aside class="preview-banner" id="previewBanner" hidden>
-    Draft preview · <a href="/keystatic">Back to admin</a>
-  </aside>
-  <TopBar />
-  <Scene />
-  <MenuBook />
-  <NoScriptAccess />
+  <Stall />
 </Base>
-
-<script>
-  if (new URLSearchParams(window.location.search).get('preview') === 'menu') {
-    document.body.classList.add('menu-preview');
-    const banner = document.getElementById('previewBanner');
-    if (banner) banner.hidden = false;
-    const openPreview = () =>
-      document.dispatchEvent(new CustomEvent('nb:open', { detail: 'menu' }));
-    if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', openPreview, { once: true });
-    } else {
-      openPreview();
-    }
-  }
-</script>

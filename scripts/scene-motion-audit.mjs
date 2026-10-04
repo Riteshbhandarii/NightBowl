@@ -23,6 +23,7 @@ async function frozen(ctx,label) {
   // Loading and control affordances may finish their CSS transitions without
   // changing the scene. Compare only after the loading fade has settled.
   await sleep(1000);
+  await wait(ctx,"getComputedStyle(document.getElementById('loading')).opacity==='0' && getComputedStyle(document.getElementById('hint')).opacity==='0'",'loading and instructional hint transitions settle');
   const before=await pose(ctx);
   const imageBefore=await photograph(ctx,`${label}-before`);
   await sleep(1600);
@@ -35,8 +36,9 @@ async function frozen(ctx,label) {
 await session({width:1400,height:900},async ctx=>{
   assert.ok(await openScene(ctx,url));
   await ctx.evaluate("document.getElementById('sceneMotionControl').focus()");
-  await ctx.send('Input.dispatchKeyEvent',{type:'keyDown',key:'Enter',code:'Enter',windowsVirtualKeyCode:13});
+  await ctx.send('Input.dispatchKeyEvent',{type:'keyDown',key:'Enter',code:'Enter',windowsVirtualKeyCode:13,text:'\r',unmodifiedText:'\r'});
   await ctx.send('Input.dispatchKeyEvent',{type:'keyUp',key:'Enter',code:'Enter',windowsVirtualKeyCode:13});
+  await wait(ctx,'window.__nightbowl.selfCheck().motion.manualPaused','native keyboard pause');
   assert.equal((await check(ctx)).motion.manualPaused,true);
   assert.equal(await ctx.evaluate("localStorage.getItem('nightbowl:scene-motion')"),'paused');
   await frozen(ctx,'street-pause');
@@ -55,11 +57,12 @@ await session({width:1400,height:900},async ctx=>{
   await wait(ctx,"window.__nightbowl.selfCheck().turnover?.phase==='leave'",'departure');
   await click(ctx);
   const before=await frozen(ctx,'departure-pause');
+  const resumedAt=Date.now();
   await click(ctx);
-  await sleep(450);
+  await wait(ctx,`window.__nightbowl.selfCheck().turnover?.x!==${before.turnover.x}`,'departure travel resumes');
   const after=await check(ctx);
   assert.equal(after.turnover?.phase,'leave','resuming does not skip departure');
-  assert.ok(after.sceneTime-before.time<0.8,'paused wall time is excluded');
+  assert.ok(after.sceneTime-before.time<=(Date.now()-resumedAt)/1000+0.2,'paused wall time is excluded');
   assert.notEqual(after.turnover.x,before.turnover.x,'departure resumes');
   assert.equal(await ctx.evaluate("localStorage.getItem('nightbowl:scene-motion')"),'playing');
   assert.deepEqual(ctx.errors,[]);
@@ -89,6 +92,7 @@ await session({width:1400,height:900},async ctx=>{
 });
 
 await session({width:390,height:844},async ctx=>{
+  await ctx.send('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:false});
   await ctx.send('Emulation.setEmulatedMedia',{features:[{name:'prefers-reduced-motion',value:'reduce'}]});
   assert.ok(await openScene(ctx,url));
   assert.equal((await check(ctx)).motion.systemReduced,true);
@@ -105,11 +109,13 @@ await session({width:800,height:600,flags:['--disable-webgl']},async ctx=>{
   assert.equal(await ctx.evaluate("document.getElementById('book').classList.contains('open')"),true,'fallback content remains accessible');
 });
 await session({width:390,height:844},async ctx=>{
+  await ctx.send('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:false});
   await ctx.send('Page.addScriptToEvaluateOnNewDocument',{source:"Storage.prototype.getItem=Storage.prototype.setItem=function(){throw new DOMException('Blocked storage','SecurityError')}"});
   assert.ok(await openScene(ctx,url));
   await click(ctx);
   assert.equal((await check(ctx)).motion.manualPaused,true,'pause works when browser storage is blocked');
   assert.ok(await ctx.evaluate("document.getElementById('sceneMotionControl').title.includes('this visit only')"));
+  await sleep(1000);
   await photograph(ctx,'blocked-storage-phone');
   assert.deepEqual(ctx.errors,[]);
 });

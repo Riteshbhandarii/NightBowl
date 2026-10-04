@@ -1,0 +1,20 @@
+---
+import { BILL, CONTACT, SITE } from '../data/content';
+interface Props { receipt?: boolean }
+const { receipt = false } = Astro.props;
+const Row = receipt ? 'li' : 'div';
+const Label = receipt ? 'b' : 'dt';
+const Value = receipt ? 'span' : 'dd';
+const links = [
+  { label: 'GitHub', text: BILL.githubLabel, href: SITE.github, external: true },
+  { label: 'LinkedIn', text: BILL.linkedinLabel, href: SITE.linkedin, external: true },
+  ...(CONTACT.email ? [{ label: 'Email', text: CONTACT.email, href: `mailto:${encodeURIComponent(CONTACT.email)}`, external: false }] : []),
+  ...(CONTACT.cv ? [{ label: 'CV', text: BILL.cvLinkLabel, href: CONTACT.cv, external: false }] : []),
+];
+---
+{links.map((link) => (
+  <Row>
+    <Label>{link.label}</Label>
+    <Value><a href={link.href} target={link.external ? '_blank' : undefined} rel={link.external ? 'noopener' : undefined} download={link.label === 'CV' ? true : undefined}>{link.text}</a></Value>
+  </Row>
+))}

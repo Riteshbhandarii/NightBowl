@@ -32,6 +32,8 @@ for (const route of ['/menu/','/guide/','/log/','/bill/']) {
 }
 for (const [width,height] of [[1400,900],[390,844],[280,640]]) {
   await session({width,height},async ctx=>{
+    await ctx.send('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:false});
+    assert.equal(await ctx.evaluate('innerWidth'),width,'test uses the requested viewport, not Chrome window minimum');
     await ctx.send('Emulation.setScriptExecutionDisabled',{value:true});
     await ctx.send('Page.navigate',{url:base});
     await wait(ctx,"!!document.querySelector('.plain-access')",'no-script entrance');
@@ -56,9 +58,9 @@ await session({width:1400,height:900},async ctx=>{
   await ctx.send('Network.enable');
   await ctx.send('Network.setBlockedURLs',{urls:['*/_astro/*.js']});
   await ctx.send('Page.navigate',{url:base});
-  await wait(ctx,"!!document.querySelector('.topbar [data-open=menu]') && !!document.getElementById('sectionData')",'HTML menu before scene modules');
+  await wait(ctx,"document.readyState!=='loading' && !!document.querySelector('.topbar [data-open=menu]') && !!document.getElementById('sectionData')",'parsed HTML menu before scene modules');
   await click(ctx,'.topbar [data-open=menu]');
-  await wait(ctx,"document.getElementById('book').classList.contains('open') && location.hash==='#menu'",'enhanced early menu');
+  await wait(ctx,"document.getElementById('book')?.classList.contains('open') && location.hash==='#menu'",'enhanced early menu');
   assert.equal(await ctx.evaluate('typeof window.__nightbowl'),'undefined','scene modules remain blocked');
   for(const section of ['guide','bill']) {
     await ctx.evaluate(`document.querySelector('#tabs [data-tab=${section}]').click()`);

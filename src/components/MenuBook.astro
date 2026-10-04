@@ -1,5 +1,6 @@
 ---
 import { getCollection } from 'astro:content';
+import BillLinks from './BillLinks.astro';
 import { SITE, NAVIGATION, MENU, GUIDE, SPECIALS, BILL, LOG } from '../data/content';
 
 const projects = (await getCollection('projects')).sort((a, b) => a.data.order - b.data.order);
@@ -193,9 +194,7 @@ const anyDraft =
           {BILL.rows.map(([k, v]) => (
             <li><b>{k}</b><span>{v}</span></li>
           ))}
-          <li><b>GitHub</b><span><a href={SITE.github} target="_blank" rel="noopener">{BILL.githubLabel}</a></span></li>
-          <li><b>LinkedIn</b><span><a href={SITE.linkedin} target="_blank" rel="noopener">{BILL.linkedinLabel}</a></span></li>
-          {BILL.cvReady && <li><b>CV</b><span><a href={BILL.cvUrl} target="_blank" rel="noopener">{BILL.cvLinkLabel}</a></span></li>}
+          <BillLinks receipt />
         </ul>
         <p class="total">{BILL.total}</p>
       </div>

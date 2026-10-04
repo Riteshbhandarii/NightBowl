@@ -142,7 +142,7 @@ await session({}, async (ctx) => {
 await session({ flags: ['--force-prefers-reduced-motion'] }, async (ctx) => {
   for (const [width, height] of [[280, 640], [320, 568], [390, 844], [844, 390]]) {
     await size(ctx, width, height);
-    assert.ok(await openScene(ctx, url, '?nbtest=1&preview=menu'));
+    assert.ok(await openScene(ctx, new URL('/preview/menu/', url).href));
     await sleep(800);
     for (const section of ['menu', 'guide', 'log', 'bill']) {
       const point = await ctx.evaluate(`(() => {const b=document.querySelector('#tabs [data-tab=${section}]'),r=b.getBoundingClientRect();return{x:r.x+r.width/2,y:r.y+r.height/2,clear:document.elementFromPoint(r.x+r.width/2,r.y+r.height/2)===b}})()`);

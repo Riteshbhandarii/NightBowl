@@ -1,12 +1,15 @@
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
+import assert from 'node:assert/strict';
 import {
   existsSync,
   readFileSync,
   readdirSync,
+  mkdirSync,
   writeFileSync,
 } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { session, sleep } from './lib/chrome.mjs';
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const projectsDir = join(root, 'src/content/projects');
@@ -14,6 +17,51 @@ const routeSource = readFileSync(join(root, 'src/pages/menu/[slug].astro'), 'utf
 const menuBookSource = readFileSync(join(root, 'src/components/MenuBook.astro'), 'utf8');
 const editorSource = readFileSync(join(root, 'keystatic.config.ts'), 'utf8');
 const failures = [];
+const outIndex = process.argv.indexOf('--out');
+const out = outIndex >= 0 ? process.argv[outIndex + 1] : null;
+
+async function reviewPublishedRoute(slug) {
+  const port = 42000 + Math.floor(Math.random() * 10000);
+  const base = `http://127.0.0.1:${port}`;
+  const server = spawn(process.execPath, ['scripts/serve.mjs'], {
+    cwd: root, env: { ...process.env, HOST: '127.0.0.1', PORT: String(port) }, stdio: 'ignore',
+  });
+  try {
+    let ready = false;
+    for (let i = 0; i < 60 && !ready; i++) {
+      try { ready = (await fetch(`${base}/menu/${slug}/`)).ok; } catch { /* booting */ }
+      if (!ready) await sleep(100);
+    }
+    assert.ok(ready, 'temporary publication server boots');
+    for (const width of [1400, 390, 280]) {
+      await session({ width, height: 900 }, async ctx => {
+        await ctx.send('Emulation.setDeviceMetricsOverride', { width, height: 900, deviceScaleFactor: 1, mobile: false });
+        await ctx.send('Emulation.setScriptExecutionDisabled', { value: true });
+        await ctx.send('Page.navigate', { url: `${base}/menu/${slug}/` });
+        for (let i = 0; i < 60; i++) {
+          if (await ctx.evaluate("document.readyState==='complete' && !!document.querySelector('.project-body h2')")) break;
+          await sleep(100);
+        }
+        assert.ok(await ctx.evaluate('document.documentElement.scrollWidth<=innerWidth+1'), `${width}px case-study layout fits`);
+        assert.ok(await ctx.evaluate("!!document.querySelector('.project-body pre code') && document.querySelector('.project-body img').naturalWidth>0"), 'rich code and image render without JavaScript');
+        assert.ok(await ctx.evaluate("!!document.querySelector('.reading-back[href=\"/menu/\"]')"));
+        if (out) {
+          mkdirSync(out, { recursive: true });
+          for (const [part, scroll] of [['top', 'scrollTo(0,0)'], ['body', "document.querySelector('.project-body').scrollIntoView()"]]) {
+            await ctx.evaluate(scroll);
+            const shot = await ctx.send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false });
+            writeFileSync(join(out, `published-fixture-${width}-${part}.png`), Buffer.from(shot.result.data, 'base64'));
+          }
+        }
+        assert.deepEqual(ctx.errors, []);
+      });
+    }
+    check('published rich route is readable without JavaScript at desktop, phone and 280px', true);
+  } finally {
+    server.kill('SIGTERM');
+    await sleep(200);
+  }
+}
 
 const check = (name, ok) => {
   console.log(`${ok ? '  ok  ' : ' FAIL '} ${name}`);
@@ -63,9 +111,9 @@ for (const editorCapability of [
   check(`editor exposes ${editorCapability}`, editorSource.includes(editorCapability));
 }
 
-const draftFile = projectFiles.find((file) => field(readFileSync(file, 'utf8'), 'status') === 'draft');
+const draftFile = projectFiles.find((file) => field(readFileSync(file, 'utf8'), 'status') === 'draft') || projectFiles[0];
 if (!draftFile) {
-  throw new Error('A draft project is required for the temporary publication fixture.');
+  throw new Error('A project is required for the temporary publication fixture.');
 }
 
 const original = readFileSync(draftFile, 'utf8');
@@ -83,12 +131,22 @@ PROJECT_ROUTE_FIXTURE_CODE_BLOCK
 
 ![PROJECT_ROUTE_FIXTURE_IMAGE](/favicon.svg)
 `;
-const draftFixture = original
-  .replace(
-    /^order:/m,
-    'contribution: "PROJECT_ROUTE_FIXTURE_CONTRIBUTION"\ncontext: "PROJECT_ROUTE_FIXTURE_CONTEXT"\nstack:\n  - "PROJECT_ROUTE_FIXTURE_STACK"\norder:',
-  )
-  .replace(/\s*$/, fixtureBody);
+// Replace only for the test, rather than assuming owner-authored fields or
+// publication states stay empty forever. The existing slug is retained.
+const draftFixture = `---
+name: "Publication test fixture"
+course: "mains"
+tag: "Test only"
+summary: "Synthetic route fixture. The original project is restored after this check."
+status: "draft"
+contribution: "PROJECT_ROUTE_FIXTURE_CONTRIBUTION"
+context: "PROJECT_ROUTE_FIXTURE_CONTEXT"
+stack: ["PROJECT_ROUTE_FIXTURE_STACK"]
+sourceUrl: "https://github.com/Riteshbhandarii/NightBowl"
+order: 0
+draftCopy: true
+---
+${fixtureBody}`;
 
 try {
   writeFileSync(draftFile, draftFixture);
@@ -136,6 +194,7 @@ try {
     !menuHtml.includes('PROJECT_ROUTE_FIXTURE_CONTRIBUTION')
       && !menuHtml.includes('PROJECT_ROUTE_FIXTURE_CONTEXT')
       && !menuHtml.includes('PROJECT_ROUTE_FIXTURE_STACK'));
+  await reviewPublishedRoute(slug);
 } finally {
   writeFileSync(draftFile, original);
   build();
@@ -145,9 +204,9 @@ console.log('\ndraft publication boundary');
 const finalDist = outputRoot();
 const finalMenu = readFileSync(join(finalDist, 'menu/index.html'), 'utf8');
 const restoredSource = readFileSync(draftFile, 'utf8');
-check('temporary project fixture is restored to draft', field(restoredSource, 'status') === 'draft');
-check('restored draft has no public detail route', !existsSync(join(finalDist, 'menu', slug, 'index.html')));
-check('restored draft summary remains public', finalMenu.includes(field(restoredSource, 'summary')));
+check('temporary project fixture restores the exact owner source', restoredSource === original);
+check('restored detail route matches the owner publication status', existsSync(join(finalDist, 'menu', slug, 'index.html')) === (field(original, 'status') === 'published'));
+check('restored owner summary remains public', finalMenu.includes(field(restoredSource, 'summary')));
 if (body(restoredSource)) {
   check('restored draft body is absent from the public summary index', !finalMenu.includes(body(restoredSource)));
 }

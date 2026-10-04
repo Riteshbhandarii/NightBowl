@@ -82,7 +82,7 @@ export default config({
       path: 'src/content/projects/*',
       format: { contentField: 'body' },
       entryLayout: 'content',
-      previewUrl: '/?preview=menu',
+      previewUrl: '/preview/menu/',
       columns: ['name', 'status', 'course', 'order'],
       schema: {
         name: fields.slug({
@@ -163,10 +163,11 @@ export default config({
       label: 'Site copy and links',
       path: 'src/content/site',
       format: 'json',
-      previewUrl: '/?preview=menu',
+      previewUrl: '/preview/menu/',
       schema: {
         site: fields.object({
           name: requiredText('Site name'),
+          ownerName: requiredText('Portfolio owner name'),
           tagline: requiredText('Tagline'),
           github: fields.url({ label: 'GitHub URL', validation: { isRequired: true } }),
           linkedin: fields.url({ label: 'LinkedIn URL', validation: { isRequired: true } }),
@@ -235,11 +236,13 @@ export default config({
           cvNote: fields.text({ label: 'CV note', multiline: true }),
           emptyCvMessage: fields.text({ label: 'Message before CV is ready', multiline: true, validation: { isRequired: true } }),
           cvUrl: requiredText('CV URL'),
+          email: fields.text({ label: 'Public contact email', description: 'Use only the address Ritesh approves for publication.' }),
+          emailConfirmed: fields.checkbox({ label: 'Email approved for public contact', defaultValue: false }),
           cvLinkLabel: requiredText('CV link label'),
           githubLabel: requiredText('GitHub link label'),
           linkedinLabel: requiredText('LinkedIn link label'),
           total: requiredText('Closing total'),
-          cvReady: fields.checkbox({ label: 'Show CV download', defaultValue: false }),
+          cvReady: fields.checkbox({ label: 'Show CV download', description: 'Requires an existing PDF in public/ at the CV URL. The build rejects missing or non-PDF assets.', defaultValue: false }),
           draftCopy: fields.checkbox({ label: 'Mark copy as draft', defaultValue: true }),
         }, { label: 'The Bill' }),
         log: fields.object({

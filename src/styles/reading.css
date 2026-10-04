@@ -48,6 +48,7 @@
 }
 
 .reading-main {
+  overflow-wrap: anywhere;
   width: min(900px, calc(100% - 40px));
   margin: 0 auto;
   padding: clamp(64px, 10vw, 112px) 0 120px;

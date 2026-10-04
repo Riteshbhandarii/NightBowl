@@ -1,5 +1,6 @@
 ---
 import ReadingLayout from '../layouts/ReadingLayout.astro';
+import BillLinks from '../components/BillLinks.astro';
 import { BILL, SITE } from '../data/content';
 ---
 
@@ -12,9 +13,7 @@ import { BILL, SITE } from '../data/content';
       {!BILL.cvReady && <p>{BILL.emptyCvMessage}</p>}
       <dl class="plain-bill">
         {BILL.rows.map(([label, value]) => <div><dt>{label}</dt><dd>{value}</dd></div>)}
-        <div><dt>GitHub</dt><dd><a href={SITE.github} target="_blank" rel="noopener">{BILL.githubLabel}</a></dd></div>
-        <div><dt>LinkedIn</dt><dd><a href={SITE.linkedin} target="_blank" rel="noopener">{BILL.linkedinLabel}</a></dd></div>
-        {BILL.cvReady && <div><dt>CV</dt><dd><a href={BILL.cvUrl} target="_blank" rel="noopener">{BILL.cvLinkLabel}</a></dd></div>}
+        <BillLinks />
       </dl>
       <p>{BILL.total}</p>
       {BILL.draftCopy && <p class="draft-notice">{SITE.draftStamp}</p>}
@@ -23,8 +22,8 @@ import { BILL, SITE } from '../data/content';
 </ReadingLayout>
 
 <style>
-  .plain-bill > div { display: grid; grid-template-columns: 100px minmax(0, 1fr); gap: 16px; padding: 14px 0; border-bottom: 1px solid var(--line); }
-  dt { color: var(--ink-soft); font: 11px/1.7 'Space Mono', monospace; }
-  dd { margin: 0; overflow-wrap: anywhere; }
-  @media (max-width: 400px) { .plain-bill > div { grid-template-columns: 1fr; gap: 4px; } }
+  .plain-bill :global(div) { display: grid; grid-template-columns: 100px minmax(0, 1fr); gap: 16px; padding: 14px 0; border-bottom: 1px solid var(--line); }
+  .plain-bill :global(dt) { color: var(--ink-soft); font: 11px/1.7 'Space Mono', monospace; }
+  .plain-bill :global(dd) { margin: 0; overflow-wrap: anywhere; }
+  @media (max-width: 400px) { .plain-bill :global(div) { grid-template-columns: 1fr; gap: 4px; } }
 </style>

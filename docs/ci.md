@@ -33,7 +33,17 @@ job's time allowance, and every suite still runs before merge.
 **What it catches:** code that no longer compiles, a page that silently stops
 being generated, and a JavaScript download that has quietly grown.
 
-It runs four checks in order.
+It runs the type check, builds the site, tests publication/launch fixtures,
+then checks generated routes and payload size.
+
+`npm run check:projects` temporarily gives a draft extended Markdown and private
+structured fields. It verifies those stay out of public pages, publishes the
+fixture to exercise headings, lists, code and images, then restores and rebuilds
+the real content. `npm run check:launch` tests approved/unapproved email,
+missing/non-PDF CV rejection, configured and unconfigured canonical/share
+metadata, image dimensions and sitemap exclusions. Its temporary blank PDF is
+deleted and site copy restored before the artifact is uploaded. These checks
+must not run against a build that a browser suite is currently using.
 
 ### Type check
 Reads every TypeScript and Astro file and confirms the types line up.
@@ -85,6 +95,13 @@ npm run check:perf
 ```
 
 The limit itself is in `scripts/perf-budget.mjs`.
+
+The interactions job also runs `npm run audit:access` with JavaScript disabled
+and with the scene bundle held, including native reading links, narrow layouts,
+hash/history navigation and modifier clicks. `npm run audit:pause` verifies
+keyboard activation, saved and blocked storage, static ordering, paired rendered
+frames, service/departure clock continuity, reduced motion and WebGL fallback.
+Both audits accept `-- --url http://127.0.0.1:4321 --out /tmp/nightbowl-review`.
 
 ---
 

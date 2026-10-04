@@ -1,11 +1,14 @@
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { basename, join } from 'node:path';
+import { siteOrigin } from './lib/site-origin.mjs';
 
 const root = new URL('..', import.meta.url).pathname;
 const postsDir = join(root, 'src/content/posts');
 const distRoot = join(root, 'dist');
 const distDir = existsSync(join(distRoot, 'client')) ? join(distRoot, 'client') : distRoot;
-const sitemap = readFileSync(join(distDir, 'sitemap-0.xml'), 'utf8');
+const origin = siteOrigin();
+const sitemapPath = join(distDir, 'sitemap-0.xml');
+const sitemap = existsSync(sitemapPath) ? readFileSync(sitemapPath, 'utf8') : '';
 const failures = [];
 
 const check = (name, ok) => {
@@ -17,6 +20,9 @@ console.log('\ngenerated content routes');
 check('/log index exists', existsSync(join(distDir, 'log/index.html')));
 check('/admin redirect exists', existsSync(join(distDir, 'admin/index.html')));
 check('production server entry exists', existsSync(join(distRoot, 'server/entry.mjs')));
+for (const route of ['menu', 'guide', 'bill']) check(`/${route} index exists`, existsSync(join(distDir, route, 'index.html')));
+check('sitemap exists only with a configured production origin', Boolean(sitemap) === Boolean(origin));
+check('placeholder origin is absent', !sitemap.includes('nightbowl.example'));
 check('admin is absent from sitemap', !sitemap.includes('/admin/'));
 check('previews are absent from sitemap', !sitemap.includes('/preview/'));
 
@@ -30,7 +36,7 @@ for (const file of readdirSync(postsDir).filter((name) => /\.mdx?$/.test(name)))
   check(`preview route exists: ${slug}`, previewExists);
   if (status === 'published') {
     check(`published post route exists: ${slug}`, routeExists);
-    check(`published post is in sitemap: ${slug}`, listed);
+    check(`published post sitemap matches origin configuration: ${slug}`, listed === Boolean(origin));
   } else {
     check(`draft post has no route: ${slug}`, !routeExists);
     check(`draft post is absent from sitemap: ${slug}`, !listed);
