@@ -940,6 +940,8 @@ export function initScene(canvas, onHotspot, opts = {}) {
 
   function applyPose(rig, c) {
     rig.hip.position.y = c.hipY;
+    rig.legL.shoe.rotation.x = Math.PI / 2;
+    rig.legR.shoe.rotation.x = Math.PI / 2;
     rig.torso.rotation.set(c.torsoX, c.torsoY, c.torsoZ);
     rig.head.rotation.set(c.headX, c.headY, c.headZ);
     rig.armL.sh.rotation.x = c.lShX; rig.armL.sh.rotation.z = c.lShZ;
@@ -1728,7 +1730,7 @@ export function initScene(canvas, onHotspot, opts = {}) {
   }
 
   function solveWalkingLeg(leg, footZ, lift, amt) {
-    const upper = 0.4, lower = 0.375;
+    const upper = 0.4, lower = Math.hypot(0.375, 0.03);
     const targetY = -0.755 + lift * amt;
     const targetZ = footZ * amt;
     const reach = Math.min(upper + lower - 0.001, Math.hypot(targetY, targetZ));
@@ -1738,7 +1740,10 @@ export function initScene(canvas, onHotspot, opts = {}) {
     const targetAngle = Math.atan2(-targetZ, -targetY);
     const hip = targetAngle - Math.atan2(lower * Math.sin(knee), upper + lower * Math.cos(knee));
     leg.hp.rotation.x = hip;
-    leg.knee.rotation.x = knee;
+    // Solve for the actual shoe origin, including its 3cm forward offset.
+    leg.knee.rotation.x = knee + Math.atan2(0.03, 0.375);
+    // Ankle compensation keeps the sole horizontal through the planted stroke.
+    leg.shoe.rotation.x = Math.PI / 2 - hip - leg.knee.rotation.x;
   }
 
   // Distance, not wall time, drives this gait. During each half-stride the
@@ -1757,7 +1762,7 @@ export function initScene(canvas, onHotspot, opts = {}) {
     const left = foot(0.25), right = foot(0.75);
     solveWalkingLeg(rig.legL, left.z, left.lift, amt);
     solveWalkingLeg(rig.legR, right.z, right.lift, amt);
-    rig.hip.position.y = mix(0.8, 0.78, amt);
+    rig.hip.position.y = 0.8;
     if (!swingArms) return;
     const phase = distance / WALK_STRIDE * Math.PI * 2;
     rig.armL.sh.rotation.x = Math.sin(phase + Math.PI) * 0.32 * amt;
@@ -1811,7 +1816,17 @@ export function initScene(canvas, onHotspot, opts = {}) {
   }
 
   function applyCookWalk() {
-    if (!guideRig || !guide?.userData.serviceWalking) return;
+    if (!guideRig) return;
+    // Stations and turn-only beats are standing poses, not a frozen last step.
+    for (const leg of [guideRig.legL, guideRig.legR]) {
+      leg.hp.rotation.x = 0;
+      leg.knee.rotation.x = 0;
+      leg.shoe.rotation.x = Math.PI / 2;
+    }
+    if (!guide?.userData.serviceWalking) {
+      if (guide.userData.walk?.moving) beginWalk(guide);
+      return;
+    }
     applyWalkFromTravel(guide, guide.userData.walkAmount, false);
   }
 
@@ -3156,10 +3171,13 @@ export function initScene(canvas, onHotspot, opts = {}) {
         const value = object.getWorldPosition(new THREE.Vector3());
         return { x: value.x, y: value.y, z: value.z };
       };
+      const soleBox = new THREE.Box3();
       return {
         root: point(npc),
         footL: point(rig.legL.shoe),
         footR: point(rig.legR.shoe),
+        soleL: soleBox.setFromObject(rig.legL.shoe, true).min.y,
+        soleR: soleBox.setFromObject(rig.legR.shoe, true).min.y,
         distance: npc.userData.walk?.distance || 0,
         moving: !!npc.userData.walk?.moving,
         scale: npc.scale.x,

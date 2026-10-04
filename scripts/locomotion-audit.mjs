@@ -18,6 +18,7 @@ const median = (values) => [...values].sort((a, b) => a - b)[Math.floor(values.l
 function planted(samples, label) {
   const ratios = [];
   const stanceY = [];
+  const soleY = [];
   for (let i = 1; i < samples.length; i++) {
     const a = samples[i - 1], b = samples[i];
     const foot = a.footL.y <= a.footR.y ? 'footL' : 'footR';
@@ -26,11 +27,15 @@ function planted(samples, label) {
     if (rootTravel < 0.003) continue;
     ratios.push(horizontal(a[foot], b[foot]) / rootTravel);
     stanceY.push(Math.max(a[foot].y, b[foot].y));
+    const sole = foot === 'footL' ? 'soleL' : 'soleR';
+    soleY.push(a[sole], b[sole]);
   }
   assert.ok(ratios.length >= 5, `${label}: not enough live stance samples`);
   assert.ok(median(ratios) < 0.38, `${label}: stance foot drifts with root (${median(ratios)})`);
   assert.ok(median(stanceY) < 0.12, `${label}: stance foot is above floor (${median(stanceY)})`);
-  return { samples: ratios.length, medianDriftRatio: median(ratios), medianStanceY: median(stanceY) };
+  assert.ok(Math.min(...soleY) >= -0.005, `${label}: stance sole penetrates ground (${Math.min(...soleY)})`);
+  assert.ok(median(soleY) <= 0.025, `${label}: stance sole floats above floor (${median(soleY)})`);
+  return { samples: ratios.length, medianDriftRatio: median(ratios), medianStanceY: median(stanceY), minSoleY: Math.min(...soleY), medianSoleY: median(soleY) };
 }
 
 async function waitFor(evaluate, expression, label, attempts = 180) {
