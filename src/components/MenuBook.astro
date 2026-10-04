@@ -276,10 +276,25 @@ const anyDraft =
     render(fromClick && isOpen);
   }
 
-  function open(tab) {
+  function sectionFromUrl() {
+    const section = location.hash.slice(1);
+    return Object.prototype.hasOwnProperty.call(SECTIONS, section) ? section : null;
+  }
+
+  function recordSection(section) {
+    const url = new URL(location.href);
+    url.hash = section || '';
+    if (url.href !== location.href) {
+      history.pushState(history.state, '', url);
+    }
+  }
+
+  function open(tab, updateUrl = true) {
     cancelOpenTimers();
     if (!isOpen) lastFocus = document.activeElement;
-    setTab(tab || 'menu', false);
+    const section = Object.prototype.hasOwnProperty.call(SECTIONS, tab) ? tab : 'menu';
+    setTab(section, false);
+    if (updateUrl) recordSection(section);
     book.inert = false;
     book.removeAttribute('aria-hidden');
     book.setAttribute('aria-modal', 'true');
@@ -295,13 +310,14 @@ const anyDraft =
     focusTimer = setTimeout(() => { if (isOpen) closeBtn.focus(); }, 260);
   }
 
-  function close() {
+  function close(updateUrl = true) {
     cancelOpenTimers();
     book.classList.remove('open', 'flipped');
     backdrop.classList.remove('open');
     isOpen = false;
+    if (updateUrl && sectionFromUrl()) recordSection(null);
     document.dispatchEvent(new CustomEvent('nb:bookstate', { detail: false }));
-    const opener = lastFocus?.isConnected && lastFocus.getClientRects().length ? lastFocus
+    const opener = lastFocus?.isConnected && lastFocus.tabIndex >= 0 && lastFocus.getClientRects().length ? lastFocus
       : [...document.querySelectorAll('.topbar [data-open]')].find((el) => el.getClientRects().length);
     opener?.focus();
     book.inert = true;
@@ -322,15 +338,36 @@ const anyDraft =
     }
   });
 
-  closeBtn.addEventListener('click', close);
-  backdrop.addEventListener('click', close);
+  closeBtn.addEventListener('click', () => close());
+  backdrop.addEventListener('click', () => close());
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && isOpen) close(); });
   cover.addEventListener('click', () => book.classList.add('flipped'));
   tabsEl.addEventListener('click', (e) => {
     const b = e.target instanceof Element ? e.target.closest('button[data-tab]') : null;
-    if (b) setTab(b.dataset.tab, true);
+    if (b) {
+      setTab(b.dataset.tab, true);
+      recordSection(b.dataset.tab);
+    }
   });
   document.addEventListener('nb:open', (e) => open(e.detail));
+  document.addEventListener('click', (e) => {
+    if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+    const link = e.target instanceof Element ? e.target.closest('a[data-open]') : null;
+    if (!link || link.target || link.hasAttribute('download') || !SECTIONS[link.dataset.open]) return;
+    e.preventDefault();
+    open(link.dataset.open);
+  });
+
+  function restoreSection() {
+    const section = sectionFromUrl();
+    if (section) {
+      if (!isOpen) open(section, false);
+      else if (curTab !== section) setTab(section, false);
+    } else if (isOpen) close(false);
+  }
+  window.addEventListener('popstate', restoreSection);
+  window.addEventListener('hashchange', restoreSection);
+  restoreSection();
 
   book.addEventListener('keydown', (e) => {
     if (e.key !== 'Tab' || !isOpen) return;
