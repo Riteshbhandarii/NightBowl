@@ -20,7 +20,9 @@ const screenshot = async (ctx, name) => {
 };
 const size = async (ctx, width, height) => {
   await ctx.send('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 1, mobile: width <= 860 });
-  await sleep(150);
+  // Media-query change events are delivered with rendering, not after a fixed
+  // 150ms deadline. A software-rendered frame can take longer than that.
+  await ctx.evaluate('new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))');
 };
 const key = async (ctx, name, code, text = '', modifiers = 0) => {
   await ctx.send('Input.dispatchKeyEvent', { type: 'keyDown', key: name, code: name, windowsVirtualKeyCode: code, ...(text ? { text, unmodifiedText: text } : {}), modifiers });

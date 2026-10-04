@@ -141,7 +141,9 @@ await session(viewport, async (ctx) => {
     const api = window.__nightbowl;
     const p = api.auditLocomotion('cook', 0);
     api.auditBegin(); api.auditFocus('cook', 0);
-    api.auditFrame({ target: { x: p.root.x, y: 0.85, z: p.root.z }, azimuth: Math.PI, elevation: 0.06, radius: 2.25 });
+    // Stay inside the stall's rear wall; a camera directly behind it produces
+    // an occluded photograph, not full-body evidence of the cook's live gait.
+    api.auditFrame({ target: { x: p.root.x, y: 0.95, z: p.root.z }, azimuth: 1.95, elevation: 0.025, radius: 2.05 });
   })()`);
   await screenshot(send, 'cook-service-rear-full-body');
   await evaluate('window.__nightbowl.auditEnd()');
