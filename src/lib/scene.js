@@ -1440,7 +1440,7 @@ export function initScene(canvas, onHotspot, opts = {}) {
     if (orderComplete) orderComplete.hidden = visitorOrder.status !== 'done';
     orderStatus.textContent = visitorOrder.status === 'queued' ? LABELS.orderQueued
       : visitorOrder.status === 'serving' ? LABELS.orderServing
-        : visitorOrder.status === 'done' ? LABELS.orderComplete
+        : visitorOrder.status === 'done' && visitorOrder.firstBite ? LABELS.orderComplete
           : visitorOrder.dish ? LABELS.orderEnjoy : '';
   }
 

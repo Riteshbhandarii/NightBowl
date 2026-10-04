@@ -36,6 +36,12 @@ desktop/phone reflow, child-text clipping and overlap checks, and real pointer
 tests for the CMS preview navigation. Add `-- --out /tmp/nightbowl-menu-review`
 to capture the checked layouts for visual review.
 
+`npm run audit:visitor` verifies repeat meals, Done and recoverable browsing
+dismissal, including held Enter/Space and static reduced-motion delivery.
+`npm run audit:locomotion` measures live planted-foot contact and distance-driven
+gait under sparse frames. Both accept `-- --out /tmp/nightbowl-review` for
+screenshots; see [the CI guide](docs/ci.md) for their exact gates.
+
 ## Write through the admin
 
 Open `http://localhost:4321/admin/`. In development, Keystatic edits the files

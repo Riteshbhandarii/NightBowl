@@ -49,6 +49,7 @@ async function waitFor(ctx, predicate, label, timeout = 40000) {
 
 async function shot(ctx, name) {
   if (!out) return;
+  await ctx.evaluate('new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))');
   const r = await ctx.send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false });
   writeFileSync(join(out, `${name}.png`), Buffer.from(r.result.data, 'base64'));
 }
@@ -203,6 +204,7 @@ await session({ width: 390, height: 844 }, async (ctx) => {
     const dish = index % 2 ? 'house' : 'veggie';
     await ctx.send('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 1, mobile: true });
     assert.ok(await openScene(ctx, url));
+    await sleep(800); // Let the loader's fade finish before input or screenshots.
     const layout = await ctx.evaluate(`(() => {
       const p = document.getElementById('visitorOrder'), r = p.getBoundingClientRect();
       return {shown: !p.hidden, left:r.left, right:r.right, top:r.top, bottom:r.bottom,
@@ -222,6 +224,7 @@ await session({ width: 390, height: 844 }, async (ctx) => {
     assert.equal(s.visitorOrder.dismissed, false, `held ${key === 'Enter' ? 'Enter' : 'Space'} cannot transfer into dismissal`);
     assert.equal(s.visitorOrder.fill, 1);
     assert.equal(s.visitorOrder.firstBite, false, 'reduced motion skips bite animation');
+    assert.equal(await ctx.evaluate("document.getElementById('visitorOrderStatus').textContent"), 'Enjoy your bowl.', 'static delivery must not claim an uneaten bowl was finished');
     assert.equal(s.visitorOrder.bowlVisible, true);
     assert.equal(s.visitorAutonomous, false);
     assert.equal(await ctx.evaluate("document.getElementById('visitorOrderComplete').hidden"), false);

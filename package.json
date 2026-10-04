@@ -19,6 +19,7 @@
     "audit:ik": "node scripts/ik-targets-audit.mjs",
     "audit:visitor": "node scripts/visitor-order-audit.mjs",
     "audit:menu": "node scripts/menu-ui-audit.mjs",
+    "audit:locomotion": "node scripts/locomotion-audit.mjs",
     "audit:motion": "node scripts/motion-review.mjs",
     "audit:turnover": "node scripts/turnover-review.mjs",
     "audit:service": "node scripts/service-review.mjs",

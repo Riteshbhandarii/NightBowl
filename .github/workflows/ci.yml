@@ -1,6 +1,6 @@
 # nightbowl CI
 #
-# Four jobs. Each one exists to catch a specific way this site breaks, and the
+# Five jobs. Each one exists to catch a specific way this site breaks, and the
 # comment above it says which way. If a job fails it prints what broke and what
 # to run locally, not a stack trace.
 #
@@ -88,7 +88,7 @@ jobs:
           echo "The budget lives in scripts/perf-budget.mjs."
 
       # Handing the built output to the other jobs is what keeps this workflow
-      # to roughly one build instead of three.
+      # to roughly one build instead of four.
       - name: Share the build
         uses: actions/upload-artifact@v4
         with:
@@ -165,11 +165,46 @@ jobs:
           echo "::error::A hand or utensil stopped following the object it acts on."
           echo "Reproduce with: npm run build && npm run preview, then npm run audit:ik"
 
-      - name: Visitor meal interaction
-        run: npm run audit:visitor
+  # Catches: hidden-menu focus, content lost on resize, clipped reading copy,
+  # unrecoverable meal choices, held-key dismissal, and skating locomotion.
+  # These longer lifecycle checks reuse the same immutable production build.
+  interactions:
+    name: interactions - menu, repeat meals, grounded walking
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist
+
+      - name: Serve the production build
+        run: |
+          PORT=4321 HOST=127.0.0.1 npm run preview &
+          for i in $(seq 1 60); do
+            curl -sf http://127.0.0.1:4321/ >/dev/null && exit 0
+            sleep 1
+          done
+          echo "::error::The production server never came up."
+          exit 1
 
       - name: Menu accessibility and responsive interactions
         run: npm run audit:menu
+      - name: Visitor meal interaction
+        run: npm run audit:visitor
+      - name: Grounded locomotion and sparse frames
+        run: npm run audit:locomotion
+      - if: failure()
+        run: |
+          echo "::error::An interaction regression failed. Read the named assertion above."
+          echo "Reproduce with npm run build and npm run preview, then the failing audit."
 
   # Catches: the admin losing its GitHub authentication, or the
   # draft-preview-publish flow breaking.
@@ -230,7 +265,7 @@ jobs:
   # cost of waiting for CI stays visible instead of being guessed at.
   summary:
     name: summary - how long this took
-    needs: [build, scene, cms]
+    needs: [build, scene, interactions, cms]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
