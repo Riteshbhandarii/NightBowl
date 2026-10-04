@@ -34,6 +34,8 @@ export function initScene(canvas, onHotspot, opts = {}) {
   let manualMotionPaused = !!opts.motionPaused;
   let sceneElapsed = 0;
   let sceneClockAt = null;
+  let pageHidden = document.hidden;
+  let disposed = false;
 
   function motionState() {
     return {
@@ -47,6 +49,7 @@ export function initScene(canvas, onHotspot, opts = {}) {
   // anchor while paused prevents a service, meal or turnover from jumping when
   // motion resumes.
   function advanceSceneClock() {
+    if (disposed) return 0;
     const at = performance.now() / 1000;
     if (sceneClockAt === null) {
       sceneClockAt = at;
@@ -54,8 +57,16 @@ export function initScene(canvas, onHotspot, opts = {}) {
     }
     const delta = Math.max(0, at - sceneClockAt);
     sceneClockAt = at;
-    if (!motionState().paused) sceneElapsed += delta;
-    return motionState().paused ? 0 : delta;
+    const paused = motionState().paused || pageHidden;
+    if (!paused) sceneElapsed += delta;
+    return paused ? 0 : delta;
+  }
+
+  function onVisibilityChange() {
+    // Settle the old visible interval before switching. Visibility is not a
+    // manual preference and must not make a background arrival auto-seat.
+    advanceSceneClock();
+    pageHidden = document.hidden;
   }
 
   function nowSec() { return sceneElapsed; }
@@ -1513,7 +1524,7 @@ export function initScene(canvas, onHotspot, opts = {}) {
   }
 
   function orderMeal(dish) {
-    if (phase !== 'seated' || visitorOrder.dismissed || visitorOrder.dish || !['house', 'veggie'].includes(dish)) return false;
+    if (disposed || phase !== 'seated' || visitorOrder.dismissed || visitorOrder.dish || !['house', 'veggie'].includes(dish)) return false;
     visitorOrder.dish = dish;
     visitorOrder.firstBite = false;
     delete visitorOrder.completedAt;
@@ -2533,6 +2544,7 @@ export function initScene(canvas, onHotspot, opts = {}) {
 
   /* ---------- the cook: GLB if present, stand-in otherwise ---------- */
   function useStandInCook() {
+    if (disposed) return;
     guide = buildPerson({ shirt: 0xffffff, apron: true, toque: true, skin: 0xd7a173, hair: 0x241a12 });
     guide.position.set(COOK_HOME_X, 0, -0.3);
     guide.rotation.y = -0.08;
@@ -2599,6 +2611,7 @@ export function initScene(canvas, onHotspot, opts = {}) {
     loader.load(
       '/models/chef.glb',
       (gltf) => {
+        if (disposed) { disposeResources(gltf.scene); return; }
         guide = gltf.scene;
         // normalise: assume model faces +Z, feet at y=0; scale to ~1.7 units tall
         const bb = new THREE.Box3().setFromObject(guide);
@@ -2634,7 +2647,7 @@ export function initScene(canvas, onHotspot, opts = {}) {
   const ORDER = { menu: 1, guide: 2, log: 3, bill: 4 };
   let pinsBuilt = false;
   function buildPins() {
-    if (pinsBuilt) return;
+    if (disposed || pinsBuilt) return;
     pinsBuilt = true;
     const seen = new Set();
     [...hotspots].filter((h) => h.key !== 'seat').sort((a, b) => (ORDER[a.key] || 9) - (ORDER[b.key] || 9)).forEach((hs) => {
@@ -2658,7 +2671,7 @@ export function initScene(canvas, onHotspot, opts = {}) {
     return LABELS.navigation[key] || key;
   }
   // pins are built once the cook (async) is registered; this is the safety net
-  setTimeout(buildPins, 3000);
+  const pinTimer = setTimeout(buildPins, 3000);
 
   const _v = new THREE.Vector3();
   function updatePins() {
@@ -2815,7 +2828,7 @@ export function initScene(canvas, onHotspot, opts = {}) {
   }
 
   function takeSeat() {
-    if (phase !== 'street') return;
+    if (disposed || phase !== 'street') return;
     if (motionState().paused) {
       seated();
       return;
@@ -2845,6 +2858,7 @@ export function initScene(canvas, onHotspot, opts = {}) {
   }
 
   function setMotionPaused(paused) {
+    if (disposed) return motionState();
     // Account for the active interval up to this interaction before changing
     // the state that decides whether clock time accrues.
     advanceSceneClock();
@@ -2929,12 +2943,13 @@ export function initScene(canvas, onHotspot, opts = {}) {
   canvas.addEventListener('pointerdown', onDown);
   canvas.addEventListener('pointermove', onMove);
   canvas.addEventListener('pointerup', onUp);
-  canvas.addEventListener('pointercancel', (e) => {
+  const onCancel = (e) => {
     activePointers.delete(e.pointerId);
     pinchDistance = 0;
     dragging = false;
     canvas.classList.remove('grabbing');
-  });
+  };
+  canvas.addEventListener('pointercancel', onCancel);
   canvas.addEventListener('wheel', onWheel, { passive: false });
 
   function rootHotspot(o) {
@@ -3013,12 +3028,14 @@ export function initScene(canvas, onHotspot, opts = {}) {
     renderer.setSize(window.innerWidth, window.innerHeight);
   };
   window.addEventListener('resize', onResize);
+  document.addEventListener('visibilitychange', onVisibilityChange);
 
   /* ---------- loop ---------- */
   let startT = 0;
   function frame() {
+    if (disposed) return;
     raf = requestAnimationFrame(frame);
-    const staticScene = motionState().paused;
+    const staticScene = motionState().paused || pageHidden;
     const poseDt = Math.min(advanceSceneClock(), 0.5);
     // Locomotion stays capped so one stalled frame cannot teleport a walker.
     // Pose easing uses the real elapsed interval; otherwise a 1 FPS software
@@ -3152,8 +3169,31 @@ export function initScene(canvas, onHotspot, opts = {}) {
   updateOrderUI();
   frame();
 
+  function disposeResources(root) {
+    const geometries = new Set(), materials = new Set(), textures = new Set(), skeletons = new Set();
+    root.traverse(object => {
+      if (object.geometry) geometries.add(object.geometry);
+      for (const material of [object.material].flat().filter(Boolean)) materials.add(material);
+      if (object.skeleton) skeletons.add(object.skeleton);
+      if (object.isInstancedMesh) object.dispose();
+    });
+    if (root === scene) {
+      for (const geometry of Object.values(ramenAssetCache?.geo || {})) geometries.add(geometry);
+      for (const material of Object.values(ramenAssetCache?.mat || {})) materials.add(material);
+      for (const texture of [scene.background, scene.environment, _faceOpen, _faceShut, _blobTex, steamTexture]) {
+        if (texture?.isTexture) textures.add(texture);
+      }
+    }
+    for (const material of materials) {
+      for (const value of Object.values(material)) if (value?.isTexture) textures.add(value);
+      material.dispose();
+    }
+    for (const resource of [...geometries, ...textures, ...skeletons]) resource.dispose();
+  }
+
   return {
     setBookOpen(v) {
+      if (disposed) return;
       advanceSceneClock();
       bookOpen = v;
       hideHint();
@@ -3732,13 +3772,37 @@ export function initScene(canvas, onHotspot, opts = {}) {
     },
 
     dispose() {
+      if (disposed) return;
+      disposed = true;
       cancelAnimationFrame(raf);
+      clearTimeout(pinTimer);
+      hideHint();
+      canvas.removeEventListener('pointerdown', onDown);
+      canvas.removeEventListener('pointermove', onMove);
+      canvas.removeEventListener('pointerup', onUp);
+      canvas.removeEventListener('pointercancel', onCancel);
+      canvas.removeEventListener('wheel', onWheel);
+      for (const id of activePointers.keys()) {
+        if (canvas.hasPointerCapture(id)) canvas.releasePointerCapture(id);
+      }
+      activePointers.clear();
+      canvas.classList.remove('grabbing', 'pointing');
       orderChoices?.removeEventListener('click', onOrderClick);
       orderSkip?.removeEventListener('click', onOrderSkip);
       orderAgain?.removeEventListener('click', chooseAnotherMeal);
       orderDone?.removeEventListener('click', onOrderDone);
       orderReopen?.removeEventListener('click', onOrderReopen);
       window.removeEventListener('resize', onResize);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+      for (const hotspot of hotspots) hotspot.el?.remove();
+      seatPin?.remove();
+      youPin?.remove();
+      for (const bubble of bubbles) bubble.el.remove();
+      bubbles.length = 0;
+      if (orderPanel) orderPanel.hidden = true;
+      if (orderReopenPanel) orderReopenPanel.hidden = true;
+      guideMixer?.stopAllAction();
+      disposeResources(scene);
       renderer.dispose();
     },
   };

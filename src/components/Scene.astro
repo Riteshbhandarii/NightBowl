@@ -16,9 +16,12 @@ const sceneContent = {
   },
   menuItems: projects,
 };
+// A script is a raw-text HTML element even when its type is application/json.
+// Escape '<' so literal CMS text cannot close it; JSON.parse restores the text.
+const sceneJson = JSON.stringify(sceneContent).replace(/</g, '\\u003c');
 ---
 
-<script id="nbSceneContent" type="application/json" set:html={JSON.stringify(sceneContent)} is:inline></script>
+<script id="nbSceneContent" type="application/json" set:html={sceneJson} is:inline></script>
 <canvas id="scene" aria-label={SCENE.canvasLabel}></canvas>
 <button
   type="button"
@@ -72,6 +75,7 @@ const sceneContent = {
     setBookOpen(v: boolean): void;
     setMotionPaused(v: boolean): MotionState;
     getMotionState(): MotionState;
+    dispose(): void;
   };
   let controls: SceneControls | null = null;
 
@@ -105,6 +109,34 @@ const sceneContent = {
 
   setMotionControl('loading');
 
+  function onBookState(e: Event) {
+    controls?.setBookOpen((e as CustomEvent).detail);
+    if (controls) setMotionControl(controls.getMotionState());
+  }
+
+  function sceneUnavailable() {
+    controls?.dispose();
+    controls = null;
+    delete (window as any).__nightbowl;
+    document.removeEventListener('nb:bookstate', onBookState);
+    canvas.removeEventListener('webglcontextlost', onContextLost);
+    if (loading) {
+      loading.textContent = (loading as HTMLElement).dataset.error || 'Scene unavailable';
+      (loading as HTMLElement).style.letterSpacing = '0.08em';
+      loading.classList.remove('gone');
+      loading.classList.add('failed');
+    }
+    canvas.hidden = true;
+    setMotionControl('unavailable');
+  }
+
+  function onContextLost(e: Event) {
+    e.preventDefault();
+    // Content remains usable. A reload creates a clean scene, rather than
+    // restoring abandoned meal state on a possibly unstable graphics context.
+    sceneUnavailable();
+  }
+
   function boot() {
     try {
       let sceneContent: any = { chatter: { cook: [], diner: [] }, labels: {}, menuItems: [] };
@@ -114,19 +146,11 @@ const sceneContent = {
       }, { ...sceneContent, motionPaused: savedMotionPaused });
     } catch (err) {
       console.error(err);
-      if (loading) {
-        loading.textContent = (loading as HTMLElement).dataset.error || 'Scene unavailable';
-        (loading as HTMLElement).style.letterSpacing = '0.08em';
-        loading.classList.add('failed');
-      }
-      canvas.hidden = true;
-      setMotionControl('unavailable');
+      sceneUnavailable();
       return;
     }
-    document.addEventListener('nb:bookstate', (e) => {
-      controls?.setBookOpen((e as CustomEvent).detail);
-      if (controls) setMotionControl(controls.getMotionState());
-    });
+    canvas.addEventListener('webglcontextlost', onContextLost);
+    document.addEventListener('nb:bookstate', onBookState);
     // The menu controller runs while the HTML is parsed, before this module.
     // Synchronise events that fired while the scene bundle was still loading.
     controls.setBookOpen(document.getElementById('book')?.classList.contains('open') ?? false);
