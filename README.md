@@ -39,7 +39,9 @@ to capture the checked layouts for visual review.
 `npm run audit:visitor` verifies repeat meals, Done and recoverable browsing
 dismissal, including held Enter/Space and static reduced-motion delivery.
 `npm run audit:locomotion` measures live planted-foot contact and distance-driven
-gait under sparse frames. Both accept `-- --out /tmp/nightbowl-review` for
+gait and visible stride length under sparse frames. `npm run audit:visit` checks
+seating across Menu/Bill book interactions, native content round trips and
+same-tab reloads, plus blocked session storage. These accept `-- --out /tmp/nightbowl-review` for
 screenshots; see [the CI guide](docs/ci.md) for their exact gates.
 
 ## Write through the admin

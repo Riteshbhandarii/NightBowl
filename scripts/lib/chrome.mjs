@@ -154,6 +154,9 @@ export async function session({ flags = [], width = 1280, height = 800 }, run) {
 
 /** Navigate and wait until the scene handle and the menu markup both exist. */
 export async function openScene({ send, evaluate }, url, query = '?nbtest=1') {
+  // Each audit scenario asks for a fresh visit. Real content round trips and
+  // reloads use native navigation instead and deliberately retain this marker.
+  await evaluate(`(() => { try { sessionStorage.removeItem('nightbowl:seated-this-visit'); } catch {} })()`);
   await send('Page.navigate', { url: `${url}/${query}` });
   for (let i = 0; i < 60; i++) {
     await sleep(250);

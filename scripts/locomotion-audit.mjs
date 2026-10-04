@@ -15,6 +15,15 @@ mkdirSync(out, { recursive: true });
 const horizontal = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
 const median = (values) => [...values].sort((a, b) => a - b)[Math.floor(values.length / 2)];
 
+function stride(samples, label) {
+  const span = Math.max(...samples.map((pose) => Math.abs(
+    (pose.footR.x - pose.footL.x) * pose.facingX + (pose.footR.z - pose.footL.z) * pose.facingZ
+  ) / pose.scale));
+  assert.ok(span >= 0.46, `${label}: tiny steps returned (maximum normalized foot separation ${span})`);
+  assert.ok(span <= 0.68, `${label}: gait overextends (maximum normalized foot separation ${span})`);
+  return { maximumNormalizedFootSpan: span };
+}
+
 function planted(samples, label) {
   const ratios = [];
   const stanceY = [];
@@ -105,6 +114,14 @@ await session(viewport, async (ctx) => {
     results.walkers[label] = { elapsedMs: after.at - before.at, rootTravel, gaitTravel };
   }
 
+  for (const index of [0, 1]) {
+    assert.ok(await openScene(ctx, url), `walker ${index} stride scene did not boot`);
+    if (softwareRenderer()) await evaluate('window.__nightbowl.auditRendering(false)');
+    await evaluate('window.__nightbowl.auditStreetWalkers([-2, 2])');
+    const frames = await sample(evaluate, 'walker', index, 42);
+    results.walkers[`walker${index}Stride`] = { ...stride(frames, `walker ${index}`), ...planted(frames, `walker ${index}`) };
+  }
+
   assert.ok(await openScene(ctx, url), 'turnover scene did not boot');
   if (softwareRenderer()) await evaluate('window.__nightbowl.auditRendering(false)');
   await evaluate("document.querySelector('.seat-pin')?.click()");
@@ -115,7 +132,7 @@ await session(viewport, async (ctx) => {
       `window.__nightbowl.selfCheck().turnover?.phase === 'leave' && Math.abs(window.__nightbowl.selfCheck().turnover.x - window.__nightbowl.selfCheck().turnover.seatX) > 0.25`,
       `diner ${index} departure`);
     const leaving = await sample(evaluate, 'diner', index, 18);
-    results.turnover[`diner${index}Leave`] = planted(leaving, `diner ${index} departure`);
+    results.turnover[`diner${index}Leave`] = { ...planted(leaving, `diner ${index} departure`), ...stride(leaving, `diner ${index} departure`) };
     await evaluate(`(() => {
       const api = window.__nightbowl;
       const p = api.auditLocomotion('diner', ${index});
@@ -129,7 +146,7 @@ await session(viewport, async (ctx) => {
         "window.__nightbowl.selfCheck().turnover?.phase === 'arrive' && Math.abs(window.__nightbowl.selfCheck().turnover.x - window.__nightbowl.selfCheck().turnover.entryX) > 0.25",
         'diner 0 arrival', 260);
       const arriving = await sample(evaluate, 'diner', index, 18);
-      results.turnover.diner0Arrive = planted(arriving, 'diner 0 arrival');
+      results.turnover.diner0Arrive = { ...planted(arriving, 'diner 0 arrival'), ...stride(arriving, 'diner 0 arrival') };
       await evaluate(`(() => {
         const api = window.__nightbowl;
         const p = api.auditLocomotion('diner', 0);
@@ -158,7 +175,7 @@ await session(viewport, async (ctx) => {
   const cookFrames = await sample(evaluate, 'cook', 0, 88, 75);
   const movingCook = cookFrames.filter((frame) => frame.moving);
   assert.ok(movingCook.length >= 12, `cook only had ${movingCook.length} moving samples`);
-  results.cook = planted(cookFrames, 'cook service');
+  results.cook = { ...planted(cookFrames, 'cook service'), ...stride(movingCook, 'cook service') };
   const service = await evaluate('window.__nightbowl.selfCheck().serviceAudit');
   assert.ok(service.lifted && service.filledCarry && service.completed, `service ordering regressed: ${JSON.stringify(service)}`);
 
