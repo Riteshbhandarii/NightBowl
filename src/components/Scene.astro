@@ -20,6 +20,15 @@ const sceneContent = {
 
 <script id="nbSceneContent" type="application/json" set:html={JSON.stringify(sceneContent)} is:inline></script>
 <canvas id="scene" aria-label={SCENE.canvasLabel}></canvas>
+<button
+  type="button"
+  class="scene-motion-control"
+  id="sceneMotionControl"
+  data-state="unavailable"
+  aria-label="Scene motion unavailable"
+  aria-pressed="false"
+  disabled
+><span>Motion unavailable</span></button>
 <div class="loading" id="loading" data-error={SCENE.error}>{SCENE.loading}</div>
 <div class="pins" id="pins"></div>
 <aside class="visitor-order" id="visitorOrder" aria-labelledby="visitorOrderTitle" hidden>
@@ -46,15 +55,63 @@ const sceneContent = {
 
   const canvas = document.getElementById('scene') as HTMLCanvasElement;
   const loading = document.getElementById('loading');
+  const motionControl = document.getElementById('sceneMotionControl') as HTMLButtonElement | null;
+  const motionLabel = motionControl?.querySelector('span');
+  const motionPreferenceKey = 'nightbowl:scene-motion';
+  let storageAvailable = true;
+  let savedMotionPaused = false;
+
+  try {
+    savedMotionPaused = localStorage.getItem(motionPreferenceKey) === 'paused';
+  } catch {
+    storageAvailable = false;
+  }
+
+  type MotionState = { manualPaused: boolean; systemReduced: boolean; paused: boolean };
+  type SceneControls = {
+    setBookOpen(v: boolean): void;
+    setMotionPaused(v: boolean): MotionState;
+    getMotionState(): MotionState;
+  };
+  let controls: SceneControls | null = null;
+
+  function setMotionControl(state: MotionState | 'loading' | 'unavailable') {
+    if (!motionControl || !motionLabel) return;
+    if (state === 'loading' || state === 'unavailable') {
+      const loadingState = state === 'loading';
+      motionControl.disabled = true;
+      motionControl.dataset.state = state;
+      motionControl.setAttribute('aria-pressed', 'false');
+      motionControl.setAttribute('aria-label', loadingState ? 'Scene motion loading' : 'Scene motion unavailable');
+      motionControl.title = loadingState ? 'Scene motion is loading' : 'The 3D scene is unavailable';
+      motionLabel.textContent = loadingState ? 'Motion loading' : 'Motion unavailable';
+      return;
+    }
+    motionControl.dataset.state = state.paused ? 'paused' : 'playing';
+    motionControl.setAttribute('aria-pressed', String(state.paused));
+    if (state.systemReduced) {
+      motionControl.disabled = true;
+      motionControl.setAttribute('aria-label', 'Scene motion reduced by system settings');
+      motionControl.title = 'Your reduced-motion system setting keeps the scene still';
+      motionLabel.textContent = 'Motion reduced';
+      return;
+    }
+    motionControl.disabled = false;
+    const action = state.manualPaused ? 'Resume scene motion' : 'Pause scene motion';
+    motionControl.setAttribute('aria-label', action);
+    motionControl.title = storageAvailable ? action : `${action}. Preference applies to this visit only`;
+    motionLabel.textContent = state.manualPaused ? 'Resume motion' : 'Pause motion';
+  }
+
+  setMotionControl('loading');
 
   function boot() {
-    let controls: { setBookOpen(v: boolean): void } | null = null;
     try {
       let sceneContent: any = { chatter: { cook: [], diner: [] }, labels: {}, menuItems: [] };
       try { sceneContent = JSON.parse(document.getElementById('nbSceneContent')!.textContent!); } catch (e) {}
       controls = initScene(canvas, (key: string) => {
         document.dispatchEvent(new CustomEvent('nb:open', { detail: key }));
-      }, sceneContent);
+      }, { ...sceneContent, motionPaused: savedMotionPaused });
     } catch (err) {
       console.error(err);
       if (loading) {
@@ -63,18 +120,34 @@ const sceneContent = {
         loading.classList.add('failed');
       }
       canvas.hidden = true;
+      setMotionControl('unavailable');
       return;
     }
     document.addEventListener('nb:bookstate', (e) => {
       controls?.setBookOpen((e as CustomEvent).detail);
+      if (controls) setMotionControl(controls.getMotionState());
     });
     // The menu controller runs while the HTML is parsed, before this module.
     // Synchronise events that fired while the scene bundle was still loading.
     controls.setBookOpen(document.getElementById('book')?.classList.contains('open') ?? false);
+    setMotionControl(controls.getMotionState());
     // only reachable when explicitly asked for, so normal loads stay clean
     if (location.search.includes('nbtest')) (window as any).__nightbowl = controls;
     loading?.classList.add('gone');
   }
+
+  motionControl?.addEventListener('click', () => {
+    if (!controls) return;
+    const current = controls.getMotionState();
+    if (current.systemReduced) return;
+    const next = controls.setMotionPaused(!current.manualPaused);
+    try {
+      localStorage.setItem(motionPreferenceKey, next.manualPaused ? 'paused' : 'playing');
+    } catch {
+      storageAvailable = false;
+    }
+    setMotionControl(next);
+  });
 
   if ('fonts' in document) {
     let done = false;
@@ -85,3 +158,32 @@ const sceneContent = {
     boot();
   }
 </script>
+
+<style>
+  .scene-motion-control {
+    position: fixed;
+    left: max(16px, env(safe-area-inset-left));
+    top: max(20px, env(safe-area-inset-top));
+    z-index: 20;
+    min-height: 44px;
+    padding: 8px 12px;
+    border: 1px solid rgba(247, 240, 226, 0.22);
+    border-radius: 999px;
+    color: rgba(247, 240, 226, 0.82);
+    background: rgba(12, 10, 15, 0.76);
+    backdrop-filter: blur(9px);
+    -webkit-backdrop-filter: blur(9px);
+    font: 500 10px/1.2 'Space Mono', ui-monospace, monospace;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    cursor: pointer;
+  }
+
+  .scene-motion-control:hover:not(:disabled) { background: rgba(42, 34, 44, 0.9); }
+  .scene-motion-control:disabled { cursor: default; opacity: 0.68; }
+  .scene-motion-control[data-state='paused'] { border-color: rgba(239, 154, 76, 0.55); }
+
+  @media (prefers-reduced-motion: reduce) {
+    .scene-motion-control { transition: none; }
+  }
+</style>
