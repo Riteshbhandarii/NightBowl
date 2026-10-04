@@ -65,12 +65,14 @@ async function screenshot(send, name) {
 
 const results = { walkers: {}, turnover: {}, cook: {}, sparseCook: {}, reduced: {} };
 
-// Foot contact is a world-space assertion, not a frame-rate benchmark. Keep
-// the no-GPU runner's raster small enough to sample the actual moving poses.
+// Sparse-frame travel below keeps rendering. Contact measurements then retain
+// live animation updates but suppress raster on no-GPU runners, where a fixed
+// wall-clock walk can finish before five stance intervals are observable.
+// Rendered behavior remains covered by smoke; auditFrame draws the live pose.
 const viewport = softwareRenderer() ? { width: 640, height: 400 } : { width: 1400, height: 900 };
 await session(viewport, async (ctx) => {
   const { evaluate, send } = ctx;
-  for (const [label, busyMs] of [['60fps', 0], ['20fps', 34], ['10fps', 84], ['6fps', 150]]) {
+  for (const [label, busyMs] of [['normal', 0], ['34ms-starved', 34], ['84ms-starved', 84], ['150ms-starved', 150]]) {
     assert.ok(await openScene(ctx, url), `${label}: scene did not boot`);
     await evaluate('window.__nightbowl.auditStreetWalkers([-2, 2])');
     await sleep(150);
@@ -99,6 +101,7 @@ await session(viewport, async (ctx) => {
   }
 
   assert.ok(await openScene(ctx, url), 'turnover scene did not boot');
+  if (softwareRenderer()) await evaluate('window.__nightbowl.auditRendering(false)');
   await evaluate("document.querySelector('.seat-pin')?.click()");
   await waitFor(evaluate, "window.__nightbowl.selfCheck().phase === 'seated'", 'seated scene');
   for (const index of [0, 2]) {
@@ -143,7 +146,7 @@ await session(viewport, async (ctx) => {
     api.auditBegin(); api.auditFocus('cook', 0);
     // Stay inside the stall's rear wall; a camera directly behind it produces
     // an occluded photograph, not full-body evidence of the cook's live gait.
-    api.auditFrame({ target: { x: p.root.x, y: 0.95, z: p.root.z }, azimuth: 1.95, elevation: 0.025, radius: 2.05 });
+    api.auditFrame({ target: { x: p.root.x, y: 0.93, z: p.root.z }, azimuth: 1.9, elevation: 0.02, radius: 2.45 });
   })()`);
   await screenshot(send, 'cook-service-rear-full-body');
   await evaluate('window.__nightbowl.auditEnd()');
@@ -160,6 +163,7 @@ await session(viewport, async (ctx) => {
   // Start a fresh room: after two complete turnovers a natural second-meal
   // departure can legitimately take priority over a manually emptied bowl.
   assert.ok(await openScene(ctx, url), 'sparse cook scene did not boot');
+  if (softwareRenderer()) await evaluate('window.__nightbowl.auditRendering(false)');
   await evaluate("document.querySelector('.seat-pin')?.click()");
   await waitFor(evaluate, "window.__nightbowl.selfCheck().phase === 'seated'", 'sparse cook seating');
   assert.ok(await evaluate('window.__nightbowl.testEmptyBowl(2)'));

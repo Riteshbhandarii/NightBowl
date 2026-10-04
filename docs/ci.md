@@ -306,8 +306,11 @@ animated scene already exceeds it. Physical phone performance remains #34.
 departure directions, an arriving customer and the serving cook. It compares
 actual street-root travel with gait distance under normal and starved frames,
 checks a cook displacement over half a metre after a skipped render, verifies
-service ordering and ensures reduced-motion walkers stay still. The software
-renderer uses a smaller raster for live contact sampling; this is not an FPS gate.
+service ordering and ensures reduced-motion walkers stay still. Sparse walker
+checks keep actual rendering. No-GPU contact checks suppress continuous raster
+while the real director/pose/gait loop keeps updating, so a walk cannot finish
+before enough stance intervals are observable. The rendered scene is still
+covered by smoke; screenshots explicitly draw the live pose. This is not an FPS gate.
 
 Use `npm run audit:locomotion -- --out /tmp/nightbowl-locomotion-review` for live
 full-body screenshots and a JSON measurement report. These photos preserve the

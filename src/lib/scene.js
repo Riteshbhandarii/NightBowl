@@ -100,6 +100,7 @@ export function initScene(canvas, onHotspot, opts = {}) {
     return out;
   }
   const clock = new THREE.Clock();
+  let auditSkipRender = false;
 
   const hotspots = [];
   const steamGroups = [];
@@ -3073,7 +3074,7 @@ export function initScene(canvas, onHotspot, opts = {}) {
     updateHover();
     if (phase === 'seated') { updatePins(); updateYouPin(); }
     else { updateSeatPin(t); updateYouPin(); }
-    renderer.render(scene, camera);
+    if (!auditSkipRender) renderer.render(scene, camera);
   }
   orderChoices?.addEventListener('click', onOrderClick);
   orderSkip?.addEventListener('click', onOrderSkip);
@@ -3166,6 +3167,10 @@ export function initScene(canvas, onHotspot, opts = {}) {
         facingZ: Math.cos(npc.rotation.y),
       };
     },
+
+    // Test-only: keep the real live director/pose/gait updates while a no-GPU
+    // runner measures world-space contact. auditFrame still draws screenshots.
+    auditRendering(enabled) { auditSkipRender = !enabled; },
 
     /* Test-only transform perturbations for the IK regression audit. Each call
        is reversible by applying the opposite delta (or reciprocal scale). */
