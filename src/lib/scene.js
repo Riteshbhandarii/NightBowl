@@ -1749,7 +1749,8 @@ export function initScene(canvas, onHotspot, opts = {}) {
   // Distance, not wall time, drives this gait. During each half-stride the
   // stance foot moves backward by exactly the root's forward displacement;
   // its world position therefore stays planted until the other foot lands.
-  function walkRig(rig, distance, amt = 1, swingArms = true) {
+  function walkRig(npc, distance, amt = 1, swingArms = true) {
+    const rig = npc.userData.rig;
     const foot = (offset) => {
       const cycle = ((distance / WALK_STRIDE + offset) % 1 + 1) % 1;
       if (cycle < 0.5) return { z: WALK_STRIDE * (0.25 - cycle), lift: 0 };
@@ -1762,7 +1763,8 @@ export function initScene(canvas, onHotspot, opts = {}) {
     const left = foot(0.25), right = foot(0.75);
     solveWalkingLeg(rig.legL, left.z, left.lift, amt);
     solveWalkingLeg(rig.legR, right.z, right.lift, amt);
-    rig.hip.position.y = 0.8;
+    // Roots have different heights; keep the stance sole on the same ground.
+    rig.hip.position.y = 0.8 - npc.position.y / npc.scale.y;
     if (!swingArms) return;
     const phase = distance / WALK_STRIDE * Math.PI * 2;
     rig.armL.sh.rotation.x = Math.sin(phase + Math.PI) * 0.32 * amt;
@@ -1792,7 +1794,7 @@ export function initScene(canvas, onHotspot, opts = {}) {
     walk.x = npc.position.x;
     walk.z = npc.position.z;
     walk.moving = step > 0.00001;
-    if (walk.moving) walkRig(npc.userData.rig, walk.distance, amt, swingArms);
+    if (walk.moving) walkRig(npc, walk.distance, amt, swingArms);
   }
 
   function cookTravelX(from, to, u) {
@@ -1819,9 +1821,7 @@ export function initScene(canvas, onHotspot, opts = {}) {
     if (!guideRig) return;
     // Stations and turn-only beats are standing poses, not a frozen last step.
     for (const leg of [guideRig.legL, guideRig.legR]) {
-      leg.hp.rotation.x = 0;
-      leg.knee.rotation.x = 0;
-      leg.shoe.rotation.x = Math.PI / 2;
+      solveWalkingLeg(leg, 0, 0, 0);
     }
     if (!guide?.userData.serviceWalking) {
       if (guide.userData.walk?.moving) beginWalk(guide);
@@ -1834,10 +1834,8 @@ export function initScene(canvas, onHotspot, opts = {}) {
     if (!guideRig) return;
     guide.userData.serviceWalking = false;
     guide.rotation.y = guide.userData.walkHomeRotation ?? guide.rotation.y;
-    guideRig.legL.hp.rotation.x = 0;
-    guideRig.legR.hp.rotation.x = 0;
-    guideRig.legL.knee.rotation.x = 0;
-    guideRig.legR.knee.rotation.x = 0;
+    solveWalkingLeg(guideRig.legL, 0, 0, 0);
+    solveWalkingLeg(guideRig.legR, 0, 0, 0);
     guideRig.hip.position.y = 0.8;
     beginWalk(guide);
   }

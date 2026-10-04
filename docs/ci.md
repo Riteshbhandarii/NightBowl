@@ -303,7 +303,10 @@ animated scene already exceeds it. Physical phone performance remains #34.
 ### Grounded locomotion and sparse frames
 
 `npm run audit:locomotion` measures world-space stance-foot drift on both diner
-departure directions, an arriving customer and the serving cook. It compares
+departure directions, an arriving customer and the serving cook. Precise shoe
+mesh bounds also reject soles below the ground or floating above it; checking
+only the shoe origin misses ankle rotation driving the sole through the floor.
+It compares
 actual street-root travel with gait distance under normal and starved frames,
 checks a cook displacement over half a metre after a skipped render, verifies
 service ordering and ensures reduced-motion walkers stay still. Sparse walker
