@@ -114,7 +114,22 @@ try {
       }
     }
   }
+  const tree = await fetch(new URL('/api/keystatic/tree', base), {
+    headers: { 'no-cors': '1' },
+  });
+  check('local file-read API exists only in development',
+    tree.status === (mode === 'production' ? 404 : 200), `status=${tree.status}`);
+  check('successful local reads and denied production reads remain non-cacheable',
+    tree.headers.get('cache-control') === 'private, no-store');
   if (mode === 'production') {
+    const update = await fetch(new URL('/api/keystatic/update', base), {
+      method: 'POST',
+      headers: { 'no-cors': '1', 'content-type': 'application/json' },
+      body: JSON.stringify({ additions: [], deletions: [] }),
+    });
+    check('production does not expose the local file-write API', update.status === 404);
+    check('denied production writes remain non-cacheable',
+      update.headers.get('cache-control') === 'private, no-store');
     const home = await fetch(new URL('/', base));
     const homeHtml = await home.text();
     const assetPath = homeHtml.match(/(?:src|href)="([^" ]*\/_astro\/[^" ]+\.js)"/)?.[1];
