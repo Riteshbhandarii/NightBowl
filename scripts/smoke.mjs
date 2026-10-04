@@ -16,7 +16,7 @@
            SMOKE_FLAGS   extra Chrome flags (CI uses swiftshader)
    ============================================================ */
 import { spawn } from 'node:child_process';
-import { mkdtempSync, rmSync, existsSync } from 'node:fs';
+import { mkdtempSync, rmSync, existsSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -25,11 +25,7 @@ const arg = (name, fallback) => {
   return i > -1 ? process.argv[i + 1] : fallback;
 };
 const URL_ = arg('--url', 'http://localhost:4321');
-// Not a fixed port: a Chrome left behind by an earlier run still answers on it,
-// and the next run attaches to that stale browser instead of the one it just
-// spawned. Nothing errors, the flags just belong to the wrong process. The
-// about:blank assertion below is the backstop.
-let nextPort = 9300 + Math.floor(Math.random() * 600);
+// Use Chrome's private DevToolsActivePort file, never a guessed shared port.
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // Navigation pins that do not currently sit on the object they label. Listing
@@ -123,11 +119,11 @@ const check = (name, ok, detail = '') => {
 };
 
 async function session(flags, run) {
-  const port = nextPort++;
+  let port = 0;
   const profile = mkdtempSync(join(tmpdir(), 'nightbowl-smoke-'));
   const chrome = spawn(findChrome(), [
     '--headless=new',
-    `--remote-debugging-port=${port}`,
+    '--remote-debugging-port=0',
     `--user-data-dir=${profile}`,
     '--no-first-run',
     '--no-default-browser-check',
@@ -151,6 +147,7 @@ async function session(flags, run) {
   for (let i = 0; i < 120 && !target && exited === null; i++) {
     await sleep(500);
     try {
+      port = Number(readFileSync(join(profile, 'DevToolsActivePort'), 'utf8').split('\n')[0]);
       const list = await (await fetch(`http://127.0.0.1:${port}/json/list`)).json();
       target = list.find((t) => t.type === 'page');
     } catch { /* not up yet */ }

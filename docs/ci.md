@@ -67,6 +67,11 @@ metadata, image dimensions and sitemap exclusions. Its temporary blank PDF is
 deleted and site copy restored before the artifact is uploaded. These checks
 must not run against a build that a browser suite is currently using.
 
+`npm run check:scene-content` rebuilds with synthetic literal script-like text,
+quotes and Unicode in scene labels and chatter. A real browser checks that no
+marker script executes and JSON parsing restores the exact text. The original
+CMS copy and production build are restored in `finally`, before artifact sharing.
+
 ### Type check
 Reads every TypeScript and Astro file and confirms the types line up.
 
@@ -134,6 +139,24 @@ geometry and pose limits are unchanged.
 ---
 
 ## Job 2: scene
+
+`npm run audit:lifecycle` uses Chrome's real `WEBGL_lose_context` extension
+after arrival and during phone meal service. It checks the content fallback,
+native-keyboard Menu/Guide/Log/Bill access, idempotent teardown, delayed loader
+callbacks, timer/input cleanup and reload recovery. Context restoration does not
+resurrect an abandoned scene; reload starts a fresh one. Actual tab switching
+and an initially background-loaded tab test frozen clocks, entrance/service/
+departure continuity and unchanged manual/reading pause preferences. Visible
+slow frames still use wall-clock action time, not a blanket delta clamp.
+Teardown releases application geometry/materials/textures. Three r185's shared
+16×16 DFG lookup texture is an internal resource, not an application texture;
+the disposal assertion allows precisely that one counted texture, not an
+arbitrary leak. Physical geometry limits and retention gates stay unchanged.
+
+The shared, smoke and CMS browser launchers use Chrome's OS-assigned debugging
+port, read from each newly created private profile's `DevToolsActivePort` file.
+`npm run check:browser-isolation` verifies six concurrent targets remain owned
+by their respective sessions. Unexpected targets are still rejected.
 
 **What it catches:** the 3D stall failing to start, a character posed somewhere
 physically impossible, and the site breaking on a phone.

@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process';
-import { existsSync, mkdtempSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, rmSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -19,7 +19,7 @@ const chromeCandidates = [
 ].filter(Boolean);
 const chromePath = chromeCandidates.find((candidate) => existsSync(candidate));
 const profile = mkdtempSync(join(tmpdir(), 'nightbowl-cms-smoke-'));
-const port = 9433 + Math.floor(Math.random() * 400);
+let port = 0;
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const failures = [];
 const check = (name, ok, detail = '') => {
@@ -31,7 +31,7 @@ if (!chromePath) throw new Error('Chrome not found. Set CHROME_PATH.');
 
 const chrome = spawn(chromePath, [
   '--headless=new',
-  `--remote-debugging-port=${port}`,
+  '--remote-debugging-port=0',
   `--user-data-dir=${profile}`,
   '--no-first-run',
   '--no-default-browser-check',
@@ -44,11 +44,16 @@ let target;
 for (let attempt = 0; attempt < 80 && !target; attempt++) {
   await sleep(250);
   try {
+    port = Number(readFileSync(join(profile, 'DevToolsActivePort'), 'utf8').split('\n')[0]);
     const targets = await (await fetch(`http://127.0.0.1:${port}/json/list`)).json();
     target = targets.find((item) => item.type === 'page');
   } catch { /* Chrome is still starting. */ }
 }
-if (!target) throw new Error('Chrome did not expose a debugging target.');
+if (!target || target.url !== 'about:blank') {
+  chrome.kill('SIGKILL');
+  rmSync(profile, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
+  throw new Error('Chrome did not expose its own blank debugging target.');
+}
 
 const ws = new WebSocket(target.webSocketDebuggerUrl);
 await new Promise((resolve, reject) => {

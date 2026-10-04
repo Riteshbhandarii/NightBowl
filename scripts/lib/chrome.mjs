@@ -8,7 +8,7 @@
          SMOKE_FLAGS   extra Chrome flags (CI uses swiftshader)
    ============================================================ */
 import { spawn } from 'node:child_process';
-import { mkdtempSync, rmSync, existsSync } from 'node:fs';
+import { mkdtempSync, rmSync, existsSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -33,23 +33,19 @@ export function findChrome() {
 /** True when Chrome was asked to rasterise in software (no GPU on the runner). */
 export const softwareRenderer = () => /swiftshader/i.test(process.env.SMOKE_FLAGS || '');
 
-/* A fixed base port is a trap: a Chrome left behind by an earlier run still
-   answers on it, and the next run attaches to that stale browser instead of the
-   one it just spawned. Nothing errors — the flags silently belong to the wrong
-   process. Start from a random base per run, and verify below that the target
-   we attached to is the blank page we asked for. */
-let nextPort = 9200 + Math.floor(Math.random() * 600);
+// Chrome asks the OS for a free port. Its private profile tells us which one;
+// small random ranges can collide with another concurrently running audit.
 
 /**
  * Boot Chrome, hand `run` a CDP channel, and always tear the browser down.
  * `flags` are appended after SMOKE_FLAGS so a caller can override.
  */
 export async function session({ flags = [], width = 1280, height = 800 }, run) {
-  const port = nextPort++;
+  let port = 0;
   const profile = mkdtempSync(join(tmpdir(), 'nightbowl-audit-'));
   const chrome = spawn(findChrome(), [
     '--headless=new',
-    `--remote-debugging-port=${port}`,
+    '--remote-debugging-port=0',
     `--user-data-dir=${profile}`,
     '--no-first-run',
     '--no-default-browser-check',
@@ -71,6 +67,7 @@ export async function session({ flags = [], width = 1280, height = 800 }, run) {
   for (let i = 0; i < 120 && !target && exited === null; i++) {
     await sleep(500);
     try {
+      port = Number(readFileSync(join(profile, 'DevToolsActivePort'), 'utf8').split('\n')[0]);
       const list = await (await fetch(`http://127.0.0.1:${port}/json/list`)).json();
       target = list.find((t) => t.type === 'page');
     } catch { /* not up yet */ }
