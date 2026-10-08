@@ -133,7 +133,7 @@ const anyDraft =
         <span class="eyebrow">{GUIDE.eyebrow}</span>
         <h2>{GUIDE.title}</h2>
         <p class="sub">{GUIDE.intro}</p>
-        <div class="portrait" aria-hidden="true"><span>{GUIDE.portraitPlaceholder}</span></div>
+        {GUIDE.portrait && <div class="portrait"><img src={GUIDE.portrait} alt={GUIDE.portraitAlt} width="640" height="640" loading="lazy" decoding="async" /></div>}
       </div>
       <div data-side="r">
         {GUIDE.body.map((para) => <p>{para}</p>)}
