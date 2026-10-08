@@ -747,15 +747,17 @@ await session([], async (ctx) => {
       entries: document.querySelectorAll('.log-index > li').length,
       drafts: document.querySelectorAll('.log-index > li.draft').length,
       linkedDrafts: document.querySelectorAll('.log-index > li.draft h2 a').length,
+      linkedPublished: document.querySelectorAll('.log-index > li:not(.draft) h2 a').length,
       homeLink: document.querySelector('.reading-header a[href="/"]')?.textContent.trim(),
       horizontalOverflow: document.documentElement.scrollWidth - innerWidth,
     }))()`);
     check(`${viewport.name}: Kitchen Log has its own index`,
       log.title === 'Kitchen Log' && log.entries > 0 && !!log.homeLink,
       `title=${log.title} entries=${log.entries}`);
-    check(`${viewport.name}: drafts are teasers, not links`,
-      log.drafts > 0 && log.linkedDrafts === 0,
-      `drafts=${log.drafts} linked=${log.linkedDrafts}`);
+    // Draft routes are covered by check:build and check:launch; owner posts may all be published.
+    check(`${viewport.name}: drafts are teasers, published posts are links`,
+      log.linkedDrafts === 0 && log.linkedPublished === log.entries - log.drafts,
+      `drafts=${log.drafts} linkedDrafts=${log.linkedDrafts} published=${log.entries - log.drafts} linkedPublished=${log.linkedPublished}`);
     check(`${viewport.name}: Kitchen Log has no horizontal overflow`,
       log.horizontalOverflow <= 0.5, `overflow=${log.horizontalOverflow}`);
   }
