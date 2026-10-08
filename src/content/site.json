@@ -93,10 +93,10 @@
       }
     ],
     "cvNote": "",
-    "emptyCvMessage": "Want the full CV? Message me on LinkedIn and I will send it.",
+    "emptyCvMessage": "Want the full CV? Email me and I will send it.",
     "cvUrl": "/cv.pdf",
-    "email": "",
-    "emailConfirmed": false,
+    "email": "bhanrit@gmail.com",
+    "emailConfirmed": true,
     "cvLinkLabel": "download PDF",
     "githubLabel": "github.com/Riteshbhandarii",
     "linkedinLabel": "ritesh-bhandari",
