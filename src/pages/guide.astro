@@ -8,6 +8,7 @@ import { GUIDE, SITE } from '../data/content';
     <span class="reading-kicker">{GUIDE.eyebrow}</span>
     <h1>{GUIDE.title}</h1>
     <p class="reading-deck">{GUIDE.intro}</p>
+    {GUIDE.portrait && <div class="portrait"><img src={GUIDE.portrait} alt={GUIDE.portraitAlt} width="640" height="640" decoding="async" /></div>}
     <div class="project-body">
       {GUIDE.body.map((paragraph) => <p>{paragraph}</p>)}
       <p><a href={SITE.github} target="_blank" rel="noopener">{GUIDE.githubLabel}</a></p>
