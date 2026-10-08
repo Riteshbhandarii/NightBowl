@@ -1,4 +1,4 @@
-# nightbowl
+# Development notes
 
 Ritesh Bhandari's portfolio + kitchen log, served from an interactive late-night
 ramen stall. Built with Astro + three.js, with a GitHub-backed Keystatic admin.
@@ -43,7 +43,7 @@ dismissal, including held Enter/Space and static reduced-motion delivery.
 gait and visible stride length under sparse frames. `npm run audit:visit` checks
 seating across Menu/Bill book interactions, native content round trips and
 same-tab reloads, plus blocked session storage. These accept `-- --out /tmp/nightbowl-review` for
-screenshots; see [the CI guide](docs/ci.md) for their exact gates.
+screenshots; see [the CI guide](ci.md) for their exact gates.
 
 ## Write through the admin
 
@@ -89,7 +89,7 @@ callback URLs. Never commit `.env`; it is ignored.
 
 CMS API responses carry `Cache-Control: private, no-store`, including auth
 redirects and errors. Preserve that policy at the production host/CDN.
-See [the dependency and caching review](docs/security.md) for the current
+See [the dependency and caching review](security.md) for the current
 advisory findings, regression checks and limits of the audit result.
 
 ## Where the content lives (currently draft copy)
@@ -108,7 +108,7 @@ the content is portable and reviewable in Git.
 ## The cook
 
 The production asset track is an original Blender cook and at least ten distinct
-NPC looks (#79). Start with one cook; see [the character handoff](public/models/PUT-CHEF-GLB-HERE.md).
+NPC looks (#79). Start with one cook; see [the character handoff](../public/models/PUT-CHEF-GLB-HERE.md).
 The legacy `chef.glb` loader can display a model and play one idle clip, but
 does **not** connect it to cook AI, tools, serving or turnover. Dropping in a
 GLB is not a completed replacement. Keep the tested procedural cook until the
