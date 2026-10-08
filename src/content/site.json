@@ -94,14 +94,14 @@
     ],
     "cvNote": "",
     "emptyCvMessage": "Want the full CV? Email me and I will send it.",
-    "cvUrl": "/cv.pdf",
+    "cvUrl": "/Ritesh-Bhandari-CV.pdf",
     "email": "bhanrit@gmail.com",
     "emailConfirmed": true,
     "cvLinkLabel": "download PDF",
     "githubLabel": "github.com/Riteshbhandarii",
     "linkedinLabel": "ritesh-bhandari",
     "total": "Total, one hire. Service not included.",
-    "cvReady": false,
+    "cvReady": true,
     "draftCopy": false
   },
   "log": {
