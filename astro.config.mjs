@@ -5,6 +5,7 @@ import mdx from '@astrojs/mdx';
 import markdoc from '@astrojs/markdoc';
 import sitemap from '@astrojs/sitemap';
 import node from '@astrojs/node';
+import cloudflare from '@astrojs/cloudflare';
 import keystatic from '@keystatic/astro';
 import { readFileSync } from 'node:fs';
 import { siteOrigin } from './scripts/lib/site-origin.mjs';
@@ -14,7 +15,11 @@ const copy = JSON.parse(readFileSync(new URL('./src/content/site.json', import.m
 // An unconfigured local/preview build must not advertise an invented launch URL.
 export default defineConfig({
   ...(origin ? { site: origin } : {}),
-  adapter: node({ mode: 'standalone' }),
+  // Cloudflare deploys build with NIGHTBOWL_ADAPTER=cloudflare; everything else
+  // (dev, CI, smoke tests) keeps the standalone Node server.
+  adapter: process.env.NIGHTBOWL_ADAPTER === 'cloudflare' ? cloudflare({ imageService: 'passthrough' }) : node({ mode: 'standalone' }),
+  // No Astro sessions are used; this stops the Cloudflare adapter requiring a KV binding.
+  session: false,
   integrations: [
     react(),
     mdx(),

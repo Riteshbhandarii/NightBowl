@@ -1,0 +1,19 @@
+{
+  // Deploy with `npm run build:cloudflare && npx wrangler deploy`. Public pages are
+  // prerendered static assets; only /keystatic and /api/keystatic run in the Worker.
+  // Keystatic secrets are Worker secrets (`wrangler secret put`), never in this file.
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "nightbowl",
+  "compatibility_date": "2026-10-01",
+  "workers_dev": false,
+  "preview_urls": false,
+  "routes": [
+    { "pattern": "nightbowl.live", "custom_domain": true },
+    { "pattern": "www.nightbowl.live", "custom_domain": true }
+  ],
+  "assets": {
+    "directory": "./dist/client",
+    "html_handling": "auto-trailing-slash",
+    "not_found_handling": "none"
+  }
+}
