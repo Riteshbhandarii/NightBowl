@@ -8,6 +8,7 @@
   "scripts": {
     "dev": "astro dev",
     "build": "astro build",
+    "build:cloudflare": "NIGHTBOWL_ADAPTER=cloudflare astro build",
     "check": "astro check",
     "check:build": "node scripts/check-build.mjs",
     "check:perf": "node scripts/perf-budget.mjs",
@@ -60,6 +61,8 @@
   },
   "devDependencies": {
     "@astrojs/check": "^0.9.10",
-    "typescript": "^6.0.3"
+    "@astrojs/cloudflare": "^14.3.4",
+    "typescript": "^6.0.3",
+    "wrangler": "^4.148.0"
   }
 }
