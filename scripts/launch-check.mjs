@@ -12,6 +12,10 @@ const fixture = JSON.parse(original);
 const fixtureUrl = `/nightbowl-download-fixture-${process.pid}.pdf`;
 const fixturePath = join(root, 'public', fixtureUrl.slice(1));
 assert.ok(!existsSync(fixturePath), 'never overwrite an existing public asset');
+// Owner posts may all be published; a temporary draft keeps the draft boundary under test.
+const draftSlug = `nightbowl-draft-fixture-${process.pid}`;
+const draftPostPath = join(root, 'src/content/posts', `${draftSlug}.md`);
+assert.ok(!existsSync(draftPostPath), 'never overwrite an existing post');
 const dist = join(root, 'dist/client');
 const html = (route) => readFileSync(join(dist, route), 'utf8');
 const origin = 'https://nightbowl-fixture.dev'; // Test input, not the selected launch domain.
@@ -82,7 +86,9 @@ try {
   pdf += `xref\n0 5\n0000000000 65535 f \n${offsets.slice(1).map(offset => `${String(offset).padStart(10, '0')} 00000 n \n`).join('')}trailer\n<< /Size 5 /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`;
   writeFileSync(fixturePath, pdf);
   fixture.bill.draftCopy = false;
+  fixture.guide.draftCopy = true;
   save();
+  writeFileSync(draftPostPath, '---\ntitle: "Draft fixture"\ndate: 2026-01-01\nstatus: draft\nexcerpt: "Test input only."\n---\n\nTest input only.\n');
   build(origin);
   for (const route of ['index.html', 'bill/index.html']) {
     const page = html(route);
@@ -105,18 +111,19 @@ try {
     titles.add(title);
   }
   for (const route of ['guide/index.html', 'preview/menu/index.html',
-    'preview/log/why-a-ramen-stall/index.html']) {
+    `preview/log/${draftSlug}/index.html`]) {
     const page = html(route);
     assert.ok(page.includes('content="noindex, nofollow"'), `${route}: drafts/previews not indexed`);
     assert.ok(!page.includes('rel="canonical"') && !page.includes('property="og:url"'));
   }
   const sitemap = html('sitemap-0.xml');
   assert.ok(sitemap.includes(`${origin}/menu/`) && sitemap.includes(`${origin}/bill/`));
-  for (const path of ['/guide/', '/preview/', '/admin/', '/keystatic/', '/log/why-a-ramen-stall/']) assert.ok(!sitemap.includes(path));
+  for (const path of ['/guide/', '/preview/', '/admin/', '/keystatic/', `/log/${draftSlug}/`]) assert.ok(!sitemap.includes(path));
   assert.ok(!sitemap.includes('nightbowl.example'));
 } finally {
   writeFileSync(copyPath, original);
   if (existsSync(fixturePath)) unlinkSync(fixturePath);
+  if (existsSync(draftPostPath)) unlinkSync(draftPostPath);
   execFileSync('npm', ['run', 'build'], { cwd: root, stdio: 'inherit' });
 }
 assert.equal(readFileSync(copyPath, 'utf8'), original, 'test restores owner-controlled content');

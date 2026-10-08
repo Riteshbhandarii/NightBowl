@@ -7,5 +7,5 @@ status: "draft"
 sourceUrl: "https://github.com/Riteshbhandarii/Chess-engine"
 demoUrl: "https://chess-engine-two.vercel.app"
 order: 1
-draftCopy: true
+draftCopy: false
 ---

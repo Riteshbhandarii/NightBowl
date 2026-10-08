@@ -6,5 +6,5 @@ summary: "A scheduled Airflow pipeline that extracts, cleans and validates weath
 status: "draft"
 sourceUrl: "https://github.com/Riteshbhandarii/weather-etl-pipeline"
 order: 1
-draftCopy: true
+draftCopy: false
 ---

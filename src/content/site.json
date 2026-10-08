@@ -8,8 +8,8 @@
     "establishedYear": "2026",
     "coverLine": "open late",
     "coverPrompt": "tap to open",
-    "homeDescription": "Ritesh Bhandari — portfolio and kitchen log, served from a late-night ramen stall.",
-    "draftStamp": "Draft copy, written by the assistant. Ritesh replaces it in his own voice."
+    "homeDescription": "Ritesh Bhandari's portfolio and kitchen log, served from a late night ramen stall.",
+    "draftStamp": "Work in progress."
   },
   "navigation": {
     "menu": "Menu",
@@ -28,7 +28,7 @@
     "smallPlatesNote": "focused tools and experiments",
     "offMenuTitle": "Off the menu",
     "offMenuNote": "ventures and research",
-    "closing": "More detail, and the parts that aren’t on GitHub, coming with the full site.",
+    "closing": "Ask me about any of these. The code for most of them is on GitHub.",
     "projectLinkLabel": "open ↗"
   },
   "guide": {
@@ -36,34 +36,35 @@
     "title": "The Guide",
     "intro": "Not the cook. The one who tells you what the cook has been up to.",
     "body": [
-      "Pull up a stool. The cook here is Ritesh, final year Data & AI Engineering at Turku University of Applied Sciences, and a student assistant at a research group called Core Cognitive Tech.",
-      "He likes the unglamorous half of machine learning. Not the demo: the part where a model or a data pipeline has to run in production without waking anyone at three in the morning.",
-      "Ten years of football, one recent first half marathon, English and Finnish, learning Swedish. Everything on the menu he built himself, so ask about any of it."
+      "Pull up a stool. The cook here is Ritesh. He is in his final year of Data and AI Engineering at Turku University of Applied Sciences. He also works as a student assistant at Core Cognitive Tech, a research team inside the university.",
+      "He likes the part of machine learning that comes after the demo. Getting a model or a data pipeline to run every day without anyone babysitting it. His thesis predicts prices for used car parts from real listing data.",
+      "He speaks Finnish, English and Nepali, and he is learning Swedish. Outside the kitchen he plays football and just ran his first half marathon. Everything on the menu he built himself, so ask him about any of it."
     ],
-    "portraitPlaceholder": "the cook, in person, once there's an illustration",
+    "portrait": "/images/guide/ritesh.jpg",
+    "portraitAlt": "Ritesh with a microphone, presenting on stage",
     "githubLabel": "github.com/Riteshbhandarii ↗",
-    "draftCopy": true
+    "draftCopy": false
   },
   "specials": {
     "title": "Today’s specials",
     "items": [
       {
         "name": "Final-year thesis",
-        "note": "simmering",
-        "line": "Machine-learning study of used spare-part pricing. In review and defence."
+        "note": "almost done",
+        "line": "A machine learning study of used car part prices. In final review with my supervisor."
       },
       {
         "name": "Core Cognitive Tech",
         "note": "on the pass",
-        "line": "Student assistant: agent internals and developer-experience work."
+        "line": "Student assistant. I work on a local AI agent, the team's GPU servers and dashboards, and I help the interns."
       },
       {
         "name": "Fundamentals, deep track",
         "note": "slow braise",
-        "line": "A deliberate ground-up rebuild of the maths and stats under all of it."
+        "line": "Rebuilding the maths and statistics under all of it, from the ground up."
       }
     ],
-    "draftCopy": true
+    "draftCopy": false
   },
   "bill": {
     "eyebrow": "settle up",
@@ -72,7 +73,7 @@
     "rows": [
       {
         "label": "Order",
-        "value": "Data & AI Engineering student, final year — Turku UAS"
+        "value": "Data and AI Engineering student, final year, Turku UAS"
       },
       {
         "label": "Now",
@@ -80,7 +81,7 @@
       },
       {
         "label": "Focus",
-        "value": "Deep learning, data pipelines, backend / MLOps"
+        "value": "Deep learning, data pipelines, backend and MLOps"
       },
       {
         "label": "Kitchen",
@@ -88,20 +89,20 @@
       },
       {
         "label": "Spoken",
-        "value": "English, Finnish; learning Swedish"
+        "value": "Finnish, English, Nepali. Learning Swedish"
       }
     ],
-    "cvNote": "Full CV as a PDF arrives once the copy is final. Drop it at /public/cv.pdf and flip cvReady to true.",
-    "emptyCvMessage": "The full CV as a PDF arrives once the copy is final. Until then the links are the source of truth.",
+    "cvNote": "",
+    "emptyCvMessage": "Want the full CV? Email me and I will send it.",
     "cvUrl": "/cv.pdf",
-    "email": "",
-    "emailConfirmed": false,
+    "email": "bhanrit@gmail.com",
+    "emailConfirmed": true,
     "cvLinkLabel": "download PDF",
     "githubLabel": "github.com/Riteshbhandarii",
     "linkedinLabel": "ritesh-bhandari",
-    "total": "Total: one hire. — service not included",
+    "total": "Total, one hire. Service not included.",
     "cvReady": false,
-    "draftCopy": true
+    "draftCopy": false
   },
   "log": {
     "eyebrow": "from the kitchen",
@@ -121,7 +122,7 @@
     "canvasLabel": "Interactive 3D ramen stall. Use the Open menu button for a text version of everything.",
     "loading": "lighting the lanterns…",
     "hint": "drag to look around · tap a sign to open the menu",
-    "credit": "built from scratch · placeholder cook until the real model drops in",
+    "credit": "built from scratch by Ritesh",
     "error": "scene error — use the Open menu button",
     "mainSignLine": "OPEN LATE  ·  RAMEN  ·  EST. 2026",
     "menuSignTitle": "MENU",
@@ -129,9 +130,7 @@
     "logSignTitle": "KITCHEN LOG",
     "logSignItems": [
       "— why a ramen stall",
-      "— a chess engine, my games",
-      "— a boring Airflow DAG",
-      "— what the model learned"
+      "— a chess engine, my games"
     ],
     "logSignFooter": "fresh batches inside",
     "specialsHotspot": "Specials",
@@ -169,6 +168,6 @@
       "Told you it was worth the walk.",
       "Still open at this hour. Every night."
     ],
-    "draftCopy": true
+    "draftCopy": false
   }
 }
