@@ -1,0 +1,13 @@
+{
+  // Phase 1: the public site is fully prerendered, so Cloudflare serves
+  // dist/client as static assets. The Keystatic API (/keystatic, /api/keystatic)
+  // is not deployed yet; edit content locally and push to main to publish.
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "nightbowl",
+  "compatibility_date": "2026-10-01",
+  "assets": {
+    "directory": "./dist/client",
+    "html_handling": "auto-trailing-slash",
+    "not_found_handling": "none"
+  }
+}
