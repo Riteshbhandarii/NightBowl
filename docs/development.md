@@ -1,0 +1,162 @@
+# Development notes
+
+Ritesh Bhandari's portfolio + kitchen log, served from an interactive late-night
+ramen stall. Built with Astro + three.js, with a GitHub-backed Keystatic admin.
+
+`nightbowl` is a working title. Alternatives floated: "the usual", "open late",
+"counter seat". Change it through **Site copy and links** in `/admin/`.
+
+## Run it
+
+```bash
+npm install
+npm run dev        # http://localhost:4321
+npm run check
+npm run check:security
+npm run build      # -> dist/ (standalone Node server + static assets)
+npm run check:build
+npm run check:perf
+npm run preview
+npm run smoke      # run against the production server on port 4321
+```
+
+`npm run preview` wraps Astro's production handler with HTTP compression, so a
+plain Node deployment does not ship the large scene bundle uncompressed. A CDN
+or reverse proxy may compress it again only if the response is still eligible.
+
+The browser smoke suite covers narrow/large phones, phone landscape, both
+tablet orientations, laptops and wide monitors. It also checks touch drag and
+pinch, reduced motion, book controls, a disabled-WebGL fallback, and a
+throttled-4G load. The build enforces a 750 KiB raw / 250 KiB gzip initial
+first-party payload budget. Real iOS Safari, Android Chrome, Firefox and Safari
+still require a physical-device pass before launch; automation cannot certify
+their GPU and battery behaviour.
+
+`npm run audit:menu` adds closed-dialog keyboard/accessibility checks, live
+desktop/phone reflow, child-text clipping and overlap checks, and real pointer
+tests for the CMS preview navigation. Add `-- --out /tmp/nightbowl-menu-review`
+to capture the checked layouts for visual review.
+
+`npm run audit:visitor` verifies repeat meals, Done and recoverable browsing
+dismissal, including held Enter/Space and static reduced-motion delivery.
+`npm run audit:locomotion` measures live planted-foot contact and distance-driven
+gait and visible stride length under sparse frames. `npm run audit:visit` checks
+seating across Menu/Bill book interactions, native content round trips and
+same-tab reloads, plus blocked session storage. These accept `-- --out /tmp/nightbowl-review` for
+screenshots; see [the CI guide](ci.md) for their exact gates.
+
+## Write through the admin
+
+Open `http://localhost:4321/admin/`. In development, Keystatic edits the files
+in this checkout directly. The admin contains:
+
+- **Kitchen Log** — create and edit posts, set `Draft` or `Published`, add tags,
+  write rich Markdown, and open the post preview.
+- **Menu projects** — edit the short public summary and separate source/demo
+  links. Extended Markdown, contribution, context and stack appear only after
+  explicitly publishing a case study at `/menu/<existing-slug>/`.
+- **Site copy and links** — edit the Guide, specials, Bill, social links, and
+  ambient character dialogue without touching source code.
+
+The intended production workflow is strict:
+
+1. Set a post to **Draft** and save it. It stays out of `/log/` and the sitemap.
+2. Open **Preview**. Draft previews live at `/preview/log/<slug>/`, carry a
+   `noindex` directive, and are never included in the sitemap.
+3. Set it to **Published** and save to the repository's default branch. The
+   connected host rebuilds and the public post route goes live.
+
+Project and site-copy saves work the same way. Their Preview action opens the
+menu book in preview mode. Local changes are visible immediately; production
+changes become visible when the connected deployment finishes.
+
+## Production sign-in
+
+Production uses Keystatic's GitHub mode. Only GitHub users with write access to
+`Riteshbhandarii/NightBowl` can edit. Create the GitHub App from the local
+`/admin/` setup flow, then copy these values into the deployment environment
+(the names are also in `.env.example`):
+
+```text
+KEYSTATIC_GITHUB_CLIENT_ID
+KEYSTATIC_GITHUB_CLIENT_SECRET
+KEYSTATIC_SECRET
+PUBLIC_KEYSTATIC_GITHUB_APP_SLUG
+```
+
+Add the deployed `/api/keystatic/github/oauth/callback` URL to the GitHub App's
+callback URLs. Never commit `.env`; it is ignored.
+
+CMS API responses carry `Cache-Control: private, no-store`, including auth
+redirects and errors. Preserve that policy at the production host/CDN.
+See [the dependency and caching review](security.md) for the current
+advisory findings, regression checks and limits of the audit result.
+
+## Where the content lives (currently draft copy)
+
+| What | File |
+|------|------|
+| Projects on the menu | `src/content/projects/*.md` — one file each, frontmatter + one-paragraph body |
+| Blog posts | `src/content/posts/*.md` — `status: draft` shows a teaser only |
+| The Guide / The Bill / Specials / site name | `src/content/site.json` |
+| Colours + type | `src/styles/global.css` (`:root` tokens) |
+| The 3D scene | `src/lib/scene.js` |
+
+Use `/admin/` for normal editing. The files remain plain Markdown and JSON, so
+the content is portable and reviewable in Git.
+
+## The cook
+
+The production asset track is an original Blender cook and at least ten distinct
+NPC looks (#79). Start with one cook; see [the character handoff](../public/models/PUT-CHEF-GLB-HERE.md).
+The legacy `chef.glb` loader can display a model and play one idle clip, but
+does **not** connect it to cook AI, tools, serving or turnover. Dropping in a
+GLB is not a completed replacement. Keep the tested procedural cook until the
+original rig is integrated and the interaction/performance gates pass.
+
+## Deploy
+
+The admin needs server-side Node APIs, so this is deliberately a standalone
+Node build instead of a static-only Cloudflare Pages build. Deploy it to any
+Node or container host (Railway, Render, Fly.io, a VPS, or a Docker platform):
+
+- Build: `npm ci && npm run build`
+- Start: `npm run preview`
+- Health route: `/`
+- Required environment: the four Keystatic variables above
+
+Changing hosts later does not move or transform the content; it stays in GitHub.
+Moving specifically to Vercel later requires swapping `@astrojs/node` for
+`@astrojs/vercel`, copying the four environment variables, and adding the new
+OAuth callback URL to the GitHub App. The posts, projects, and site copy do not
+need conversion.
+
+Set `NIGHTBOWL_SITE_URL=https://your-approved-domain.tld` in the build environment
+after picking the real domain. It must be an HTTPS origin, without a path,
+query, credentials or placeholder host. Unconfigured builds emit no sitemap,
+canonical or absolute share URL. Configured builds use that origin for each
+public page and the original 1200×630 scene image. Admin and preview routes,
+unpublished articles and case studies, and draft Guide/Bill pages are excluded.
+Draft post previews are unlisted and `noindex`, not confidential or authenticated.
+
+In **The Bill**, add the owner-approved public email and check its approval box.
+An unapproved address creates no public link. For the CV, add the actual PDF to
+`public/`, set its local URL, then enable **Show CV download**. The build rejects
+a missing/non-PDF file or remote URL. Keep these controls off until the assets
+and publication approval exist; generated placeholders are not a finished CV.
+
+The ordinary `/menu/`, `/guide/`, `/log/` and `/bill/` pages work without JavaScript.
+With scripts enabled, the stall opens the book immediately and records its
+section in the URL hash; reload, Back and Forward restore that section.
+**Pause motion** freezes autonomous scene time, persists the choice when browser
+storage is available, and respects reduced-motion settings. Reading the book
+also pauses the scene. Static mode still allows explicit seating, ordering and
+camera interaction; it does not promise to stop GPU rendering.
+
+## Stack
+
+- Astro 7 with standalone Node output, `@astrojs/mdx`, `@astrojs/sitemap`
+- Keystatic admin with GitHub authentication and file-backed content
+- three.js 0.185 (scene + GLTFLoader for the cook)
+- No CSS framework; tokens + hand-written CSS in `src/styles/global.css`
+- Fonts: Zilla Slab / Hanken Grotesk / Space Mono via Google Fonts
