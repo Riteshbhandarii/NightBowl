@@ -6,5 +6,5 @@ summary: "An endless runner you control with your body. Pose estimation reads th
 status: "draft"
 sourceUrl: "https://github.com/Riteshbhandarii/subwaysurf-Computervision"
 order: 2
-draftCopy: true
+draftCopy: false
 ---
