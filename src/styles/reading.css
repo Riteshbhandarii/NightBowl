@@ -82,6 +82,11 @@
   color: rgba(239, 228, 208, 0.72);
 }
 
+.reading-main .portrait {
+  max-width: 360px;
+  margin: 32px 0 0;
+}
+
 .menu-section {
   margin-top: 72px;
 }
