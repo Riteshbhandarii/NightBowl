@@ -1,7 +1,7 @@
 {
-  // Phase 1: the public site is fully prerendered, so Cloudflare serves
-  // dist/client as static assets. The Keystatic API (/keystatic, /api/keystatic)
-  // is not deployed yet; edit content locally and push to main to publish.
+  // Deploy with `npm run build:cloudflare && npx wrangler deploy`. Public pages are
+  // prerendered static assets; only /keystatic and /api/keystatic run in the Worker.
+  // Keystatic secrets are Worker secrets (`wrangler secret put`), never in this file.
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "nightbowl",
   "compatibility_date": "2026-10-01",
