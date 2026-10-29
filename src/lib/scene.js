@@ -324,10 +324,12 @@ export function initScene(canvas, onHotspot, opts = {}) {
   }
 
   /* ---------- lights ---------- */
-  scene.add(new THREE.AmbientLight(0x3f3a5c, 0.85));
-  scene.add(new THREE.HemisphereLight(0x59608c, 0x2a1c18, 0.5));
-  const key = new THREE.DirectionalLight(0xffd7a6, 0.3);
-  key.position.set(-5, 7, 6);
+  // night fill stays low so the stall's own warm light does the work.
+  scene.add(new THREE.AmbientLight(0x3f3a5c, 0.32));
+  scene.add(new THREE.HemisphereLight(0x59608c, 0x2a1c18, 0.3));
+  // warm key from the street side, as if the stall spills light onto its customers.
+  const key = new THREE.DirectionalLight(0xffc98f, 1.05);
+  key.position.set(-2.5, 4.5, 7);
   scene.add(key);
   // rim: sits behind the subjects relative to camera, so it catches the outline of
   // heads and shoulders. cool, to read against the warm lanterns.
@@ -387,7 +389,8 @@ export function initScene(canvas, onHotspot, opts = {}) {
 
     const roof = pos(box(7.3, 0.18, 3.1, 0x221a17, { rough: 1 }), 0, 3.2, -0.05);
     roof.rotation.x = -0.055; s.add(roof);
-    s.add(pos(box(7.5, 0.38, 0.16, 0x1a1310, { rough: 1 }), 0, 3.05, 1.52));
+    // the fascia sits behind the sign board so the lettering stays whole.
+    s.add(pos(box(7.5, 0.38, 0.16, 0x1a1310, { rough: 1 }), 0, 3.05, 1.36));
 
     const signTex = textTexture((g, w, h) => {
       g.fillStyle = '#1c1512'; g.fillRect(0, 0, w, h);
@@ -406,9 +409,10 @@ export function initScene(canvas, onHotspot, opts = {}) {
       g.fillStyle = '#a5341d'; g.fillRect(0, 0, w, h);
       g.fillStyle = 'rgba(0,0,0,0.16)'; g.fillRect(0, 0, w, 12);
       g.strokeStyle = '#f0d9a8'; g.lineWidth = 8;
-      g.beginPath(); g.arc(w / 2, h * 0.5, h * 0.26, 0, Math.PI * 2); g.stroke();
+      // only the bottom of each flap shows under the sign, so the emblem lives there.
+      g.beginPath(); g.arc(w / 2, h * 0.8, h * 0.13, 0, Math.PI * 2); g.stroke();
       g.fillStyle = '#f0d9a8'; g.textAlign = 'center'; g.textBaseline = 'middle';
-      g.font = "700 96px 'Zilla Slab', serif"; g.fillText(LABELS.siteInitial, w / 2, h * 0.5 + 4);
+      g.font = "700 46px 'Zilla Slab', serif"; g.fillText(LABELS.siteInitial, w / 2, h * 0.8 + 2);
     }, 256, 256);
     const norenMat = new THREE.MeshStandardMaterial({ map: norenTex, roughness: 1, side: THREE.DoubleSide });
     for (let i = -1; i <= 1; i++) {
@@ -459,19 +463,22 @@ export function initScene(canvas, onHotspot, opts = {}) {
     registerHotspot('log', LABELS.navigation.log, poster, new THREE.Vector3(1.8, 2.56, -1.03));
 
     [
-      { x: -2.42, y: 2.61, color: 0xff9c42, intensity: 1.78, size: 1.04 },
-      { x: -0.08, y: 2.53, color: 0xffad58, intensity: 1.42, size: 0.96 },
-      { x: 2.21, y: 2.58, color: 0xffc184, intensity: 1.08, size: 1 },
+      // low enough to show under the noren from the street, high enough to clear heads.
+      { x: -2.62, y: 2.12, color: 0xff9c42, intensity: 2.2, size: 0.72 },
+      { x: -0.08, y: 2.08, color: 0xffad58, intensity: 1.9, size: 0.7 },
+      { x: 2.42, y: 2.1, color: 0xffc184, intensity: 1.6, size: 0.7 },
     ].forEach(({ x, y, color, intensity, size }) => {
       const lg = new THREE.Group();
-      lg.add(pos(cyl(0.012, 0.012, 0.62, 0x0f0f0f, {}, 6), 0, 0.31, 0));
+      const cord = 3.12 - y; // hangs from the roof beam
+      lg.add(pos(cyl(0.012, 0.012, cord, 0x0f0f0f, {}, 6), 0, cord / 2, 0));
       const b = sph(0.25, 0xffb066, { emissive: 0xff7326, emissiveIntensity: 1.35, rough: 0.6 }, 20);
       b.scale.set(size, 1.28 * size, size); b.position.y = -0.1; lg.add(b);
       lanternMats.push(b.material);
       lg.add(pos(cyl(0.07, 0.09, 0.06, 0x281b13, {}, 10), 0, 0.13, 0));
       const light = new THREE.PointLight(color, intensity, 7.5, 2);
       light.position.y = -0.1; lg.add(light);
-      lg.position.set(x, y, 0.6);
+      // just inside the noren, so they hang over the customers and not in front of the back wall.
+      lg.position.set(x, y, 1.2);
       lanterns.push({ group: lg, light });
       scene.add(lg);
     });
