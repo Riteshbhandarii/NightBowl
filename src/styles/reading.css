@@ -114,6 +114,25 @@
   border-top: 1px solid rgba(239, 228, 208, 0.18);
 }
 
+.project-card .project-featured {
+  margin: 0 0 12px;
+  font: 700 10px/1.4 'Space Mono', monospace;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: #ef9a4c;
+}
+
+.project-image {
+  display: block;
+  width: 100%;
+  max-width: 560px;
+  height: auto;
+  margin: 0 0 18px;
+  border: 1px solid rgba(239, 228, 208, 0.18);
+  border-radius: 4px;
+  background: #0b0a0e;
+}
+
 .project-card-head {
   display: flex;
   align-items: baseline;
