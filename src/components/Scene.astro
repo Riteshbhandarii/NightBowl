@@ -39,7 +39,40 @@ const sceneJson = JSON.stringify(sceneContent).replace(/</g, '\\u003c');
   </div>
   <p class="opening-name">{SITE.name}</p>
   <p class="opening-text">{SCENE.loading}</p>
+  <p class="opening-count" aria-hidden="true">0%</p>
 </div>
+<script is:inline>
+  // Counts the stall open while the 3D bundle downloads. It eases toward 90%
+  // on its own, waits there for the real scene, then finishes and lifts the noren.
+  (() => {
+    const el = document.getElementById('loading');
+    const count = el && el.querySelector('.opening-count');
+    if (!el || !count || !document.body.classList.contains('cinematic')) return;
+    const start = performance.now();
+    let value = 0, last = start;
+    function giveUp() {
+      // the 3D never arrived: get out of the way and bring the navigation back
+      el.classList.add('gone');
+      document.body.classList.add('scene-failed');
+      document.body.classList.remove('intro-lock');
+    }
+    function tick(now) {
+      if (el.classList.contains('failed')) { document.body.classList.add('scene-failed'); return; }
+      if (!window.__nbSceneReady && now - start > 9000) { giveUp(); return; }
+      const ready = window.__nbSceneReady && now - start > 1600;
+      const goal = ready ? 100 : 90;
+      value += (goal - value) * Math.min(1, (now - last) / (ready ? 160 : 850));
+      last = now;
+      if (ready && value > 99.4) value = 100;
+      count.textContent = Math.floor(value) + '%';
+      if (value < 100) { requestAnimationFrame(tick); return; }
+      el.classList.add('gone');
+      window.__nbOpened = true;
+      document.dispatchEvent(new Event('nb:opened'));
+    }
+    requestAnimationFrame(tick);
+  })();
+</script>
 <div class="pins" id="pins"></div>
 <aside class="visitor-order" id="visitorOrder" aria-labelledby="visitorOrderTitle" hidden>
   <h2 id="visitorOrderTitle">{SCENE.orderTitle}</h2>
@@ -82,6 +115,7 @@ const sceneJson = JSON.stringify(sceneContent).replace(/</g, '\\u003c');
     setBookOpen(v: boolean): void;
     setMotionPaused(v: boolean): MotionState;
     setOffscreen?(v: boolean): void;
+    setScrollProgress?(v: number): void;
     getMotionState(): MotionState;
     dispose(): void;
   };
@@ -181,10 +215,13 @@ const sceneJson = JSON.stringify(sceneContent).replace(/</g, '\\u003c');
     controls.setBookOpen(document.getElementById('book')?.classList.contains('open') ?? false);
     setMotionControl(controls.getMotionState());
     controls.setOffscreen?.(pastHero);
+    controls.setScrollProgress?.(scrollY / (innerHeight * 0.9));
     if ((controls as any).getPhase?.() === 'seated') unlockIntro();
     // only reachable when explicitly asked for, so normal loads stay clean
     if (location.search.includes('nbtest')) (window as any).__nightbowl = controls;
-    loading?.classList.add('gone');
+    (window as any).__nbSceneReady = true;
+    if (!cinematic) loading?.classList.add('gone');
+    else setTimeout(() => loading?.classList.add('gone'), 6000); // in case the counter never ran
   }
 
   // The home page scrolls past the stall. Once it is fully out of view, stop
@@ -200,7 +237,12 @@ const sceneJson = JSON.stringify(sceneContent).replace(/</g, '\\u003c');
   }
 
   if (heroSpace) {
-    const onScroll = () => document.body.classList.toggle('scrolled', scrollY > innerHeight * 0.5);
+    const onScroll = () => {
+      document.body.classList.toggle('scrolled', scrollY > innerHeight * 0.5);
+      document.body.classList.toggle('leaving', scrollY > innerHeight * 0.04);
+      // the stall hands over to the page across the first ninety percent of a screen
+      controls?.setScrollProgress?.(scrollY / (innerHeight * 0.9));
+    };
     addEventListener('scroll', onScroll, { passive: true });
     onScroll();
   }
