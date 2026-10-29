@@ -1,0 +1,104 @@
+---
+// The portfolio you scroll to under the stall. The scene stays fixed behind
+// it; these sections slide over it as a normal page.
+import { getCollection } from 'astro:content';
+import { BILL, CONTACT, GUIDE, HOME, SCENE, SITE, SPECIALS } from '../data/content';
+
+const slug = (id: string) => id.replace(/\.(md|mdx)$/, '');
+const mains = (await getCollection('projects', ({ data }) => data.course === 'mains'))
+  .sort((a, b) => a.data.order - b.data.order);
+const posts = (await getCollection('posts', ({ data }) => data.status === 'published'))
+  .sort((a, b) => +b.data.date - +a.data.date)
+  .slice(0, 3);
+// Cards carry the first sentence; the full summary lives on the menu and case study.
+const lead = (t: string) => {
+  const sentences = t.split(/(?<=[.!?])\s+/);
+  return sentences[0].length < 60 && sentences[1] ? `${sentences[0]} ${sentences[1]}` : sentences[0];
+};
+const fmtDate = (d: Date) => d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+---
+
+<div class="hero-space" id="heroSpace"></div>
+
+<main class="home">
+  <div class="home-peek"><a href="#work">{HOME.scrollCue} <span aria-hidden="true">↓</span></a></div>
+  <header class="home-intro">
+    {GUIDE.portrait && <img class="home-portrait" src={GUIDE.portrait} alt={GUIDE.portraitAlt} width="640" height="640" decoding="async" />}
+    <div>
+    <h1>{SITE.ownerName}</h1>
+    <p class="home-role">{SITE.role}</p>
+    <p class="home-meta">{SITE.availability}</p>
+    <p class="home-line">{SITE.positioning}</p>
+    <p class="home-actions">
+      {CONTACT.cv && <a class="primary" href={CONTACT.cv} download>Download CV</a>}
+      {CONTACT.email && <a href={`mailto:${encodeURIComponent(CONTACT.email)}`}>Email</a>}
+      <a href={SITE.github} target="_blank" rel="noopener">GitHub ↗</a>
+      <a href={SITE.linkedin} target="_blank" rel="noopener">LinkedIn ↗</a>
+    </p>
+    </div>
+  </header>
+
+  <section id="work" aria-labelledby="work-title">
+    <h2 id="work-title">{HOME.workTitle}</h2>
+    <p class="home-sub">{HOME.workIntro}</p>
+    <ul class="work-grid">
+      {mains.map((p) => {
+        const href = p.data.status === 'published' ? `/menu/${slug(p.id)}/` : (p.data.demoUrl || p.data.sourceUrl || '/menu/');
+        return (
+          <li class:list={['work-card', { featured: p.data.featured }]}>
+            <a class="work-media" href={href} tabindex="-1" aria-hidden="true">
+              {p.data.image
+                ? <img src={p.data.image} alt="" width="1080" height="506" loading="lazy" decoding="async" />
+                : <span>{p.data.name}<small>{p.data.tag}</small></span>}
+            </a>
+            {p.data.featured && <p class="work-badge">Chef's recommendation</p>}
+            <h3><a href={href}>{p.data.name}</a></h3>
+            <p class="work-tag">{p.data.tag}</p>
+            <p>{p.data.featured ? p.data.summary : lead(p.data.summary)}</p>
+          </li>
+        );
+      })}
+    </ul>
+    <a class="home-more" href="/menu/">{HOME.allWork} →</a>
+  </section>
+
+  <section id="now" aria-labelledby="now-title">
+    <h2 id="now-title">{HOME.nowTitle}</h2>
+    <ul class="now-list">
+      {SPECIALS.items.map((it) => (
+        <li><h3>{it.name} <span>{it.note}</span></h3><p>{it.line}</p></li>
+      ))}
+    </ul>
+  </section>
+
+  <section id="about" aria-labelledby="about-title">
+    <h2 id="about-title">{HOME.aboutTitle}</h2>
+    {GUIDE.body.slice(0, 2).map((para) => <p class="home-sub">{para}</p>)}
+    <a class="home-more" href="/guide/">{HOME.aboutMore} →</a>
+  </section>
+
+  {posts.length > 0 && (
+    <section id="log-notes" aria-labelledby="log-title">
+      <h2 id="log-title">{HOME.logTitle}</h2>
+      <ul class="log-list">
+        {posts.map((post) => (
+          <li><a href={`/log/${slug(post.id)}/`}><time>{fmtDate(post.data.date)}</time><span>{post.data.title}</span></a></li>
+        ))}
+      </ul>
+      <a class="home-more" href="/log/">{HOME.logMore} →</a>
+    </section>
+  )}
+
+  <section id="contact" aria-labelledby="contact-title">
+    <h2 id="contact-title">{HOME.contactTitle}</h2>
+    <p class="home-sub">{HOME.contactIntro}</p>
+    <p class="home-actions">
+      {CONTACT.email && <a class="primary" href={`mailto:${encodeURIComponent(CONTACT.email)}`}>{CONTACT.email}</a>}
+      {CONTACT.cv && <a href={CONTACT.cv} download>Download CV</a>}
+    </p>
+    <p class="home-total">{BILL.total}</p>
+  </section>
+
+  <footer class="home-foot">{SCENE.credit}</footer>
+</main>
+
