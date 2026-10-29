@@ -70,6 +70,7 @@ const anyDraft =
           <p class="cnote">{MENU.mainsNote}</p>
           {mains.map((p) => (
             <div class="item">
+              {p.data.featured && <span class="featured">{MENU.featuredLabel}</span>}
               <div class="row"><span class="name">{p.data.name}</span><span class="leader"></span><span class="tag">{p.data.tag}</span></div>
               <p class="desc">
                 {p.data.summary}{' '}
