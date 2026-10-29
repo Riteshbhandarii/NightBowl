@@ -57,7 +57,12 @@ for (const [width,height] of [[1400,900],[390,844],[280,640]]) {
 await session({width:1400,height:900},async ctx=>{
   await ctx.send('Network.enable');
   await ctx.send('Network.setBlockedURLs',{urls:['*/_astro/*.js']});
+  // The live home page plays the walk-in without a top bar; if the scene can never
+  // start, the loader must step aside and bring the navigation back.
   await ctx.send('Page.navigate',{url:base});
+  await wait(ctx,"document.getElementById('loading')?.classList.contains('gone') && document.body.classList.contains('scene-failed') && getComputedStyle(document.querySelector('.topbar')).display!=='none'",'live loader gives way when the scene cannot load');
+  // The interactive stall (test mode) keeps its early menu while modules are blocked.
+  await ctx.send('Page.navigate',{url:new URL('?nbtest=1',base).href});
   await wait(ctx,"document.readyState!=='loading' && !!document.querySelector('.topbar [data-open=menu]') && !!document.getElementById('sectionData')",'parsed HTML menu before scene modules');
   await click(ctx,'.topbar [data-open=menu]');
   await wait(ctx,"document.getElementById('book')?.classList.contains('open') && location.hash==='#menu'",'enhanced early menu');
