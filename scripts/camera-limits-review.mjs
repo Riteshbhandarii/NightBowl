@@ -35,7 +35,7 @@ await session({ width: 1600, height: 1000 }, async (ctx) => {
     event('pointermove', ${toX});
     event('pointerup', ${toX});
     canvas.dispatchEvent(new WheelEvent('wheel', {
-      deltaY: ${wheelDelta}, bubbles: true, cancelable: true,
+      deltaY: ${wheelDelta}, bubbles: true, cancelable: true, ctrlKey: true,
     }));
     return window.__nightbowl.selfCheck().camera;
   })()`);
