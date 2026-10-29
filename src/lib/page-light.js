@@ -22,13 +22,16 @@ export function initPageLight(root) {
 
   if (reduced || !fine) return;
   const glow = root.querySelector('.page-glow');
+  const pinned = root === document.body;
   const cards = [...root.querySelectorAll('[data-spotlight]')];
   let x = 0, y = 0, queued = false, shown = false;
 
   function paint() {
     queued = false;
     // Read every rect first, then write, so no write forces another layout.
-    const box = root.getBoundingClientRect();
+    // On reading pages the light is pinned to the viewport; on the home page it
+    // lives inside the scrolling sections, so it is offset by their position.
+    const box = pinned ? { left: 0, top: 0 } : root.getBoundingClientRect();
     const rects = cards.map((card) => card.getBoundingClientRect());
     if (glow) glow.style.transform = `translate3d(${x - box.left}px, ${y - box.top}px, 0)`;
     cards.forEach((card, i) => {
