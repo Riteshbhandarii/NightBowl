@@ -199,7 +199,6 @@ export default config({
           bill: requiredText('Bill label'),
           openMenu: requiredText('Mobile menu button'),
           cv: requiredText('CV button label'),
-          theme: requiredText('Theme button label'),
         }, { label: 'Navigation labels' }),
         menu: fields.object({
           title: requiredText('Title'),
