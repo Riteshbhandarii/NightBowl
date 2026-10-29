@@ -1,9 +1,11 @@
 ---
 import Base from '../layouts/Base.astro';
 import Stall from '../components/Stall.astro';
+import HomeSections from '../components/HomeSections.astro';
 import { SITE } from '../data/content';
 ---
 
-<Base title={SITE.name} description={SITE.homeDescription}>
+<Base title={SITE.name} description={SITE.homeDescription} bodyClass="home-page">
   <Stall />
+  <HomeSections />
 </Base>
