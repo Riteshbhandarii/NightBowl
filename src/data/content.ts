@@ -14,3 +14,4 @@ export const LOG = content.log;
 export const CONTACT = publicContact(content.bill);
 export const SCENE = content.scene;
 export const CHATTER = content.chatter;
+export const HOME = content.home;
