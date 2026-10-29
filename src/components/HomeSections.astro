@@ -21,13 +21,14 @@ const fmtDate = (d: Date) => d.toLocaleDateString('en-GB', { day: 'numeric', mon
 <div class="hero-space" id="heroSpace"></div>
 
 <main class="home">
+  <div class="page-glow" aria-hidden="true"></div>
   <div class="home-peek"><a href="#work">{HOME.scrollCue} <span aria-hidden="true">↓</span></a></div>
   <header class="home-intro">
     {GUIDE.portrait && <img class="home-portrait" src={GUIDE.portrait} alt={GUIDE.portraitAlt} width="640" height="640" decoding="async" />}
     <div>
+    <p class="eyebrow-dot">{SITE.availability}</p>
     <h1>{SITE.ownerName}</h1>
     <p class="home-role">{SITE.role}</p>
-    <p class="home-meta">{SITE.availability}</p>
     <p class="home-line">{SITE.positioning}</p>
     <p class="home-actions">
       {CONTACT.cv && <a class="primary" href={CONTACT.cv} download>Download CV</a>}
@@ -38,18 +39,18 @@ const fmtDate = (d: Date) => d.toLocaleDateString('en-GB', { day: 'numeric', mon
     </div>
   </header>
 
-  <section id="work" aria-labelledby="work-title">
+  <section id="work" class="reveal" aria-labelledby="work-title">
     <h2 id="work-title">{HOME.workTitle}</h2>
     <p class="home-sub">{HOME.workIntro}</p>
     <ul class="work-grid">
       {mains.map((p) => {
         const href = p.data.status === 'published' ? `/menu/${slug(p.id)}/` : (p.data.demoUrl || p.data.sourceUrl || '/menu/');
         return (
-          <li class:list={['work-card', { featured: p.data.featured }]}>
+          <li class:list={['work-card', { featured: p.data.featured }]} data-spotlight>
             <a class="work-media" href={href} tabindex="-1" aria-hidden="true">
               {p.data.image
                 ? <img src={p.data.image} alt="" width="1080" height="506" loading="lazy" decoding="async" />
-                : <span>{p.data.name}<small>{p.data.tag}</small></span>}
+                : <span class="work-mark">{p.data.tag}</span>}
             </a>
             {p.data.featured && <p class="work-badge">Chef's recommendation</p>}
             <h3><a href={href}>{p.data.name}</a></h3>
@@ -62,23 +63,23 @@ const fmtDate = (d: Date) => d.toLocaleDateString('en-GB', { day: 'numeric', mon
     <a class="home-more" href="/menu/">{HOME.allWork} →</a>
   </section>
 
-  <section id="now" aria-labelledby="now-title">
+  <section id="now" class="reveal" aria-labelledby="now-title">
     <h2 id="now-title">{HOME.nowTitle}</h2>
     <ul class="now-list">
       {SPECIALS.items.map((it) => (
-        <li><h3>{it.name} <span>{it.note}</span></h3><p>{it.line}</p></li>
+        <li data-spotlight><h3>{it.name} <span>{it.note}</span></h3><p>{it.line}</p></li>
       ))}
     </ul>
   </section>
 
-  <section id="about" aria-labelledby="about-title">
+  <section id="about" class="reveal" aria-labelledby="about-title">
     <h2 id="about-title">{HOME.aboutTitle}</h2>
     {GUIDE.body.slice(0, 2).map((para) => <p class="home-sub">{para}</p>)}
     <a class="home-more" href="/guide/">{HOME.aboutMore} →</a>
   </section>
 
   {posts.length > 0 && (
-    <section id="log-notes" aria-labelledby="log-title">
+    <section id="log-notes" class="reveal" aria-labelledby="log-title">
       <h2 id="log-title">{HOME.logTitle}</h2>
       <ul class="log-list">
         {posts.map((post) => (
@@ -89,7 +90,7 @@ const fmtDate = (d: Date) => d.toLocaleDateString('en-GB', { day: 'numeric', mon
     </section>
   )}
 
-  <section id="contact" aria-labelledby="contact-title">
+  <section id="contact" class="reveal" aria-labelledby="contact-title">
     <h2 id="contact-title">{HOME.contactTitle}</h2>
     <p class="home-sub">{HOME.contactIntro}</p>
     <p class="home-actions">
@@ -101,4 +102,9 @@ const fmtDate = (d: Date) => d.toLocaleDateString('en-GB', { day: 'numeric', mon
 
   <footer class="home-foot">{SCENE.credit}</footer>
 </main>
+
+<script>
+  import { initPageLight } from '../lib/page-light.js';
+  initPageLight(document.querySelector('.home'));
+</script>
 
