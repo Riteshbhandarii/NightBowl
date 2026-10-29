@@ -129,6 +129,18 @@ export default config({
         }),
         sourceUrl: fields.url({ label: 'Source-code URL' }),
         demoUrl: fields.url({ label: 'Live-demo URL' }),
+        featured: fields.checkbox({
+          label: "Chef's recommendation",
+          description: 'Marks one project as the one to look at first.',
+          defaultValue: false,
+        }),
+        image: fields.image({
+          label: 'Menu image',
+          description: 'A real screenshot or figure from the project, shown on the plain menu page.',
+          directory: 'public/images/projects',
+          publicPath: '/images/projects/',
+        }),
+        imageAlt: fields.text({ label: 'Menu image description' }),
         order: fields.integer({
           label: 'Display order',
           defaultValue: 99,
@@ -168,6 +180,9 @@ export default config({
         site: fields.object({
           name: requiredText('Site name'),
           ownerName: requiredText('Portfolio owner name'),
+          role: requiredText('Role line', 'Shown under your name on the front of the stall.'),
+          availability: requiredText('Availability line', 'Degree, graduation and location, shown on the front of the stall.'),
+          positioning: requiredText('Positioning line', 'One sentence in your own voice, shown on the front of the stall.'),
           tagline: requiredText('Tagline'),
           github: fields.url({ label: 'GitHub URL', validation: { isRequired: true } }),
           linkedin: fields.url({ label: 'LinkedIn URL', validation: { isRequired: true } }),
@@ -183,7 +198,7 @@ export default config({
           log: requiredText('Kitchen Log label'),
           bill: requiredText('Bill label'),
           openMenu: requiredText('Mobile menu button'),
-          theme: requiredText('Theme button label'),
+          cv: requiredText('CV button label'),
         }, { label: 'Navigation labels' }),
         menu: fields.object({
           title: requiredText('Title'),
@@ -197,6 +212,7 @@ export default config({
           offMenuNote: requiredText('Off-menu note'),
           closing: fields.text({ label: 'Closing note', multiline: true, validation: { isRequired: true } }),
           projectLinkLabel: requiredText('Project link label'),
+          featuredLabel: requiredText('Featured project label'),
         }, { label: 'Menu text and course notes' }),
         guide: fields.object({
           eyebrow: requiredText('Eyebrow'),

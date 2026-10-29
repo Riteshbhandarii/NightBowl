@@ -24,8 +24,12 @@ const sections = [
         <p class="menu-note">{section.note}</p>
         <ol class="project-list">
           {projects.filter((project) => project.data.course === section.key).map((project) => (
-            <li class="project-card">
+            <li class:list={['project-card', { featured: project.data.featured }]}>
               <article>
+                {project.data.featured && <p class="project-featured">{MENU.featuredLabel}</p>}
+                {project.data.image && (
+                  <img class="project-image" src={project.data.image} alt={project.data.imageAlt ?? ''} width="1200" height="675" loading="lazy" decoding="async" />
+                )}
                 <div class="project-card-head">
                   <h3>{project.data.name}</h3>
                   <span class="project-tag">{project.data.tag}</span>

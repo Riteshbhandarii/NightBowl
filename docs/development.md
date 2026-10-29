@@ -27,7 +27,7 @@ or reverse proxy may compress it again only if the response is still eligible.
 The browser smoke suite covers narrow/large phones, phone landscape, both
 tablet orientations, laptops and wide monitors. It also checks touch drag and
 pinch, reduced motion, book controls, a disabled-WebGL fallback, and a
-throttled-4G load. The build enforces a 750 KiB raw / 250 KiB gzip initial
+throttled-4G load. The build enforces a 760 KiB raw / 250 KiB gzip initial
 first-party payload budget. Real iOS Safari, Android Chrome, Firefox and Safari
 still require a physical-device pass before launch; automation cannot certify
 their GPU and battery behaviour.

@@ -1,5 +1,5 @@
 ---
-import { NAVIGATION } from '../data/content';
+import { CONTACT, NAVIGATION } from '../data/content';
 ---
 
 <header class="topbar">
@@ -8,7 +8,10 @@ import { NAVIGATION } from '../data/content';
     <a href="/guide/" data-open="guide" aria-haspopup="dialog">{NAVIGATION.guide}</a>
     <a href="/log/" data-open="log" aria-haspopup="dialog">{NAVIGATION.log}</a>
     <a href="/bill/" data-open="bill" aria-haspopup="dialog">{NAVIGATION.bill}</a>
+    {CONTACT.cv && <a class="nav-cv" href={CONTACT.cv} download>{NAVIGATION.cv}</a>}
   </nav>
+
+  {CONTACT.cv && <a class="cv-toggle" href={CONTACT.cv} download>{NAVIGATION.cv}</a>}
 
   <a class="menu-toggle" href="/menu/" data-open="menu" aria-haspopup="dialog">{NAVIGATION.openMenu}</a>
 </header>

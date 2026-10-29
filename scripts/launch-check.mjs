@@ -39,7 +39,7 @@ for (const invalid of ['https://nightbowl.example', 'https://example.com', 'http
   'https://real-domain.dev/path', 'https://real-domain.dev/?preview=1', 'https://real-domain.dev/#menu']) {
   assert.throws(() => siteOrigin(invalid), /NIGHTBOWL_SITE_URL/);
 }
-const image = readFileSync(join(root, 'public/images/nightbowl-share.png'));
+const image = readFileSync(join(root, 'public/images/nightbowl-card.png'));
 assert.equal(image.subarray(1, 4).toString(), 'PNG');
 assert.equal(image.readUInt32BE(16), 1200);
 assert.equal(image.readUInt32BE(20), 630);
@@ -102,7 +102,7 @@ try {
     const page = html(route);
     assert.ok(page.includes(`rel="canonical" href="${origin}${path}"`), `${path}: canonical uses configured origin and route`);
     assert.ok(page.includes(`property="og:url" content="${origin}${path}"`));
-    assert.ok(page.includes(`${origin}/images/nightbowl-share.png`));
+    assert.ok(page.includes(`${origin}/images/nightbowl-card.png`));
     assert.ok(page.includes('name="twitter:card" content="summary_large_image"'));
     assert.ok(page.includes('content="1200"') && page.includes('content="630"'));
     const title = page.match(/<title>(.*?)<\/title>/)?.[1];

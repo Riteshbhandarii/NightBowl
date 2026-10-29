@@ -1,6 +1,6 @@
 ---
 import Base from './Base.astro';
-import { NAVIGATION, SITE } from '../data/content';
+import { CONTACT, NAVIGATION, SITE } from '../data/content';
 import '../styles/reading.css';
 
 interface Props {
@@ -22,6 +22,7 @@ const isCurrent = (prefix: string) => pathname === prefix || pathname.startsWith
       <a href="/guide/" aria-current={isCurrent('/guide') ? 'page' : undefined}>{NAVIGATION.guide}</a>
       <a href="/log/" aria-current={isCurrent('/log') ? 'page' : undefined}>{NAVIGATION.log}</a>
       <a href="/bill/" aria-current={isCurrent('/bill') ? 'page' : undefined}>{NAVIGATION.bill}</a>
+      {CONTACT.cv && <a href={CONTACT.cv} download>{NAVIGATION.cv}</a>}
       <a href="/">Back to the stall</a>
     </nav>
   </header>

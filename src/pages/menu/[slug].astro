@@ -60,6 +60,9 @@ const { Content } = await render(project);
         )}
       </header>
 
+      {project.data.image && (
+        <img class="project-image" src={project.data.image} alt={project.data.imageAlt ?? ''} width="1200" height="675" decoding="async" />
+      )}
       <div class="project-body"><Content /></div>
     </article>
   </main>
