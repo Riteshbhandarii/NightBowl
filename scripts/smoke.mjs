@@ -924,6 +924,34 @@ await session(['--force-prefers-reduced-motion'], async (ctx) => {
   check('home scroll has no uncaught exceptions', errors.length === 0, errors.slice(0, 2).join(' | '));
 });
 
+// ---- the live home page: the walk-in plays first, then the page scrolls ----
+console.log('\nlive intro walks in before the page scrolls');
+await session([], async (ctx) => {
+  const { send, evaluate, errors } = ctx;
+  await send('Emulation.setDeviceMetricsOverride', { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false });
+  await evaluate(`(() => { try { sessionStorage.removeItem('nightbowl:seated-this-visit'); } catch {} })()`);
+  await send('Page.navigate', { url: `${URL_}/` });
+  let locked = false;
+  for (let i = 0; i < 40 && !locked; i++) {
+    await sleep(100);
+    locked = await evaluate(`document.body.classList.contains('intro-lock')`);
+  }
+  check('live: the page holds still while the visitor walks in', locked);
+  check('live: no controls sit over the stall', await evaluate(`getComputedStyle(document.querySelector('.topbar')).display === 'none'
+    && getComputedStyle(document.getElementById('sceneMotionControl')).display === 'none'`));
+  let released = false;
+  const started = Date.now();
+  while (!released && Date.now() - started < 13000) {
+    await sleep(250);
+    released = !(await evaluate(`document.body.classList.contains('intro-lock')`));
+  }
+  check('live: the walk-in finishes and the page unlocks', released, `${Date.now() - started}ms`);
+  await send('Input.dispatchMouseEvent', { type: 'mouseWheel', x: 720, y: 450, deltaX: 0, deltaY: 600 });
+  await sleep(600);
+  check('live: after the walk-in the page scrolls into the portfolio', await evaluate('window.scrollY') > 0);
+  check('live intro has no uncaught exceptions', errors.length === 0, errors.slice(0, 2).join(' | '));
+});
+
 console.log('\nWebGL fallback');
 await session(['--disable-webgl', '--disable-gpu'], async (ctx) => {
   const { send, evaluate, errors } = ctx;
