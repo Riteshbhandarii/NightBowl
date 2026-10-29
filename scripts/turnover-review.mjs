@@ -22,7 +22,7 @@ await session({ width: 2048, height: 768 }, async (ctx) => {
   }
   await evaluate(`(() => {
     const c = document.getElementById('scene');
-    c.dispatchEvent(new WheelEvent('wheel', { deltaY: -1200, bubbles: true, cancelable: true }));
+    c.dispatchEvent(new WheelEvent('wheel', { deltaY: -1200, bubbles: true, cancelable: true, ctrlKey: true }));
     c.dispatchEvent(new PointerEvent('pointerdown', { pointerId: 8, clientX: 1040, clientY: 420, bubbles: true }));
     c.dispatchEvent(new PointerEvent('pointermove', { pointerId: 8, clientX: 1000, clientY: 450, bubbles: true }));
     c.dispatchEvent(new PointerEvent('pointerup', { pointerId: 8, clientX: 1000, clientY: 450, bubbles: true }));
