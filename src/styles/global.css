@@ -103,6 +103,8 @@ img { max-width: 100%; }
 .opening-lamp:nth-of-type(1) { left: 14%; } .opening-lamp:nth-of-type(2) { left: calc(50% - 13px); animation-delay: 0.3s; } .opening-lamp:nth-of-type(3) { right: 14%; animation-delay: 0.6s; }
 @keyframes lamp-warm { from { opacity: 0.45; filter: brightness(0.7); } to { opacity: 1; filter: brightness(1.15); } }
 .opening-name { font: 600 28px/1 var(--font-sans); letter-spacing: -0.03em; text-transform: none; color: var(--text); }
+.opening-count { font: 500 13px/1 var(--font-mono); color: var(--glow); font-variant-numeric: tabular-nums; min-width: 4ch; text-align: center; }
+.loading.gone .opening-count { opacity: 0; transition: opacity 0.3s ease; }
 .opening-text { font: 400 12px/1.4 var(--font-mono); letter-spacing: 0.02em; text-transform: none; color: var(--text-faint); }
 .loading.gone .opening-flap { transform: translateY(-140%) scaleY(0.4); opacity: 0; }
 .loading.gone .opening-flap:nth-of-type(4) { transition-delay: 0.05s; }
@@ -777,10 +779,11 @@ body.home-page.book-open { overflow: hidden; }
 .nav a.nav-cv, .cv-toggle { color: var(--glow); }
 
 .hero-space { height: calc(100svh - 64px); pointer-events: none; }
-.home { position: relative; z-index: 16; overflow: clip; background: var(--bg); color: var(--text); }
-.home::before {
-  content: ''; position: absolute; left: 0; right: 0; top: -1px; height: 1px;
-  background: linear-gradient(90deg, transparent, rgba(255, 173, 88, 0.45), transparent);
+.home {
+  position: relative; z-index: 16; overflow: clip; color: var(--text);
+  /* no edge: the page starts see-through and deepens to the page black, while the
+     scene itself fogs to the same black underneath */
+  background: linear-gradient(180deg, rgba(10, 10, 11, 0) 0, rgba(10, 10, 11, 0.55) 22vh, var(--bg) 62vh);
 }
 .home > :not(.page-glow) { position: relative; z-index: 1; }
 .page-glow {
@@ -790,6 +793,7 @@ body.home-page.book-open { overflow: hidden; }
   will-change: transform;
 }
 .has-glow > .page-glow { opacity: 1; }
+.reading-page > .page-glow { position: fixed; }
 .home-peek { display: flex; align-items: center; justify-content: center; height: 64px; }
 .home-peek a, .home-more {
   font: 500 13px/1 var(--font-sans); color: var(--text-soft); text-decoration: none;
@@ -889,7 +893,14 @@ body.home-page.book-open { overflow: hidden; }
 .log-list time { flex: none; width: 110px; font: 400 12px/1.4 var(--font-mono); color: var(--text-faint); }
 .log-list span { font: 500 18px/1.35 var(--font-sans); letter-spacing: -0.015em; }
 .home-total { margin-top: 28px; font-size: 13px; color: var(--text-faint); }
-.home-foot { padding: 40px 0 56px; border-top: 1px solid var(--border); text-align: center; font: 400 12px/1.6 var(--font-mono); color: var(--text-faint); }
+.site-foot { width: min(1080px, calc(100% - 40px)); margin: 0 auto; padding: 28px 0 44px; border-top: 1px solid var(--border); color: var(--text-faint); font: 400 14px/1.5 var(--font-sans); }
+.home > .site-foot { padding: 28px 0 44px; }
+.site-foot-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px 32px; }
+.site-foot p { margin: 0; }
+.site-foot-links { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 26px; }
+.site-foot a { color: var(--text-soft); text-decoration: none; transition: color 0.2s ease; }
+.site-foot a:hover { color: var(--text); }
+@media (max-width: 640px) { .site-foot-row { flex-direction: column; align-items: flex-start; } }
 
 /* sections ease in once as they arrive; never under reduced motion */
 .motion-ready .reveal { opacity: 0; transform: translateY(14px); filter: blur(6px); transition: opacity 0.7s ease, transform 0.7s cubic-bezier(0.2, 0.7, 0.2, 1), filter 0.7s ease; }
@@ -904,7 +915,7 @@ body.home-page.book-open { overflow: hidden; }
 }
 
 /* live home page: the walk-in plays first, with no controls over it */
-.cinematic .topbar, .cinematic .scene-motion-control, .cinematic .credit { display: none !important; }
+.cinematic:not(.scene-failed) .topbar, .cinematic .scene-motion-control, .cinematic .credit { display: none !important; }
 .intro-lock { overflow: hidden !important; }
 .intro-lock .home-peek, .intro-lock .hint { opacity: 0; }
 .home-peek { transition: opacity 0.6s ease; }
@@ -931,3 +942,9 @@ body.home-page.book-open { overflow: hidden; }
   backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
 }
 .hint { font: 500 12px/1.4 var(--font-sans) !important; letter-spacing: 0 !important; text-transform: none !important; color: var(--text-soft) !important; }
+.scene-focusing .visitor-order { opacity: 0; pointer-events: none; transition: opacity 0.3s ease; }
+
+/* leaving the stall: its labels and panels step aside before the page arrives */
+.pins, .hint, .visitor-order, .home-peek, .say, .you-pin, .seat-pin { transition: opacity 0.35s ease; }
+.leaving .pins, .leaving .hint, .leaving .visitor-order, .leaving .home-peek,
+.leaving .say, .leaving .you-pin, .leaving .seat-pin { opacity: 0 !important; pointer-events: none !important; }
