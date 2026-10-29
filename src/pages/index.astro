@@ -6,6 +6,7 @@ import { SITE } from '../data/content';
 ---
 
 <Base title={SITE.name} description={SITE.homeDescription} bodyClass="home-page">
+  <script is:inline>if (!/[?&]nbtest=1/.test(location.search)) document.body.classList.add('cinematic');</script>
   <Stall />
   <HomeSections />
 </Base>
