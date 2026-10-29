@@ -74,6 +74,7 @@ const sceneJson = JSON.stringify(sceneContent).replace(/</g, '\\u003c');
   type SceneControls = {
     setBookOpen(v: boolean): void;
     setMotionPaused(v: boolean): MotionState;
+    setOffscreen?(v: boolean): void;
     getMotionState(): MotionState;
     dispose(): void;
   };
@@ -110,6 +111,7 @@ const sceneJson = JSON.stringify(sceneContent).replace(/</g, '\\u003c');
   setMotionControl('loading');
 
   function onBookState(e: Event) {
+    document.body.classList.toggle('book-open', !!(e as CustomEvent).detail);
     controls?.setBookOpen((e as CustomEvent).detail);
     if (controls) setMotionControl(controls.getMotionState());
   }
@@ -155,9 +157,28 @@ const sceneJson = JSON.stringify(sceneContent).replace(/</g, '\\u003c');
     // Synchronise events that fired while the scene bundle was still loading.
     controls.setBookOpen(document.getElementById('book')?.classList.contains('open') ?? false);
     setMotionControl(controls.getMotionState());
+    controls.setOffscreen?.(pastHero);
     // only reachable when explicitly asked for, so normal loads stay clean
     if (location.search.includes('nbtest')) (window as any).__nightbowl = controls;
     loading?.classList.add('gone');
+  }
+
+  // The home page scrolls past the stall. Once it is fully out of view, stop
+  // drawing it and tuck away the controls that only make sense over the scene.
+  const heroSpace = document.getElementById('heroSpace');
+  let pastHero = false;
+  if (heroSpace && 'IntersectionObserver' in window) {
+    new IntersectionObserver(([entry]) => {
+      pastHero = !entry.isIntersecting;
+      document.body.classList.toggle('past-hero', pastHero);
+      controls?.setOffscreen?.(pastHero);
+    }).observe(heroSpace);
+  }
+
+  if (heroSpace) {
+    const onScroll = () => document.body.classList.toggle('scrolled', scrollY > innerHeight * 0.5);
+    addEventListener('scroll', onScroll, { passive: true });
+    onScroll();
   }
 
   motionControl?.addEventListener('click', () => {
