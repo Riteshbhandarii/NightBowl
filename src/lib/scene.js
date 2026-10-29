@@ -35,6 +35,7 @@ export function initScene(canvas, onHotspot, opts = {}) {
   let sceneElapsed = 0;
   let sceneClockAt = null;
   let pageHidden = document.hidden;
+  let offscreen = false; // scrolled past the stall: stop drawing, hold the clock
   let disposed = false;
 
   function motionState() {
@@ -66,7 +67,7 @@ export function initScene(canvas, onHotspot, opts = {}) {
     // Settle the old visible interval before switching. Visibility is not a
     // manual preference and must not make a background arrival auto-seat.
     advanceSceneClock();
-    pageHidden = document.hidden;
+    pageHidden = document.hidden || offscreen;
   }
 
   function nowSec() { return sceneElapsed; }
@@ -2938,7 +2939,10 @@ export function initScene(canvas, onHotspot, opts = {}) {
     if (phase === 'sitting') return;
     if (!movedFar && performance.now() - dnT < 500) tryClick();
   };
+  // A plain wheel scrolls the page past the stall. Trackpad pinch arrives as a
+  // ctrl+wheel, and only that zooms the camera.
   const onWheel = (e) => {
+    if (!e.ctrlKey) return;
     e.preventDefault();
     if (phase !== 'seated') return;
     userMoved = true;
@@ -3042,6 +3046,7 @@ export function initScene(canvas, onHotspot, opts = {}) {
   function frame() {
     if (disposed) return;
     raf = requestAnimationFrame(frame);
+    if (offscreen) return;
     const staticScene = motionState().paused || pageHidden;
     const poseDt = Math.min(advanceSceneClock(), 0.5);
     // Locomotion stays capped so one stalled frame cannot teleport a walker.
@@ -3205,6 +3210,12 @@ export function initScene(canvas, onHotspot, opts = {}) {
       bookOpen = v;
       hideHint();
       updateOrderUI();
+    },
+    setOffscreen(v) {
+      if (disposed || offscreen === !!v) return;
+      advanceSceneClock();
+      offscreen = !!v;
+      pageHidden = document.hidden || offscreen;
     },
     setMotionPaused,
     getMotionState: motionState,
