@@ -13,7 +13,7 @@ stack:
   - "Differential privacy"
 sourceUrl: "https://github.com/imaddde867/FL-Attack"
 demoUrl: "https://imaddde867.github.io/FL-Attack/"
-image: "/images/projects/fl-reconstructions.webp"
+image: "/images/projects/fl-privacy-benchmark/image.webp"
 imageAlt: "Grid of original faces next to faces reconstructed from gradients, across every attack method and defence in the benchmark"
 order: 2
 draftCopy: false
