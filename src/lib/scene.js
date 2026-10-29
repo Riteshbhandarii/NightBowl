@@ -96,10 +96,11 @@ export function initScene(canvas, onHotspot, opts = {}) {
   const scene = new THREE.Scene();
   scene.background = textTexture((g, w, h) => {
     const grd = g.createLinearGradient(0, 0, 0, h);
-    grd.addColorStop(0, '#0c1230');
-    grd.addColorStop(0.48, '#241d3d');
-    grd.addColorStop(0.8, '#3f2438');
-    grd.addColorStop(1, '#552c35');
+    // near-black night that meets the page below, with a warm haze at the horizon
+    grd.addColorStop(0, '#060709');
+    grd.addColorStop(0.5, '#0c0c12');
+    grd.addColorStop(0.82, '#1a1218');
+    grd.addColorStop(1, '#2a1717');
     g.fillStyle = grd; g.fillRect(0, 0, w, h);
     g.fillStyle = 'rgba(255,240,220,0.5)';
     for (let i = 0; i < 46; i++) {
@@ -108,7 +109,7 @@ export function initScene(canvas, onHotspot, opts = {}) {
     }
     g.globalAlpha = 1;
   }, 16, 512);
-  scene.fog = new THREE.Fog(0x201a30, 10, 36);
+  scene.fog = new THREE.Fog(0x110f14, 10, 36);
 
   const camera = new THREE.PerspectiveCamera(46, window.innerWidth / window.innerHeight, 0.1, 100);
   const raycaster = new THREE.Raycaster();
@@ -432,7 +433,7 @@ export function initScene(canvas, onHotspot, opts = {}) {
       g.textBaseline = 'middle';
       MENU_ITEMS.forEach((item, k) => {
         const y = 262 + k * 84;
-        g.fillStyle = '#e8d7b0'; g.font = "500 44px 'Hanken Grotesk', sans-serif"; g.textAlign = 'left';
+        g.fillStyle = '#e8d7b0'; g.font = "500 44px 'Geist', sans-serif"; g.textAlign = 'left';
         g.fillText(item.name, 78, y, 650);
         g.fillStyle = '#997c48'; g.font = "400 32px 'Space Mono', monospace"; g.textAlign = 'right';
         g.fillText(item.tag, w - 78, y, 250);
@@ -450,7 +451,7 @@ export function initScene(canvas, onHotspot, opts = {}) {
       g.fillStyle = '#a5341d'; g.fillRect(0, 0, w, 96);
       g.fillStyle = '#e8dbbf'; g.textAlign = 'center'; g.textBaseline = 'middle';
       g.font = "700 56px 'Zilla Slab', serif"; g.fillText(LABELS.logSignTitle, w / 2, 48, w - 50);
-      g.fillStyle = '#3a2f22'; g.textAlign = 'left'; g.font = "400 34px 'Hanken Grotesk', sans-serif";
+      g.fillStyle = '#3a2f22'; g.textAlign = 'left'; g.font = "400 34px 'Geist', sans-serif";
       LABELS.logSignItems.slice(0, 6).forEach((t, k) => {
         g.fillText(t, 42, 168 + k * 60);
       });
@@ -2303,15 +2304,20 @@ export function initScene(canvas, onHotspot, opts = {}) {
 
   function buildStreet() {
     const winTex = textTexture((g, w, h) => {
-      g.fillStyle = '#0c0a16'; g.fillRect(0, 0, w, h);
-      for (let y = 20; y < h - 20; y += 46) {
-        for (let x = 16; x < w - 16; x += 40) {
-          if (random() < 0.5) {
-            g.fillStyle = random() < 0.7 ? 'rgba(255,196,120,0.85)' : 'rgba(150,180,255,0.7)';
-            g.fillRect(x, y, 22, 30);
+      // distant blocks: many small, mostly dark windows, so the city sits behind the stall
+      g.fillStyle = '#08080b'; g.fillRect(0, 0, w, h);
+      for (let y = 18; y < h - 18; y += 22) {
+        for (let x = 10; x < w - 10; x += 18) {
+          if ((x / 18 | 0) % 9 === 4) continue; // gaps between buildings
+          if (random() < 0.24) {
+            const warm = random() < 0.8;
+            g.fillStyle = warm ? 'rgba(255,186,110,1)' : 'rgba(150,175,230,1)';
+            g.globalAlpha = 0.18 + random() * 0.45;
+            g.fillRect(x, y, 8, 11);
           }
         }
       }
+      g.globalAlpha = 1;
     }, 512, 512);
     const bld = new THREE.Mesh(new THREE.PlaneGeometry(26, 16), new THREE.MeshBasicMaterial({ map: winTex }));
     bld.position.set(-2, 7, -14);
@@ -2835,6 +2841,9 @@ export function initScene(canvas, onHotspot, opts = {}) {
     camera.lookAt(_look);
   }
 
+  // The live home page walks the visitor in on its own once the stall is open.
+  if (opts.autoSeat && phase === 'street') setTimeout(() => takeSeat(), 1400);
+
   function takeSeat() {
     if (disposed || phase !== 'street') return;
     if (motionState().paused) {
@@ -2853,6 +2862,7 @@ export function initScene(canvas, onHotspot, opts = {}) {
 
   function seated() {
     phase = 'seated';
+    document.dispatchEvent(new CustomEvent('nb:seated'));
     try { sessionStorage.setItem(seatVisitKey, 'seated'); } catch { /* visit-only scene state */ }
     cam.az = cam.azT; cam.el = cam.elT; cam.r = cam.rT;
     if (seatGlowMat) seatGlowMat.visible = false;
@@ -3211,6 +3221,7 @@ export function initScene(canvas, onHotspot, opts = {}) {
       hideHint();
       updateOrderUI();
     },
+    getPhase: () => phase,
     setOffscreen(v) {
       if (disposed || offscreen === !!v) return;
       advanceSceneClock();
