@@ -32,7 +32,14 @@ const sceneJson = JSON.stringify(sceneContent).replace(/</g, '\\u003c');
   aria-pressed="false"
   disabled
 ><span>Motion unavailable</span></button>
-<div class="loading" id="loading" data-error={SCENE.error}>{SCENE.loading}</div>
+<div class="loading" id="loading" data-error={SCENE.error}>
+  <div class="opening" aria-hidden="true">
+    <span class="opening-lamp"></span><span class="opening-lamp"></span><span class="opening-lamp"></span>
+    <span class="opening-flap"><b>{SITE.name.charAt(0)}</b></span><span class="opening-flap"><b>{SITE.name.charAt(0)}</b></span><span class="opening-flap"><b>{SITE.name.charAt(0)}</b></span>
+  </div>
+  <p class="opening-name">{SITE.name}</p>
+  <p class="opening-text">{SCENE.loading}</p>
+</div>
 <div class="pins" id="pins"></div>
 <aside class="visitor-order" id="visitorOrder" aria-labelledby="visitorOrderTitle" hidden>
   <h2 id="visitorOrderTitle">{SCENE.orderTitle}</h2>
@@ -110,6 +117,21 @@ const sceneJson = JSON.stringify(sceneContent).replace(/</g, '\\u003c');
 
   setMotionControl('loading');
 
+  // The live home page plays the walk-in first: the page stays put until the
+  // visitor is seated, then it scrolls. Test runs (?nbtest=1) keep the old,
+  // click-to-sit stall so the interaction suites still exercise it.
+  const cinematic = document.body.classList.contains('cinematic');
+  let unlockTimer = 0;
+  function unlockIntro() {
+    clearTimeout(unlockTimer);
+    document.body.classList.remove('intro-lock');
+  }
+  if (cinematic) {
+    document.body.classList.add('intro-lock');
+    document.addEventListener('nb:seated', unlockIntro);
+    unlockTimer = window.setTimeout(unlockIntro, 12000); // never trap anyone
+  }
+
   function onBookState(e: Event) {
     document.body.classList.toggle('book-open', !!(e as CustomEvent).detail);
     controls?.setBookOpen((e as CustomEvent).detail);
@@ -130,6 +152,7 @@ const sceneJson = JSON.stringify(sceneContent).replace(/</g, '\\u003c');
     }
     canvas.hidden = true;
     setMotionControl('unavailable');
+    unlockIntro();
   }
 
   function onContextLost(e: Event) {
@@ -145,7 +168,7 @@ const sceneJson = JSON.stringify(sceneContent).replace(/</g, '\\u003c');
       try { sceneContent = JSON.parse(document.getElementById('nbSceneContent')!.textContent!); } catch (e) {}
       controls = initScene(canvas, (key: string) => {
         document.dispatchEvent(new CustomEvent('nb:open', { detail: key }));
-      }, { ...sceneContent, motionPaused: savedMotionPaused });
+      }, { ...sceneContent, motionPaused: savedMotionPaused, autoSeat: cinematic });
     } catch (err) {
       console.error(err);
       sceneUnavailable();
@@ -158,6 +181,7 @@ const sceneJson = JSON.stringify(sceneContent).replace(/</g, '\\u003c');
     controls.setBookOpen(document.getElementById('book')?.classList.contains('open') ?? false);
     setMotionControl(controls.getMotionState());
     controls.setOffscreen?.(pastHero);
+    if ((controls as any).getPhase?.() === 'seated') unlockIntro();
     // only reachable when explicitly asked for, so normal loads stay clean
     if (location.search.includes('nbtest')) (window as any).__nightbowl = controls;
     loading?.classList.add('gone');
