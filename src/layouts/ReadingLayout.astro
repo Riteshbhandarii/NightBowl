@@ -1,6 +1,7 @@
 ---
 import Base from './Base.astro';
 import { CONTACT, NAVIGATION, SITE } from '../data/content';
+import SiteFooter from '../components/SiteFooter.astro';
 import '../styles/reading.css';
 
 interface Props {
@@ -27,6 +28,7 @@ const isCurrent = (prefix: string) => pathname === prefix || pathname.startsWith
     </nav>
   </header>
   <slot />
+  <SiteFooter />
   <div class="page-glow" aria-hidden="true"></div>
   <script>
     import { initPageLight } from '../lib/page-light.js';
