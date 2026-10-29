@@ -5,6 +5,6 @@ tag: "Apache Airflow"
 summary: "A scheduled Airflow pipeline that extracts, cleans and validates weather data, engineers daily and monthly aggregations plus wind categories, and flags outliers by threshold before loading to SQLite."
 status: "draft"
 sourceUrl: "https://github.com/Riteshbhandarii/weather-etl-pipeline"
-order: 1
+order: 5
 draftCopy: false
 ---
