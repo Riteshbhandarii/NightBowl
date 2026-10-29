@@ -2,13 +2,16 @@
   "site": {
     "name": "NightBowl",
     "ownerName": "Ritesh Bhandari",
+    "role": "Data Engineering & AI student",
+    "availability": "Student assistant at CoRe, Turku UAS · graduating Jan 2027 · Turku, Finland",
+    "positioning": "I like the part of machine learning that comes after the demo.",
     "tagline": "ritesh bhandari  portfolio & kitchen log",
     "github": "https://github.com/Riteshbhandarii",
     "linkedin": "https://www.linkedin.com/in/ritesh-bhandari-0371b5294/",
     "establishedYear": "2026",
     "coverLine": "open late",
     "coverPrompt": "tap to open",
-    "homeDescription": "Ritesh Bhandari's portfolio and kitchen log, served from a late night ramen stall.",
+    "homeDescription": "Ritesh Bhandari, Data Engineering & AI student at Turku UAS and student assistant at CoRe. Data pipelines, machine learning and local LLM tools, with case studies and a CV.",
     "draftStamp": "Work in progress."
   },
   "navigation": {
@@ -16,12 +19,13 @@
     "guide": "The Guide",
     "log": "Kitchen Log",
     "bill": "The Bill",
-    "openMenu": "Open menu"
+    "openMenu": "Open menu",
+    "cv": "CV"
   },
   "menu": {
     "title": "The Menu",
     "subtitle": "Everything here was built by the cook. Ask the guide about any of it.",
-    "intro": "The big builds first, then the small sharp tools, then the ventures and the research.",
+    "intro": "The chef's recommendation first, then the other big builds, the small sharp tools, and the ventures and research.",
     "mainsTitle": "Mains",
     "mainsNote": "the builds I most like explaining",
     "smallPlatesTitle": "Small plates",
@@ -29,16 +33,17 @@
     "offMenuTitle": "Off the menu",
     "offMenuNote": "ventures and research",
     "closing": "Ask me about any of these. The code for most of them is on GitHub.",
-    "projectLinkLabel": "open ↗"
+    "projectLinkLabel": "open ↗",
+    "featuredLabel": "Chef's recommendation"
   },
   "guide": {
     "eyebrow": "your host for the evening",
     "title": "The Guide",
     "intro": "Not the cook. The one who tells you what the cook has been up to.",
     "body": [
-      "Pull up a stool. The cook here is Ritesh. He is in his final year of Data and AI Engineering at Turku University of Applied Sciences. He also works as a student assistant at Core Cognitive Tech, a research team inside the university.",
+      "Pull up a stool. The cook here is Ritesh. He is in his final year of Data Engineering and AI at Turku University of Applied Sciences. He also works as a student assistant at CoRe, the Cognitive Technologies Research Group at Turku UAS.",
       "He likes the part of machine learning that comes after the demo. Getting a model or a data pipeline to run every day without anyone babysitting it. His thesis predicts prices for used car parts from real listing data.",
-      "He speaks Finnish, English and Nepali, and he is learning Swedish. Outside the kitchen he plays football and just ran his first half marathon. Everything on the menu he built himself, so ask him about any of it."
+      "He speaks Finnish, English and Nepali, and he is learning Swedish. Outside the kitchen he plays football and just ran his first half marathon. Everything on the menu has his hands in it, and the team projects say which part was his. Ask him about any of it."
     ],
     "portrait": "/images/guide/ritesh.jpg",
     "portraitAlt": "Ritesh with a microphone, presenting on stage",
@@ -54,9 +59,9 @@
         "line": "A machine learning study of used car part prices. In final review with my supervisor."
       },
       {
-        "name": "Core Cognitive Tech",
+        "name": "CoRe research group",
         "note": "on the pass",
-        "line": "Student assistant. I work on a local AI agent, the team's GPU servers and dashboards, and I help the interns."
+        "line": "Student assistant since May 2026. Features and release tooling for an on-premises AI desktop app, internal tools that run local language models, and the GPU servers and edge devices under them."
       },
       {
         "name": "Fundamentals, deep track",
@@ -73,11 +78,15 @@
     "rows": [
       {
         "label": "Order",
-        "value": "Data and AI Engineering student, final year, Turku UAS"
+        "value": "Data Engineering and AI, B.Eng., Turku UAS. Graduating Jan 2027 (expected)"
       },
       {
         "label": "Now",
-        "value": "Student assistant, Core Cognitive Tech"
+        "value": "Student assistant, CoRe (Cognitive Technologies Research Group), Turku UAS"
+      },
+      {
+        "label": "Based",
+        "value": "Turku, Finland"
       },
       {
         "label": "Focus",
