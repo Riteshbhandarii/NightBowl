@@ -2,7 +2,8 @@
 // The portfolio you scroll to under the stall. The scene stays fixed behind
 // it; these sections slide over it as a normal page.
 import { getCollection } from 'astro:content';
-import { BILL, CONTACT, GUIDE, HOME, SCENE, SITE, SPECIALS } from '../data/content';
+import { BILL, CONTACT, GUIDE, HOME, SITE, SPECIALS } from '../data/content';
+import SiteFooter from './SiteFooter.astro';
 
 const slug = (id: string) => id.replace(/\.(md|mdx)$/, '');
 const mains = (await getCollection('projects', ({ data }) => data.course === 'mains'))
@@ -100,7 +101,7 @@ const fmtDate = (d: Date) => d.toLocaleDateString('en-GB', { day: 'numeric', mon
     <p class="home-total">{BILL.total}</p>
   </section>
 
-  <footer class="home-foot">{SCENE.credit}</footer>
+  <SiteFooter />
 </main>
 
 <script>
