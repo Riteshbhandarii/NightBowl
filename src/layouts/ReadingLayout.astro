@@ -27,4 +27,9 @@ const isCurrent = (prefix: string) => pathname === prefix || pathname.startsWith
     </nav>
   </header>
   <slot />
+  <div class="page-glow" aria-hidden="true"></div>
+  <script>
+    import { initPageLight } from '../lib/page-light.js';
+    initPageLight(document.body);
+  </script>
 </Base>
