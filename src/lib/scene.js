@@ -2619,6 +2619,21 @@ export function initScene(canvas, onHotspot, opts = {}) {
     scene.add(guide);
     registerHotspot('guide', LABELS.navigation.guide, guide, new THREE.Vector3(COOK_HOME_X - 0.23, 1.7, -0.3));
     buildPins();
+    if (/[?&]cook=pilot\b/.test(window.location.search)) dressPilotCook(guide);
+  }
+
+  // Preview of the Blender-built cook (issue #79): the new model rides on the
+  // stand-in's root so it keeps its place and walk; the stand-in's own body is
+  // hidden. Only loaded when the URL asks for it.
+  function dressPilotCook(standIn) {
+    new GLTFLoader().load('/models/cook-pilot.glb', (gltf) => {
+      if (disposed) { disposeResources(gltf.scene); return; }
+      const pilot = gltf.scene;
+      pilot.traverse((n) => { if (n.isMesh) { n.frustumCulled = false; n.userData.pilot = true; } });
+      standIn.traverse((n) => { if (n.isMesh && !n.userData.pilot && n.geometry !== _blobGeo) n.visible = false; });
+      standIn.add(pilot);
+      pilot.traverse((n) => { n.userData.hotspot = 'guide'; });
+    });
   }
 
   function loadCook() {
