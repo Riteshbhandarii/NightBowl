@@ -119,6 +119,24 @@ img { max-width: 100%; }
   transition: background 0.16s ease;
 }
 .nav a:hover { background: rgba(247, 240, 226, 0.14); }
+.nav a.nav-cv { color: #ef9a4c; }
+
+.cv-toggle {
+  display: none;
+  font: inherit;
+  font-weight: 600;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #ef9a4c;
+  background: var(--pill-bg);
+  border: 1px solid var(--pill-line);
+  backdrop-filter: blur(9px);
+  -webkit-backdrop-filter: blur(9px);
+  border-radius: 999px;
+  padding: 11px 15px;
+  text-decoration: none;
+}
 
 .menu-toggle {
   display: none;
@@ -506,6 +524,7 @@ img { max-width: 100%; }
 .course > .cnote { margin: 0 0 12px; font-style: italic; font-size: 13.5px; color: var(--ink-soft); }
 
 .item { margin: 0 0 14px; }
+.item .featured { display: block; margin: 0 0 2px; font-family: 'Space Mono', monospace; font-size: 9.5px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--accent); }
 .item .row { display: flex; align-items: baseline; gap: 8px; }
 .item .name { font-family: 'Zilla Slab', serif; font-weight: 700; font-size: 16px; color: var(--ink); flex: none; }
 .item .leader { flex: 1; border-bottom: 1.5px dotted var(--line); transform: translateY(-4px); }
@@ -644,6 +663,7 @@ img { max-width: 100%; }
 @media (max-width: 860px) {
   .nav { display: none; }
   .menu-toggle { display: block; }
+  .cv-toggle { display: block; }
   .credit { display: none; }
   .book { width: 100%; height: 100%; }
   .book-inner { border-radius: 0; }
