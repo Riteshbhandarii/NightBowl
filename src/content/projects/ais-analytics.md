@@ -16,7 +16,7 @@ stack:
   - "XGBoost"
 sourceUrl: "https://github.com/Riteshbhandarii/ais-analytics"
 featured: true
-image: "/images/projects/ais-architecture.webp"
+image: "/images/projects/ais-analytics/image.webp"
 imageAlt: "Data architecture diagram of the AIS analytics system, from the Digitraffic MQTT feed through PostgreSQL and the ETL loop to the API and dashboard"
 order: 1
 draftCopy: false
