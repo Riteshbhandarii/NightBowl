@@ -1,0 +1,16 @@
+---
+import { CONTACT, SITE } from '../data/content';
+const year = new Date().getFullYear();
+---
+
+<footer class="site-foot">
+  <div class="site-foot-row">
+    <p class="site-foot-legal">© {year} {SITE.ownerName}. All rights reserved.</p>
+    <nav class="site-foot-links" aria-label="Elsewhere">
+      <a href={SITE.github} target="_blank" rel="noopener">GitHub</a>
+      <a href={SITE.linkedin} target="_blank" rel="noopener">LinkedIn</a>
+      {CONTACT.email && <a href={`mailto:${encodeURIComponent(CONTACT.email)}`}>Email</a>}
+      <a href="/privacy/">Privacy</a>
+    </nav>
+  </div>
+</footer>

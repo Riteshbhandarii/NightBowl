@@ -45,7 +45,7 @@
       "He likes the part of machine learning that comes after the demo. Getting a model or a data pipeline to run every day without anyone babysitting it. His thesis predicts prices for used car parts from real listing data.",
       "He speaks Finnish, English and Nepali, and he is learning Swedish. Outside the kitchen he plays football and just ran his first half marathon. Everything on the menu has his hands in it, and the team projects say which part was his. Ask him about any of it."
     ],
-    "portrait": "/images/guide/ritesh.jpg",
+    "portrait": "/images/guide/ritesh.webp",
     "portraitAlt": "Ritesh with a microphone, presenting on stage",
     "githubLabel": "github.com/Riteshbhandarii ↗",
     "draftCopy": false
@@ -128,12 +128,12 @@
     "readingSuffix": "min read"
   },
   "scene": {
-    "canvasLabel": "Interactive 3D ramen stall. Use the Open menu button for a text version of everything.",
+    "canvasLabel": "Interactive 3D ramen stall run by Ritesh Bhandari. Scroll down, or use the Open menu button, for a text version of everything.",
     "loading": "lighting the lanterns…",
     "hint": "drag to look around · tap a sign to open the menu",
     "credit": "built from scratch by Ritesh",
     "error": "scene error — use the Open menu button",
-    "mainSignLine": "OPEN LATE  ·  RAMEN  ·  EST. 2026",
+    "mainSignLine": "RITESH BHANDARI  ·  DATA & AI",
     "menuSignTitle": "MENU",
     "menuSignFooter": "tap to open the menu",
     "logSignTitle": "KITCHEN LOG",
@@ -178,5 +178,18 @@
       "Still open at this hour. Every night."
     ],
     "draftCopy": false
+  },
+  "home": {
+    "scrollCue": "See the work",
+    "workTitle": "On the menu",
+    "workIntro": "The builds I would most like to walk you through.",
+    "allWork": "Every project on the menu",
+    "nowTitle": "On the stove now",
+    "aboutTitle": "Who is cooking",
+    "aboutMore": "More about me",
+    "logTitle": "From the Kitchen Log",
+    "logMore": "Open the Kitchen Log",
+    "contactTitle": "Settle up",
+    "contactIntro": "Hiring, or want to talk about any of this? Email works best."
   }
 }

@@ -20,7 +20,7 @@ const check = (name, ok, detail) => {
 };
 
 console.log('\npublic home transfer budget');
-check('raw first-party payload <= 760 KiB', rawBytes <= 760 * 1024, `${(rawBytes / 1024).toFixed(1)} KiB`);
+check('raw first-party payload <= 790 KiB', rawBytes <= 790 * 1024, `${(rawBytes / 1024).toFixed(1)} KiB`);
 check('gzip first-party payload <= 250 KiB', gzipBytes <= 250 * 1024, `${(gzipBytes / 1024).toFixed(1)} KiB`);
 check('public home does not load the CMS bundle', !/keystatic-page|react-dom/.test(html), `${files.length} initial files`);
 

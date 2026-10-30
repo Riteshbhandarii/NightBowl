@@ -813,11 +813,11 @@ await session(['--force-prefers-reduced-motion'], async (ctx) => {
       && rect.right <= device.width + 0.5 && rect.bottom <= device.height + 0.5;
     check(`${device.name}: primary controls remain reachable`,
       contained(shell.primary), JSON.stringify(shell));
-    check(`${device.name}: shell has no page overflow`,
-      shell.overflowX <= 0.5 && shell.overflowY <= 0.5,
-      `x=${shell.overflowX} y=${shell.overflowY}`);
+    // The home page scrolls vertically into the portfolio; it must never scroll sideways.
+    check(`${device.name}: shell has no sideways overflow`,
+      shell.overflowX <= 0.5, `x=${shell.overflowX} y=${shell.overflowY}`);
     if (device.touch) {
-      check(`${device.name}: canvas owns touch gestures`, shell.touchAction === 'none', shell.touchAction);
+      check(`${device.name}: canvas leaves vertical swipes to the page`, shell.touchAction === 'pan-y', shell.touchAction);
     }
 
     if (device.name === 'phone landscape') {
@@ -898,6 +898,77 @@ await session(['--force-prefers-reduced-motion'], async (ctx) => {
 });
 
 // ---- pass 6: weak or disabled WebGL must leave the content UI usable ----
+// Software-rendered CI frames are slow, so scroll effects land late: wait for them.
+async function settle(evaluate, expression, ms = 6000) {
+  const end = Date.now() + ms;
+  while (Date.now() < end) {
+    if (await evaluate(expression)) return true;
+    await sleep(150);
+  }
+  return false;
+}
+
+// ---- the home page scrolls past the stall into the portfolio ----
+console.log('\nhome scrolls past the stall');
+await session(['--force-prefers-reduced-motion'], async (ctx) => {
+  const { send, evaluate, errors } = ctx;
+  await send('Emulation.setDeviceMetricsOverride', { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false });
+  check('desktop: scene loads', await load(ctx));
+  await send('Input.dispatchMouseEvent', { type: 'mouseWheel', x: 720, y: 450, deltaX: 0, deltaY: 600 });
+  check('desktop: mouse wheel over the stall scrolls the page', await settle(evaluate, 'window.scrollY > 0'),
+    `scrollY=${await evaluate('window.scrollY')}`);
+  await evaluate(`document.getElementById('contact').scrollIntoView()`);
+  await settle(evaluate, `document.body.classList.contains('past-hero')`);
+  const past = await evaluate(`({ past: document.body.classList.contains('past-hero'),
+    pill: getComputedStyle(document.getElementById('sceneMotionControl')).pointerEvents })`);
+  check('desktop: leaving the stall pauses it and hides its controls', past.past && past.pill === 'none', JSON.stringify(past));
+
+  await send('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 2, mobile: true });
+  await send('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 5 });
+  check('phone: scene loads', await load(ctx));
+  // Synthesized touch pans never scroll in the hosted runner's GPU-less Chrome, on any
+  // element (canvas or plain link), so there the gesture cannot be measured; the
+  // canvas's pan-y touch-action is still asserted in the device matrix above.
+  if (/swiftshader/i.test(process.env.SMOKE_FLAGS || '')) {
+    console.log('  skip  phone: touch-swipe scrolling is not measurable on the software renderer');
+  } else {
+    let swiped = false;
+    for (let attempt = 0; attempt < 2 && !swiped; attempt++) {
+      await send('Input.synthesizeScrollGesture', { x: 195, y: 420, yDistance: -380, gestureSourceType: 'touch', speed: 800 });
+      swiped = await settle(evaluate, 'window.scrollY > 0', 4000);
+    }
+    check('phone: swiping up on the stall scrolls the page', swiped, `scrollY=${await evaluate('window.scrollY')}`);
+  }
+  check('home scroll has no uncaught exceptions', errors.length === 0, errors.slice(0, 2).join(' | '));
+});
+
+// ---- the live home page: the walk-in plays first, then the page scrolls ----
+console.log('\nlive intro walks in before the page scrolls');
+await session([], async (ctx) => {
+  const { send, evaluate, errors } = ctx;
+  await send('Emulation.setDeviceMetricsOverride', { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false });
+  await evaluate(`(() => { try { sessionStorage.removeItem('nightbowl:seated-this-visit'); } catch {} })()`);
+  await send('Page.navigate', { url: `${URL_}/` });
+  let locked = false;
+  for (let i = 0; i < 40 && !locked; i++) {
+    await sleep(100);
+    locked = await evaluate(`document.body.classList.contains('intro-lock')`);
+  }
+  check('live: the page holds still while the visitor walks in', locked);
+  check('live: no controls sit over the stall', await evaluate(`getComputedStyle(document.querySelector('.topbar')).display === 'none'
+    && getComputedStyle(document.getElementById('sceneMotionControl')).display === 'none'`));
+  let released = false;
+  const started = Date.now();
+  while (!released && Date.now() - started < 20000) {  // slow software-rendered runners take longer
+    await sleep(250);
+    released = !(await evaluate(`document.body.classList.contains('intro-lock')`));
+  }
+  check('live: the walk-in finishes and the page unlocks', released, `${Date.now() - started}ms`);
+  await send('Input.dispatchMouseEvent', { type: 'mouseWheel', x: 720, y: 450, deltaX: 0, deltaY: 600 });
+  check('live: after the walk-in the page scrolls into the portfolio', await settle(evaluate, 'window.scrollY > 0'));
+  check('live intro has no uncaught exceptions', errors.length === 0, errors.slice(0, 2).join(' | '));
+});
+
 console.log('\nWebGL fallback');
 await session(['--disable-webgl', '--disable-gpu'], async (ctx) => {
   const { send, evaluate, errors } = ctx;
@@ -920,6 +991,14 @@ await session(['--disable-webgl', '--disable-gpu'], async (ctx) => {
   await sleep(50);
   check('menu still opens without WebGL',
     await evaluate(`document.getElementById('book')?.classList.contains('open') || false`));
+  await evaluate(`document.getElementById('bookClose')?.click()`);
+  await sleep(300);
+  await evaluate(`document.getElementById('work').scrollIntoView()`);
+  await sleep(300);
+  check('fallback still shows the portfolio sections', await evaluate(`(() => {
+    const h = document.getElementById('work-title').getBoundingClientRect();
+    return !!document.elementFromPoint(h.x + 4, h.y + h.height / 2)?.closest('.home');
+  })()`));
   check('fallback has no uncaught exceptions', errors.length === 0, errors.slice(0, 2).join(' | '));
 });
 

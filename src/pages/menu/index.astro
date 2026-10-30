@@ -24,7 +24,7 @@ const sections = [
         <p class="menu-note">{section.note}</p>
         <ol class="project-list">
           {projects.filter((project) => project.data.course === section.key).map((project) => (
-            <li class:list={['project-card', { featured: project.data.featured }]}>
+            <li class:list={['project-card', { featured: project.data.featured }]} data-spotlight>
               <article>
                 {project.data.featured && <p class="project-featured">{MENU.featuredLabel}</p>}
                 {project.data.image && (

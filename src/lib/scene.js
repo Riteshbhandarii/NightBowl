@@ -35,6 +35,11 @@ export function initScene(canvas, onHotspot, opts = {}) {
   let sceneElapsed = 0;
   let sceneClockAt = null;
   let pageHidden = document.hidden;
+  let offscreen = false; // scrolled past the stall: stop drawing, hold the clock
+  // 0 at the top of the page, 1 once the stall has handed over to the page.
+  let scrollP = 0, scrollTarget = 0;
+  const FOG_NEAR = 10, FOG_FAR = 36, EXPOSURE = 1.06;
+  const _leaveLook = new THREE.Vector3(), _lanternLine = new THREE.Vector3(0, 2.1, 1.2);
   let disposed = false;
 
   function motionState() {
@@ -66,7 +71,7 @@ export function initScene(canvas, onHotspot, opts = {}) {
     // Settle the old visible interval before switching. Visibility is not a
     // manual preference and must not make a background arrival auto-seat.
     advanceSceneClock();
-    pageHidden = document.hidden;
+    pageHidden = document.hidden || offscreen;
   }
 
   function nowSec() { return sceneElapsed; }
@@ -95,19 +100,16 @@ export function initScene(canvas, onHotspot, opts = {}) {
   const scene = new THREE.Scene();
   scene.background = textTexture((g, w, h) => {
     const grd = g.createLinearGradient(0, 0, 0, h);
-    grd.addColorStop(0, '#0c1230');
-    grd.addColorStop(0.48, '#241d3d');
-    grd.addColorStop(0.8, '#3f2438');
-    grd.addColorStop(1, '#552c35');
+    // near-black night that meets the page below, with a warm haze at the horizon
+    grd.addColorStop(0, '#060709');
+    grd.addColorStop(0.5, '#0c0c12');
+    grd.addColorStop(0.82, '#1a1218');
+    grd.addColorStop(1, '#2a1717');
+    // gradient only: this texture is 16px wide and stretched over the screen,
+    // so any dot drawn here smears into a long streak
     g.fillStyle = grd; g.fillRect(0, 0, w, h);
-    g.fillStyle = 'rgba(255,240,220,0.5)';
-    for (let i = 0; i < 46; i++) {
-      g.globalAlpha = 0.15 + random() * 0.5;
-      g.fillRect(random() * w, random() * h * 0.46, 1.5, 1.5);
-    }
-    g.globalAlpha = 1;
   }, 16, 512);
-  scene.fog = new THREE.Fog(0x201a30, 10, 36);
+  scene.fog = new THREE.Fog(0x110f14, FOG_NEAR, FOG_FAR);
 
   const camera = new THREE.PerspectiveCamera(46, window.innerWidth / window.innerHeight, 0.1, 100);
   const raycaster = new THREE.Raycaster();
@@ -324,10 +326,12 @@ export function initScene(canvas, onHotspot, opts = {}) {
   }
 
   /* ---------- lights ---------- */
-  scene.add(new THREE.AmbientLight(0x3f3a5c, 0.85));
-  scene.add(new THREE.HemisphereLight(0x59608c, 0x2a1c18, 0.5));
-  const key = new THREE.DirectionalLight(0xffd7a6, 0.3);
-  key.position.set(-5, 7, 6);
+  // night fill stays low so the stall's own warm light does the work.
+  scene.add(new THREE.AmbientLight(0x3f3a5c, 0.32));
+  scene.add(new THREE.HemisphereLight(0x59608c, 0x2a1c18, 0.3));
+  // warm key from the street side, as if the stall spills light onto its customers.
+  const key = new THREE.DirectionalLight(0xffc98f, 1.05);
+  key.position.set(-2.5, 4.5, 7);
   scene.add(key);
   // rim: sits behind the subjects relative to camera, so it catches the outline of
   // heads and shoulders. cool, to read against the warm lanterns.
@@ -387,7 +391,8 @@ export function initScene(canvas, onHotspot, opts = {}) {
 
     const roof = pos(box(7.3, 0.18, 3.1, 0x221a17, { rough: 1 }), 0, 3.2, -0.05);
     roof.rotation.x = -0.055; s.add(roof);
-    s.add(pos(box(7.5, 0.38, 0.16, 0x1a1310, { rough: 1 }), 0, 3.05, 1.52));
+    // the fascia sits behind the sign board so the lettering stays whole.
+    s.add(pos(box(7.5, 0.38, 0.16, 0x1a1310, { rough: 1 }), 0, 3.05, 1.36));
 
     const signTex = textTexture((g, w, h) => {
       g.fillStyle = '#1c1512'; g.fillRect(0, 0, w, h);
@@ -406,9 +411,10 @@ export function initScene(canvas, onHotspot, opts = {}) {
       g.fillStyle = '#a5341d'; g.fillRect(0, 0, w, h);
       g.fillStyle = 'rgba(0,0,0,0.16)'; g.fillRect(0, 0, w, 12);
       g.strokeStyle = '#f0d9a8'; g.lineWidth = 8;
-      g.beginPath(); g.arc(w / 2, h * 0.5, h * 0.26, 0, Math.PI * 2); g.stroke();
+      // only the bottom of each flap shows under the sign, so the emblem lives there.
+      g.beginPath(); g.arc(w / 2, h * 0.8, h * 0.13, 0, Math.PI * 2); g.stroke();
       g.fillStyle = '#f0d9a8'; g.textAlign = 'center'; g.textBaseline = 'middle';
-      g.font = "700 96px 'Zilla Slab', serif"; g.fillText(LABELS.siteInitial, w / 2, h * 0.5 + 4);
+      g.font = "700 46px 'Zilla Slab', serif"; g.fillText(LABELS.siteInitial, w / 2, h * 0.8 + 2);
     }, 256, 256);
     const norenMat = new THREE.MeshStandardMaterial({ map: norenTex, roughness: 1, side: THREE.DoubleSide });
     for (let i = -1; i <= 1; i++) {
@@ -427,7 +433,7 @@ export function initScene(canvas, onHotspot, opts = {}) {
       g.textBaseline = 'middle';
       MENU_ITEMS.forEach((item, k) => {
         const y = 262 + k * 84;
-        g.fillStyle = '#e8d7b0'; g.font = "500 44px 'Hanken Grotesk', sans-serif"; g.textAlign = 'left';
+        g.fillStyle = '#e8d7b0'; g.font = "500 44px 'Geist', sans-serif"; g.textAlign = 'left';
         g.fillText(item.name, 78, y, 650);
         g.fillStyle = '#997c48'; g.font = "400 32px 'Space Mono', monospace"; g.textAlign = 'right';
         g.fillText(item.tag, w - 78, y, 250);
@@ -445,7 +451,7 @@ export function initScene(canvas, onHotspot, opts = {}) {
       g.fillStyle = '#a5341d'; g.fillRect(0, 0, w, 96);
       g.fillStyle = '#e8dbbf'; g.textAlign = 'center'; g.textBaseline = 'middle';
       g.font = "700 56px 'Zilla Slab', serif"; g.fillText(LABELS.logSignTitle, w / 2, 48, w - 50);
-      g.fillStyle = '#3a2f22'; g.textAlign = 'left'; g.font = "400 34px 'Hanken Grotesk', sans-serif";
+      g.fillStyle = '#3a2f22'; g.textAlign = 'left'; g.font = "400 34px 'Geist', sans-serif";
       LABELS.logSignItems.slice(0, 6).forEach((t, k) => {
         g.fillText(t, 42, 168 + k * 60);
       });
@@ -459,19 +465,23 @@ export function initScene(canvas, onHotspot, opts = {}) {
     registerHotspot('log', LABELS.navigation.log, poster, new THREE.Vector3(1.8, 2.56, -1.03));
 
     [
-      { x: -2.42, y: 2.61, color: 0xff9c42, intensity: 1.78, size: 1.04 },
-      { x: -0.08, y: 2.53, color: 0xffad58, intensity: 1.42, size: 0.96 },
-      { x: 2.21, y: 2.58, color: 0xffc184, intensity: 1.08, size: 1 },
+      // low enough to show under the noren from the street, high enough to clear heads.
+      { x: -2.62, y: 2.12, color: 0xff9c42, intensity: 2.2, size: 0.72 },
+      { x: -0.08, y: 2.08, color: 0xffad58, intensity: 1.9, size: 0.7 },
+      { x: 2.42, y: 2.1, color: 0xffc184, intensity: 1.6, size: 0.7 },
     ].forEach(({ x, y, color, intensity, size }) => {
       const lg = new THREE.Group();
-      lg.add(pos(cyl(0.012, 0.012, 0.62, 0x0f0f0f, {}, 6), 0, 0.31, 0));
+      const cord = 3.12 - y; // hangs from the roof beam
+      lg.add(pos(cyl(0.012, 0.012, cord, 0x0f0f0f, {}, 6), 0, cord / 2, 0));
       const b = sph(0.25, 0xffb066, { emissive: 0xff7326, emissiveIntensity: 1.35, rough: 0.6 }, 20);
       b.scale.set(size, 1.28 * size, size); b.position.y = -0.1; lg.add(b);
+      b.material.fog = false; // lanterns keep glowing as the street fogs over on scroll
       lanternMats.push(b.material);
       lg.add(pos(cyl(0.07, 0.09, 0.06, 0x281b13, {}, 10), 0, 0.13, 0));
       const light = new THREE.PointLight(color, intensity, 7.5, 2);
       light.position.y = -0.1; lg.add(light);
-      lg.position.set(x, y, 0.6);
+      // just inside the noren, so they hang over the customers and not in front of the back wall.
+      lg.position.set(x, y, 1.2);
       lanterns.push({ group: lg, light });
       scene.add(lg);
     });
@@ -2295,15 +2305,20 @@ export function initScene(canvas, onHotspot, opts = {}) {
 
   function buildStreet() {
     const winTex = textTexture((g, w, h) => {
-      g.fillStyle = '#0c0a16'; g.fillRect(0, 0, w, h);
-      for (let y = 20; y < h - 20; y += 46) {
-        for (let x = 16; x < w - 16; x += 40) {
-          if (random() < 0.5) {
-            g.fillStyle = random() < 0.7 ? 'rgba(255,196,120,0.85)' : 'rgba(150,180,255,0.7)';
-            g.fillRect(x, y, 22, 30);
+      // distant blocks: many small, mostly dark windows, so the city sits behind the stall
+      g.fillStyle = '#08080b'; g.fillRect(0, 0, w, h);
+      for (let y = 18; y < h - 18; y += 22) {
+        for (let x = 10; x < w - 10; x += 18) {
+          if ((x / 18 | 0) % 9 === 4) continue; // gaps between buildings
+          if (random() < 0.24) {
+            const warm = random() < 0.8;
+            g.fillStyle = warm ? 'rgba(255,186,110,1)' : 'rgba(150,175,230,1)';
+            g.globalAlpha = 0.18 + random() * 0.45;
+            g.fillRect(x, y, 8, 11);
           }
         }
       }
+      g.globalAlpha = 1;
     }, 512, 512);
     const bld = new THREE.Mesh(new THREE.PlaneGeometry(26, 16), new THREE.MeshBasicMaterial({ map: winTex }));
     bld.position.set(-2, 7, -14);
@@ -2604,6 +2619,28 @@ export function initScene(canvas, onHotspot, opts = {}) {
     scene.add(guide);
     registerHotspot('guide', LABELS.navigation.guide, guide, new THREE.Vector3(COOK_HOME_X - 0.23, 1.7, -0.3));
     buildPins();
+    if (/[?&]cook=pilot\b/.test(window.location.search)) dressPilotCook(guide);
+  }
+
+  // Preview of the Blender-built cook (issue #79): the new model rides on the
+  // stand-in's root so it keeps its place and walk; the stand-in's own body is
+  // hidden. Only loaded when the URL asks for it.
+  function dressPilotCook(standIn) {
+    new GLTFLoader().load('/models/cook-pilot.glb', (gltf) => {
+      if (disposed) { disposeResources(gltf.scene); return; }
+      const pilot = gltf.scene;
+      pilot.traverse((n) => { if (n.isMesh) { n.frustumCulled = false; n.userData.pilot = true; } });
+      standIn.traverse((n) => { if (n.isMesh && !n.userData.pilot && n.geometry !== _blobGeo) n.visible = false; });
+      pilot.position.set(-0.2, 0, 0.08); // a step nearer the pot than the stand-in stood
+      standIn.add(pilot);
+      pilot.traverse((n) => { n.userData.hotspot = 'guide'; });
+      // the stir loop baked in Blender; the frame loop already advances guideMixer
+      const stir = gltf.animations.find((a) => /stir/i.test(a.name)) || gltf.animations[0];
+      if (stir) {
+        guideMixer = new THREE.AnimationMixer(pilot);
+        guideMixer.clipAction(stir).play();
+      }
+    });
   }
 
   function loadCook() {
@@ -2660,7 +2697,7 @@ export function initScene(canvas, onHotspot, opts = {}) {
       dot.className = 'dot';
       dot.setAttribute('aria-hidden', 'true');
       el.append(dot, document.createTextNode(labelFor(hs.key)));
-      el.addEventListener('click', () => onHotspot(hs.key));
+      el.addEventListener('click', () => focusThenOpen(hs));
       el.addEventListener('mouseenter', () => { hs._hover = true; });
       el.addEventListener('mouseleave', () => { hs._hover = false; });
       pinWrap.appendChild(el);
@@ -2827,6 +2864,13 @@ export function initScene(canvas, onHotspot, opts = {}) {
     camera.lookAt(_look);
   }
 
+  // The live home page walks the visitor in on its own once the stall is open.
+  if (opts.autoSeat && phase === 'street') {
+    const walkIn = () => setTimeout(() => takeSeat(), 700);
+    if (window.__nbOpened) walkIn();
+    else document.addEventListener('nb:opened', walkIn, { once: true });
+  }
+
   function takeSeat() {
     if (disposed || phase !== 'street') return;
     if (motionState().paused) {
@@ -2845,6 +2889,7 @@ export function initScene(canvas, onHotspot, opts = {}) {
 
   function seated() {
     phase = 'seated';
+    document.dispatchEvent(new CustomEvent('nb:seated'));
     try { sessionStorage.setItem(seatVisitKey, 'seated'); } catch { /* visit-only scene state */ }
     cam.az = cam.azT; cam.el = cam.elT; cam.r = cam.rT;
     if (seatGlowMat) seatGlowMat.visible = false;
@@ -2931,7 +2976,10 @@ export function initScene(canvas, onHotspot, opts = {}) {
     if (phase === 'sitting') return;
     if (!movedFar && performance.now() - dnT < 500) tryClick();
   };
+  // A plain wheel scrolls the page past the stall. Trackpad pinch arrives as a
+  // ctrl+wheel, and only that zooms the camera.
   const onWheel = (e) => {
+    if (!e.ctrlKey) return;
     e.preventDefault();
     if (phase !== 'seated') return;
     userMoved = true;
@@ -2952,6 +3000,76 @@ export function initScene(canvas, onHotspot, opts = {}) {
   canvas.addEventListener('pointercancel', onCancel);
   canvas.addEventListener('wheel', onWheel, { passive: false });
 
+  function isInside(o, root) {
+    for (let n = o; n; n = n.parent) if (n === root) return true;
+    return false;
+  }
+
+  /* ---------- walk the eye to a sign before its page opens ---------- */
+  // The camera glides in under the noren to the thing you picked, the book
+  // opens when it arrives, and closing the book glides back. Tests and
+  // reduced motion open straight away.
+  const FOCUS_IN = 1.0, FOCUS_OUT = 0.8;
+  let focus = null;
+  const _focusFrom = new THREE.Vector3(), _focusLook = new THREE.Vector3();
+  function focusThenOpen(hsOrKey) {
+    const hs = typeof hsOrKey === 'string' ? hotspots.find((h) => h.key === hsOrKey) : hsOrKey;
+    if (!hs) return;
+    if (TESTING || motionState().paused || focus) { onHotspot(hs.key); return; }
+    const look = hs.key === 'guide'
+      ? hs.obj.getWorldPosition(new THREE.Vector3()).add(new THREE.Vector3(0, 1.55, 0))
+      : (hs.anchor ? hs.anchor.clone() : hs.obj.getWorldPosition(new THREE.Vector3()));
+    // duck under the noren and stop about two metres short of the thing
+    const pos = new THREE.Vector3(look.x * 0.92, 1.72, Math.min(1.9, look.z + 2.1));
+    focus = { key: hs.key, look, pos, start: performance.now() / 1000, back: false, opened: false };
+    if (pinWrap) pinWrap.style.visibility = 'hidden';
+    document.body.classList.add('scene-focusing');
+    hideHint();
+  }
+  /* ---------- leaving the stall as the page scrolls ---------- */
+  // The camera steps back and rises while the street sinks into the page's
+  // own black. The lanterns ignore fog, so they are the last thing to go.
+  const _pageFog = new THREE.Color(0x0a0a0b), _nightFog = new THREE.Color(0x110f14);
+  let leaveAt = 0;
+  function applyLeave() {
+    // its own clock: this follows the scroll even while motion is paused
+    const now = performance.now();
+    const dt = leaveAt ? Math.min(0.1, (now - leaveAt) / 1000) : 0;
+    leaveAt = now;
+    scrollP += (scrollTarget - scrollP) * Math.min(1, dt * 7);
+    if (Math.abs(scrollTarget - scrollP) < 0.0005) scrollP = scrollTarget;
+    const e = scrollP * scrollP * (3 - 2 * scrollP);
+    scene.fog.near = FOG_NEAR + (1.2 - FOG_NEAR) * e;
+    scene.fog.far = FOG_FAR + (8.5 - FOG_FAR) * e;
+    scene.fog.color.copy(_nightFog).lerp(_pageFog, e);
+    renderer.toneMappingExposure = EXPOSURE - 0.3 * e;
+    if (e <= 0) return;
+    camera.position.y += 2.2 * e;
+    camera.position.z += 4.2 * e;
+    _leaveLook.copy(target).lerp(_lanternLine, e);
+    camera.lookAt(_leaveLook);
+  }
+  const easeInOutCubic = (u) => (u < 0.5 ? 4 * u * u * u : 1 - Math.pow(-2 * u + 2, 3) / 2);
+  function applyFocus() {
+    if (!focus) return;
+    const now = performance.now() / 1000;
+    const span = focus.back ? FOCUS_OUT : FOCUS_IN;
+    const u = Math.min(1, (now - focus.start) / span);
+    const e = easeInOutCubic(focus.back ? 1 - u : u);
+    _focusFrom.copy(camera.position);
+    camera.position.lerpVectors(_focusFrom, focus.pos, e);
+    _focusLook.copy(target).lerp(focus.look, e);
+    camera.lookAt(_focusLook);
+    if (!focus.back && u >= 1 && !focus.opened) {
+      focus.opened = true;
+      onHotspot(focus.key);
+    } else if (focus.back && u >= 1) {
+      focus = null;
+      if (pinWrap) pinWrap.style.visibility = '';
+      document.body.classList.remove('scene-focusing');
+    }
+  }
+
   function rootHotspot(o) {
     let n = o;
     while (n) { if (n.userData && n.userData.hotspot) return n.userData.hotspot; n = n.parent; }
@@ -2965,7 +3083,8 @@ export function initScene(canvas, onHotspot, opts = {}) {
     const k = rootHotspot(hit.object);
     if (!k) return;
     if (k === 'seat') { takeSeat(); return; }
-    if (phase === 'seated') onHotspot(k); // the stall is only clickable once you sit
+    // the stall is only clickable once you sit
+    if (phase === 'seated') focusThenOpen(hotspots.find((h) => h.key === k && isInside(hit.object, h.obj)) || k);
   }
   function updateHover() {
     if (bookOpen || phase === 'sitting') { canvas.classList.remove('pointing'); return; }
@@ -3035,6 +3154,7 @@ export function initScene(canvas, onHotspot, opts = {}) {
   function frame() {
     if (disposed) return;
     raf = requestAnimationFrame(frame);
+    if (offscreen) return;
     const staticScene = motionState().paused || pageHidden;
     const poseDt = Math.min(advanceSceneClock(), 0.5);
     // Locomotion stays capped so one stalled frame cannot teleport a walker.
@@ -3079,6 +3199,8 @@ export function initScene(canvas, onHotspot, opts = {}) {
         target.z + cam.r * Math.cos(cam.el) * Math.cos(cam.az)
       );
       camera.lookAt(target);
+      applyLeave();
+      applyFocus();
     }
 
     if (guideMixer) guideMixer.update(dt);
@@ -3196,8 +3318,17 @@ export function initScene(canvas, onHotspot, opts = {}) {
       if (disposed) return;
       advanceSceneClock();
       bookOpen = v;
+      if (!v && focus && focus.opened && !focus.back) { focus.back = true; focus.start = performance.now() / 1000; }
       hideHint();
       updateOrderUI();
+    },
+    getPhase: () => phase,
+    setScrollProgress(v) { scrollTarget = Math.max(0, Math.min(1, v)); },
+    setOffscreen(v) {
+      if (disposed || offscreen === !!v) return;
+      advanceSceneClock();
+      offscreen = !!v;
+      pageHidden = document.hidden || offscreen;
     },
     setMotionPaused,
     getMotionState: motionState,

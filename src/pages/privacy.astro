@@ -1,0 +1,29 @@
+---
+import ReadingLayout from '../layouts/ReadingLayout.astro';
+import { CONTACT, SITE } from '../data/content';
+---
+
+<ReadingLayout title="Privacy" description={`How ${SITE.name} handles your data: no cookies and no tracking.`}>
+  <main class="reading-main">
+    <span class="reading-kicker">Privacy</span>
+    <h1>No cookies, no tracking.</h1>
+    <p class="reading-deck">This is a personal portfolio. It does not use cookies, analytics or advertising, and it does not build a profile of you.</p>
+    <div class="project-body">
+      <h2>What your browser stores</h2>
+      <p>Two small entries, both only so the site works the way you asked. Nothing is sent anywhere.</p>
+      <ul>
+        <li><code>nightbowl:scene-motion</code> in local storage. Saved only if you press Pause motion, so the stall stays still next time. You can clear it in your browser settings.</li>
+        <li><code>nightbowl:seated-this-visit</code> in session storage. Remembers that you already sat down, so the walk-in does not replay in this tab. It disappears when you close the tab.</li>
+      </ul>
+      <p>Because these are needed for features you use, they do not need consent under the EU ePrivacy rules. That is why there is no cookie banner.</p>
+
+      <h2>Hosting and fonts</h2>
+      <p>The site is hosted on Cloudflare. Like any web host, Cloudflare processes your IP address to deliver the pages and protect the site from attacks.</p>
+      <p>Fonts are currently loaded from Google Fonts, so your browser also connects to Google, which receives your IP address. See <a href="https://policies.google.com/privacy" target="_blank" rel="noopener">Google's privacy policy</a>.</p>
+
+      <h2>Who is responsible</h2>
+      <p>{SITE.ownerName}{CONTACT.email && <>, reachable at <a href={`mailto:${encodeURIComponent(CONTACT.email)}`}>{CONTACT.email}</a></>}. If you email me, I use your message only to reply.</p>
+      <p>Under the GDPR you can ask what data I hold about you, and ask me to correct or delete it. You can also complain to the Finnish Data Protection Ombudsman at <a href="https://tietosuoja.fi/en" target="_blank" rel="noopener">tietosuoja.fi</a>.</p>
+    </div>
+  </main>
+</ReadingLayout>
