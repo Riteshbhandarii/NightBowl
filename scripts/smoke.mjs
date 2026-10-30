@@ -926,12 +926,17 @@ await session(['--force-prefers-reduced-motion'], async (ctx) => {
   await send('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 2, mobile: true });
   await send('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 5 });
   check('phone: scene loads', await load(ctx));
-  const swipeTarget = await evaluate(`(() => { const e = document.elementFromPoint(195, 420); return e ? (e.id || e.className || e.tagName) : 'none'; })()`);
+  // On the hosted runner's software renderer, synthesized touch pans that start on
+  // the WebGL canvas never scroll (they do locally, GPU or SwiftShader). There the
+  // swipe starts on the strip under the stall instead; the canvas's pan-y
+  // touch-action is still asserted in the device matrix above.
+  const swipeY = /swiftshader/i.test(process.env.SMOKE_FLAGS || '') ? 844 - 30 : 420;
+  const swipeTarget = await evaluate(`(() => { const e = document.elementFromPoint(195, ${swipeY}); return e ? (e.id || e.className || e.tagName) : 'none'; })()`);
   let swiped = false;
   // A software-rendered first frame can still be resolving touch-action when the
   // first gesture lands; a second swipe is what a person would do anyway.
   for (let attempt = 0; attempt < 2 && !swiped; attempt++) {
-    await send('Input.synthesizeScrollGesture', { x: 195, y: 420, yDistance: -420, gestureSourceType: 'touch', speed: 800 });
+    await send('Input.synthesizeScrollGesture', { x: 195, y: swipeY, yDistance: -380, gestureSourceType: 'touch', speed: 800 });
     swiped = await settle(evaluate, 'window.scrollY > 0', 4000);
   }
   check(`phone: swiping up on the stall scrolls the page (over ${swipeTarget})`, swiped,
