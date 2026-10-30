@@ -898,6 +898,16 @@ await session(['--force-prefers-reduced-motion'], async (ctx) => {
 });
 
 // ---- pass 6: weak or disabled WebGL must leave the content UI usable ----
+// Software-rendered CI frames are slow, so scroll effects land late: wait for them.
+async function settle(evaluate, expression, ms = 6000) {
+  const end = Date.now() + ms;
+  while (Date.now() < end) {
+    if (await evaluate(expression)) return true;
+    await sleep(150);
+  }
+  return false;
+}
+
 // ---- the home page scrolls past the stall into the portfolio ----
 console.log('\nhome scrolls past the stall');
 await session(['--force-prefers-reduced-motion'], async (ctx) => {
@@ -905,11 +915,10 @@ await session(['--force-prefers-reduced-motion'], async (ctx) => {
   await send('Emulation.setDeviceMetricsOverride', { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false });
   check('desktop: scene loads', await load(ctx));
   await send('Input.dispatchMouseEvent', { type: 'mouseWheel', x: 720, y: 450, deltaX: 0, deltaY: 600 });
-  await sleep(600);
-  check('desktop: mouse wheel over the stall scrolls the page', await evaluate('window.scrollY') > 0,
+  check('desktop: mouse wheel over the stall scrolls the page', await settle(evaluate, 'window.scrollY > 0'),
     `scrollY=${await evaluate('window.scrollY')}`);
   await evaluate(`document.getElementById('contact').scrollIntoView()`);
-  await sleep(400);
+  await settle(evaluate, `document.body.classList.contains('past-hero')`);
   const past = await evaluate(`({ past: document.body.classList.contains('past-hero'),
     pill: getComputedStyle(document.getElementById('sceneMotionControl')).pointerEvents })`);
   check('desktop: leaving the stall pauses it and hides its controls', past.past && past.pill === 'none', JSON.stringify(past));
@@ -918,8 +927,7 @@ await session(['--force-prefers-reduced-motion'], async (ctx) => {
   await send('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 5 });
   check('phone: scene loads', await load(ctx));
   await send('Input.synthesizeScrollGesture', { x: 195, y: 420, yDistance: -420, gestureSourceType: 'touch', speed: 800 });
-  await sleep(600);
-  check('phone: swiping up on the stall scrolls the page', await evaluate('window.scrollY') > 0,
+  check('phone: swiping up on the stall scrolls the page', await settle(evaluate, 'window.scrollY > 0'),
     `scrollY=${await evaluate('window.scrollY')}`);
   check('home scroll has no uncaught exceptions', errors.length === 0, errors.slice(0, 2).join(' | '));
 });
@@ -947,8 +955,7 @@ await session([], async (ctx) => {
   }
   check('live: the walk-in finishes and the page unlocks', released, `${Date.now() - started}ms`);
   await send('Input.dispatchMouseEvent', { type: 'mouseWheel', x: 720, y: 450, deltaX: 0, deltaY: 600 });
-  await sleep(600);
-  check('live: after the walk-in the page scrolls into the portfolio', await evaluate('window.scrollY') > 0);
+  check('live: after the walk-in the page scrolls into the portfolio', await settle(evaluate, 'window.scrollY > 0'));
   check('live intro has no uncaught exceptions', errors.length === 0, errors.slice(0, 2).join(' | '));
 });
 
