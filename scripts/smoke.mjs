@@ -817,7 +817,7 @@ await session(['--force-prefers-reduced-motion'], async (ctx) => {
     check(`${device.name}: shell has no sideways overflow`,
       shell.overflowX <= 0.5, `x=${shell.overflowX} y=${shell.overflowY}`);
     if (device.touch) {
-      check(`${device.name}: canvas leaves vertical swipes to the page`, shell.touchAction === 'pan-y', shell.touchAction);
+      check(`${device.name}: canvas owns touch gestures (dragging looks around, never scrolls)`, shell.touchAction === 'none', shell.touchAction);
     }
 
     if (device.name === 'phone landscape') {
@@ -927,17 +927,22 @@ await session(['--force-prefers-reduced-motion'], async (ctx) => {
   await send('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 5 });
   check('phone: scene loads', await load(ctx));
   // Synthesized touch pans never scroll in the hosted runner's GPU-less Chrome, on any
-  // element (canvas or plain link), so there the gesture cannot be measured; the
-  // canvas's pan-y touch-action is still asserted in the device matrix above.
+  // element, so there the gestures cannot be measured; the canvas's touch-action is
+  // still asserted in the device matrix above.
   if (/swiftshader/i.test(process.env.SMOKE_FLAGS || '')) {
     console.log('  skip  phone: touch-swipe scrolling is not measurable on the software renderer');
   } else {
+    await send('Input.synthesizeScrollGesture', { x: 195, y: 420, yDistance: -380, gestureSourceType: 'touch', speed: 800 });
+    await sleep(1200);
+    check('phone: dragging on the stall looks around without scrolling the page', await evaluate('window.scrollY') === 0,
+      `scrollY=${await evaluate('window.scrollY')}`);
+    const stripY = await evaluate(`Math.round(document.querySelector('.home-peek').getBoundingClientRect().top + 30)`);
     let swiped = false;
     for (let attempt = 0; attempt < 2 && !swiped; attempt++) {
-      await send('Input.synthesizeScrollGesture', { x: 195, y: 420, yDistance: -380, gestureSourceType: 'touch', speed: 800 });
+      await send('Input.synthesizeScrollGesture', { x: 60, y: stripY, yDistance: -380, gestureSourceType: 'touch', speed: 800 });
       swiped = await settle(evaluate, 'window.scrollY > 0', 4000);
     }
-    check('phone: swiping up on the stall scrolls the page', swiped, `scrollY=${await evaluate('window.scrollY')}`);
+    check('phone: swiping the strip under the stall scrolls into the portfolio', swiped, `scrollY=${await evaluate('window.scrollY')}`);
   }
   check('home scroll has no uncaught exceptions', errors.length === 0, errors.slice(0, 2).join(' | '));
 });
