@@ -9,5 +9,15 @@ exports `public/models/cook-pilot.glb`.
       /Applications/Blender.app/Contents/MacOS/Blender -b -P tools/blender/cook-pilot.py
 
 `COOK_RENDER=1 COOK_OUT=/some/dir/` renders front and close-up stills instead.
-The site only loads the pilot when the URL has `?cook=pilot`; it rides on the
-stand-in cook's root and does not animate yet.
+
+The clothes, hair and eyebrows come from MakeHuman's CC0 system assets
+(`male_casualsuit02`, `short02`, `eyebrow001`), released as CC0 by the MakeHuman
+copyright holders. Download
+https://files2.makehumancommunity.org/asset_packs/makehuman_system_assets/makehuman_system_assets_cc0.zip,
+unzip it, and point `MH_ASSETS` at its folder (default `~/makehuman-assets/sys`).
+The look follows how ramen shop cooks dress: black T-shirt, dark trousers, a
+twisted towel tied round the head, and an indigo waist apron.
+The site only loads the cook when the URL has `?cook=pilot`. He rides on the
+code-built stand-in cook: his arms and legs are solved with two-bone IK onto the
+stand-in's hands and feet every frame, so he stirs, reads orders, carries,
+serves and walks exactly where the tested stand-in does.
