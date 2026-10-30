@@ -2631,8 +2631,15 @@ export function initScene(canvas, onHotspot, opts = {}) {
       const pilot = gltf.scene;
       pilot.traverse((n) => { if (n.isMesh) { n.frustumCulled = false; n.userData.pilot = true; } });
       standIn.traverse((n) => { if (n.isMesh && !n.userData.pilot && n.geometry !== _blobGeo) n.visible = false; });
+      pilot.position.set(-0.2, 0, 0.08); // a step nearer the pot than the stand-in stood
       standIn.add(pilot);
       pilot.traverse((n) => { n.userData.hotspot = 'guide'; });
+      // the stir loop baked in Blender; the frame loop already advances guideMixer
+      const stir = gltf.animations.find((a) => /stir/i.test(a.name)) || gltf.animations[0];
+      if (stir) {
+        guideMixer = new THREE.AnimationMixer(pilot);
+        guideMixer.clipAction(stir).play();
+      }
     });
   }
 
