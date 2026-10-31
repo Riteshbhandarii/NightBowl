@@ -272,17 +272,77 @@ for row_x in (cx0 - 0.065, cx0 + 0.065):
         bt.data.materials.append(KNOT)
         weigh(bt, trunk)
 
+for o in [o for o in bpy.data.objects if o.name.startswith(('cook_jacket', 'cook_sleeve', 'cook_cuff', 'cook_collar', 'cook_placket', 'cook_button'))]:
+    bpy.data.objects.remove(o)
+
+# Kitchen whites from MakeHuman's CC0 wardrobe (male_casualsuit02, a button-up shirt and
+# trousers), fitted and rigged by MPFB, re-coloured: a white shirt and dark trousers.
+MH = os.environ.get('MH_ASSETS', os.path.expanduser('~/makehuman-assets/sys'))
+suit = HS.add_mhclo_asset(MH + '/clothes/male_casualsuit02/male_casualsuit02.mhclo', body, asset_type='Clothes',
+                          subdiv_levels=0, material_type='MAKESKIN')
+suit.name = 'cook_suit'
+def tex(path, size, colour):
+    img = bpy.data.images.load(path)
+    if img.size[0] > size: img.scale(size, size)
+    img.colorspace_settings.name = 'sRGB' if colour else 'Non-Color'
+    return img
+def cloth(name, base, normal_img, ao_img):
+    m = bpy.data.materials.new(name); m.use_nodes = True
+    nt = m.node_tree; b = nt.nodes['Principled BSDF']
+    b.inputs['Roughness'].default_value = 0.85
+    ao = nt.nodes.new('ShaderNodeTexImage'); ao.image = ao_img
+    mix = nt.nodes.new('ShaderNodeMix'); mix.data_type = 'RGBA'; mix.blend_type = 'MULTIPLY'
+    mix.inputs['Factor'].default_value = 0.9
+    mix.inputs['A'].default_value = (*base, 1)
+    nt.links.new(ao.outputs['Color'], mix.inputs['B'])
+    nt.links.new(mix.outputs['Result'], b.inputs['Base Color'])
+    nm = nt.nodes.new('ShaderNodeTexImage'); nm.image = normal_img
+    nmap = nt.nodes.new('ShaderNodeNormalMap'); nmap.inputs['Strength'].default_value = 0.8
+    nt.links.new(nm.outputs['Color'], nmap.inputs['Color']); nt.links.new(nmap.outputs['Normal'], b.inputs['Normal'])
+    return m
+base = MH + '/clothes/male_casualsuit02/male_casualsuit02'
+NORMAL = tex(base + '_normal.png', 1024, False); AO = tex(base + '_ao.png', 1024, False)
+SHIRT = cloth('cook_tee', (0.035, 0.035, 0.04), NORMAL, AO)  # black T-shirt, the ramen-shop standard
+TROUSERS = cloth('cook_trousers', (0.10, 0.10, 0.11), NORMAL, AO)
+suit.data.materials.clear(); suit.data.materials.append(SHIRT); suit.data.materials.append(TROUSERS)
+LEGS = {'thigh_l', 'thigh_r', 'calf_l', 'calf_r', 'foot_l', 'foot_r', 'ball_l', 'ball_r'}
+gname = {g.index: g.name for g in suit.vertex_groups}
+legw = [sum(g.weight for g in v.groups if gname.get(g.group) in LEGS) for v in suit.data.vertices]
+waist_cut = bone_head('pelvis').z - 0.02
+for p in suit.data.polygons:
+    zc = sum((suit.matrix_world @ suit.data.vertices[i].co).z for i in p.vertices) / len(p.vertices)
+    p.material_index = 1 if (sum(legw[i] for i in p.vertices) / len(p.vertices) > 0.5 or zc < waist_cut) else 0
+    p.use_smooth = True
+print('SUIT', len(suit.data.vertices), [m.type for m in suit.modifiers], [m.type for m in body.modifiers])
+
 # hide the skin the clothes cover: no poke-through, and fewer triangles for the web
 covered = body.vertex_groups.new(name='covered_by_clothes')
-covered.add([v.index for v in body.data.vertices if body_only(v) and (W @ v.co).z < NECK_CUT - 0.01 and owner(v) in TORSO | {'neck_01'}], 1.0, 'REPLACE')
-hide = body.modifiers.new('hide_covered', 'MASK'); hide.vertex_group = 'covered_by_clothes'; hide.invert_vertex_group = True
+# (MPFB's own delete group hides the skin under the shirt)
 # trousers from the tights helper, which is already fitted to the legs
 PANTS = mat('cook_trousers', (0.02, 0.02, 0.022), 0.9)
 LEG_BONES = {'pelvis', 'thigh_l', 'thigh_r', 'calf_l', 'calf_r', 'foot_l', 'foot_r'}
-piece('cook_trousers', lambda v: weight(v, {'helper-tights'}) > 0.5 and weight(v, LEG_BONES) > 0.5, 0.004, 0.005, PANTS, smooth=2)
+# trousers come with the suit
+hair_asset = HS.add_mhclo_asset(MH + '/hair/short02/short02.mhclo', body, asset_type='Hair', subdiv_levels=0, material_type='MAKESKIN')
+hair_asset.name = 'cook_hairmesh'
+def darken(ob, rgb):
+    # tint the asset's own texture: dark hair, same strands
+    for slot in ob.material_slots:
+        m = slot.material
+        if not m or not m.use_nodes: continue
+        nt = m.node_tree; bsdf = next((n for n in nt.nodes if n.type == 'BSDF_PRINCIPLED'), None)
+        if not bsdf: continue
+        src = bsdf.inputs['Base Color'].links[0].from_socket if bsdf.inputs['Base Color'].links else None
+        mix = nt.nodes.new('ShaderNodeMix'); mix.data_type = 'RGBA'; mix.blend_type = 'MULTIPLY'
+        mix.inputs['Factor'].default_value = 1.0; mix.inputs['B'].default_value = (*rgb, 1)
+        if src: nt.links.new(src, mix.inputs['A'])
+        else: mix.inputs['A'].default_value = bsdf.inputs['Base Color'].default_value
+        nt.links.new(mix.outputs['Result'], bsdf.inputs['Base Color'])
+darken(hair_asset, (0.16, 0.13, 0.11))
+brows = HS.add_mhclo_asset(MH + '/eyebrows/eyebrow001/eyebrow001.mhclo', body, asset_type='Eyebrows', subdiv_levels=0, material_type='MAKESKIN')
+brows.name = 'cook_brows'
 # hair from the hair helper: short and dark
 HAIR = mat('cook_hair', (0.012, 0.010, 0.009), 0.55)
-piece('cook_hair', lambda v: body_only(v) and weight(v, {'scalp'}) > 0.4, 0.005, 0.01, HAIR, smooth=3)
+piece('cook_hair', lambda v: body_only(v) and weight(v, {'scalp'}) > 0.4, 0.001, 0.0, HAIR, smooth=3)  # dark scalp under the hair mesh
 # eyes from the eye helpers
 EYE = mat('cook_eye', (0.75, 0.72, 0.68), 0.15)
 eyes = piece('cook_eyes', lambda v: weight(v, {'helper-l-eye', 'helper-r-eye'}) > 0.5, 0.0, 0.0, EYE)
@@ -308,64 +368,103 @@ for side in ('helper-l-eye', 'helper-r-eye'):
     d = bpy.context.object; d.name = 'cook_iris_' + side[-5]; d.data.materials.append(IRIS)
     d.parent = rig; d.matrix_parent_inverse = rig.matrix_world.inverted()
 
-# toque blanche, from the references: a tall white pleated hat on a fitted band, with a soft
-# crown that puffs out over the pleats. It sits level on the brow.
-band_z = top - 0.085
-ring = [p for p in head_pts if abs(p.z - band_z) < 0.006]
-cxy = Vector((sum(p.x for p in ring) / len(ring), sum(p.y for p in ring) / len(ring), band_z))
-head_hull = hull2d([(p.x, p.y) for p in head_pts if abs(p.z - band_z) < 0.03])
-rad = 0.0  # per-angle radius below; the fitted band follows the skull, the pleats round it out
-band_r = [ray_hull(head_hull, (cxy.x, cxy.y), 2 * math.pi * k / 96) + 0.024 for k in range(96)]
-mean_r = sum(band_r) / len(band_r)
-TOQUE = mat('cook_toque', (0.86, 0.85, 0.82), 0.9)
-NP = 96  # 48 pleats
-def pleat(k, amp): return amp * (1 if k % 2 else -1)
-profile = [  # (height above the band's lower edge, radius growth, pleat depth)
-    (0.000, 0.000, 0.0), (0.045, 0.000, 0.0),        # the band
-    (0.045, 0.004, 0.004), (0.09, 0.012, 0.006), (0.15, 0.024, 0.006),
-    (0.18, 0.040, 0.004), (0.198, 0.042, 0.002),     # the puff overhangs the pleats
-    (0.212, 0.032, 0.0), (0.222, 0.016, 0.0),        # soft dome
-]
-z0 = band_z - 0.02
-def hat_r(k, h, g, a):
-    # the band hugs the head; higher up the hat rounds out to a circle
-    blend = min(1.0, h / 0.12)
-    return band_r[k] * (1 - blend) + mean_r * blend + g + pleat(k, a)
-rings_t = [[Vector((cxy.x + hat_r(k, h, g, a) * math.cos(2 * math.pi * k / NP),
-                    cxy.y + hat_r(k, h, g, a) * math.sin(2 * math.pi * k / NP), z0 + h)) for k in range(NP)]
-           for h, g, a in profile]
-toque = loft('cook_toque', rings_t, TOQUE)
-bm = bmesh.new(); bm.from_mesh(toque.data)
-top_edge = [v for v in bm.verts if abs(v.co.z - (z0 + profile[-1][0])) < 1e-5]
-cap = bm.verts.new((cxy.x, cxy.y, z0 + 0.226))
-top_sorted = sorted(top_edge, key=lambda v: math.atan2(v.co.y - cxy.y, v.co.x - cxy.x))
-for a, b in zip(top_sorted, top_sorted[1:] + top_sorted[:1]): bm.faces.new((a, b, cap))
-bm.to_mesh(toque.data); bm.free()
-toque.modifiers.new('thick', 'SOLIDIFY').thickness = 0.005
-toque.modifiers.new('soft', 'SUBSURF').levels = 1
-toque.parent = rig; toque.matrix_parent_inverse = rig.matrix_world.inverted()
-# the hair under the hat is never seen; drop it so none of it pokes through the band
+# head towel, tied the way ramen cooks wear it (nejiri hachimaki): a towel twisted into a rope,
+# pulled tight over the hair, low on the brow and lower still at the back, knotted behind
+from mathutils.bvhtree import BVHTree
+TOWEL = mat('cook_towel', (0.03, 0.03, 0.035), 0.95)
+z0 = top - 0.082                               # at the brow
+DROP = 0.022                                   # how much lower it sits at the back
+dg = bpy.context.evaluated_depsgraph_get()
+def world_bvh(objs):
+    verts, polys = [], []
+    for ob in objs:
+        ev = ob.evaluated_get(dg); me = ev.to_mesh(); n = len(verts)
+        verts += [ob.matrix_world @ v.co for v in me.vertices]
+        polys += [[n + i for i in p.vertices] for p in me.polygons]
+        ev.to_mesh_clear()
+    return BVHTree.FromPolygons(verts, polys)
+# the outer surface is the hair where there is hair and the skin elsewhere
+head_bvh = world_bvh([body, bpy.data.objects['cook_hairmesh']])
+STRAND, TWIST_R, PITCH = 0.0068, 0.0058, 0.05  # two strands wound round each other
+N_RING = 96
+path = []
+for k in range(N_RING):
+    a = 2 * math.pi * k / N_RING
+    d = Vector((math.cos(a), math.sin(a), 0))
+    z = z0 - DROP * (1 + math.sin(a)) / 2         # -y is the face, +y the back of the head
+    hit = head_bvh.ray_cast(Vector((head_c.x, head_c.y, z)) + d * 0.25, -d)  # from outside, inward
+    if hit[0] is None: continue
+    path.append((hit[0], d))
+# smooth out the lumps of the hair, then press the rope half into it so it reads as tied tight
+for _ in range(3):
+    path = [((path[k - 1][0] + 2 * path[k][0] + path[(k + 1) % len(path)][0]) / 4, path[k][1]) for k in range(len(path))]
+path = [(p + d * (TWIST_R + STRAND) * 0.45, d) for p, d in path]
+
+def tube(name, pts, bevel, cyclic=False, radii=None):
+    cu = bpy.data.curves.new(name, 'CURVE'); cu.dimensions = '3D'
+    cu.bevel_depth = bevel; cu.bevel_resolution = 2; cu.use_fill_caps = not cyclic
+    sp = cu.splines.new('POLY'); sp.points.add(len(pts) - 1); sp.use_cyclic_u = cyclic
+    for k, p in enumerate(pts):
+        sp.points[k].co = (p.x, p.y, p.z, 1)
+        if radii: sp.points[k].radius = radii[k]
+    ob = bpy.data.objects.new(name, cu); bpy.context.collection.objects.link(ob)
+    bpy.ops.object.select_all(action='DESELECT'); ob.select_set(True); bpy.context.view_layer.objects.active = ob
+    bpy.ops.object.convert(target='MESH'); ob = bpy.context.object
+    ob.data.materials.clear(); ob.data.materials.append(TOWEL)
+    for p in ob.data.polygons: p.use_smooth = True
+    return ob
+
+def twisted(pts, outward, s0=0.0, cyclic=False, r=TWIST_R):
+    # two strands spiralling round the centre line, half a turn apart
+    strands = ([], [])
+    s = s0
+    for k, p in enumerate(pts):
+        if k: s += (p - pts[k - 1]).length
+        nxt, prv = pts[(k + 1) % len(pts)] if cyclic or k + 1 < len(pts) else p, pts[k - 1] if cyclic or k else p
+        t = (nxt - prv).normalized()
+        n = (outward[k] - t * outward[k].dot(t)).normalized(); b = t.cross(n)
+        for j, st in enumerate(strands):
+            ph = 2 * math.pi * s / PITCH + j * math.pi
+            st.append(p + (n * math.cos(ph) + b * math.sin(ph)) * r)
+    return strands
+
+for j, st in enumerate(twisted([p for p, _ in path], [d for _, d in path], cyclic=True)):
+    tube(f'cook_towel_{j}', st, STRAND, cyclic=True)
+# the knot at the back, and the two short ends sticking out of it, twisted and fraying open at the cut
+back, back_d = max(path, key=lambda q: q[0].y)
+bpy.ops.mesh.primitive_uv_sphere_add(segments=16, ring_count=10, radius=0.021, location=back + back_d * 0.01)
+knot = bpy.context.object; knot.name = 'cook_towel_knot'; knot.scale = (1.5, 0.7, 1.0); knot.data.materials.append(TOWEL)
+for p in knot.data.polygons: p.use_smooth = True
+for sgn in (-1, 1):
+    start = back + back_d * 0.012
+    end = start + Vector((sgn * 0.034, 0.022, -0.038))
+    pts = [start.lerp(end, i / 10) + Vector((0, 0.006, 0)) * math.sin(math.pi * i / 10) for i in range(11)]
+    for j, st in enumerate(twisted(pts, [Vector((sgn, 0.6, 0)).normalized()] * len(pts), s0=sgn * 0.01, r=TWIST_R * 0.55)):
+        tube(f'cook_towel_end_{sgn}_{j}', st, STRAND, radii=[0.9 + 0.35 * (i / 10) ** 2 for i in range(11)])
+for o in [o for o in bpy.data.objects if o.name.startswith('cook_towel')]:
+    o.parent = rig; o.matrix_parent_inverse = rig.matrix_world.inverted()
+
 hair = bpy.data.objects['cook_hair']
 bm = bmesh.new(); bm.from_mesh(hair.data)
 bmesh.ops.delete(bm, geom=[v for v in bm.verts if (hair.matrix_world @ v.co).z > z0 + 0.01], context='VERTS')
 bm.to_mesh(hair.data); bm.free()
 
 # waist apron, worn over the coat: wraps the front and sides from the waist to the knee
-APRON = mat('cook_maekake', (0.11, 0.025, 0.018), 0.9)
+APRON = mat('cook_maekake', (0.025, 0.035, 0.075), 0.9)  # indigo, like a ramen shop maekake
 waist_z = bone_head('pelvis').z + 0.08
 def coat_r(z, k):
     # the coat's radius at height z (clamped to the hem ring below it)
     i_ = max(0, min(len(zs) - 1, int(round((z - hem_z) / 0.02))))
     return centres[i_], radii[i_][k] + ease(zs[i_])
 knee_z = bone_head('calf_l').z + 0.02
-ks = [k for k in range(NA) if math.cos(2 * math.pi * k / NA - (-math.pi / 2)) > -0.25]  # front and sides
+ks = [k for k in range(NA) if math.cos(2 * math.pi * k / NA - (-math.pi / 2)) > 0.05]  # front and sides
 ks.sort(key=lambda k: ((2 * math.pi * k / NA - math.pi / 2) % (2 * math.pi)))  # the open edges meet at the back
 rows = []
 for zi in [waist_z - i * 0.03 for i in range(int((waist_z - knee_z) / 0.03) + 1)]:
     row = []
     for k in ks:
         c, r = coat_r(max(zi, hem_z), k)
-        r += 0.012 + 0.03 * max(0.0, (hem_z - zi)) / 0.4  # sits on the coat, hangs a little looser below the hem
+        r += 0.006 + 0.012 * max(0.0, (hem_z - zi)) / 0.4  # sits on the shirt, hangs nearly straight
         a = 2 * math.pi * k / NA
         row.append(Vector((c[0] + r * math.cos(a), c[1] + r * math.sin(a), zi)))
     rows.append(row)
@@ -381,9 +480,7 @@ weigh(ap, [t for t in trunk if t[2] == 'pelvis'])
 ring_w = [coat_r(waist_z, k) for k in range(NA)]
 wr = [Vector((c[0] + (r + 0.016) * math.cos(2 * math.pi * k / NA), c[1] + (r + 0.016) * math.sin(2 * math.pi * k / NA), waist_z + dz))
       for dz in (0.0, 0.03) for k, (c, r) in enumerate(ring_w)]
-tie = loft('cook_apron_tie', [wr[:NA], wr[NA:]], APRON)
-tie.modifiers.new('thick', 'SOLIDIFY').thickness = 0.004
-weigh(tie, [t for t in trunk if t[2] in ('pelvis', 'spine_01')])
+# (no separate waist tie: the apron's top edge is the band)
 
 
 
@@ -421,7 +518,7 @@ if os.environ.get('COOK_EXPORT') == '1':
     # lighter for the web: collapse the dense skin and cloth, keep the rig and the hands
     for o in [o for o in sc.objects if o.type == 'MESH' and o.name.startswith('cook_')]:
         for m in [m for m in o.modifiers if m.type == 'SUBSURF']: o.modifiers.remove(m)  # smooth shading is enough on the web
-    for o in [o for o in sc.objects if o.type == 'MESH' and o.name.startswith(('cook_body', 'cook_jacket', 'cook_trousers', 'cook_hair', 'cook_sleeve', 'cook_apron', 'cook_toque'))]:
+    for o in [o for o in sc.objects if o.type == 'MESH' and o.name.startswith(('cook_body', 'cook_jacket', 'cook_trousers', 'cook_hair', 'cook_sleeve', 'cook_apron'))]:
         d = o.modifiers.new('web', 'DECIMATE'); d.ratio = float(os.environ.get('COOK_RATIO', '0.35')) if o.name in ('cook_body', 'cook_trousers', 'cook_hair') else 0.6
         while o.modifiers[0] != d: bpy.ops.object.modifier_move_up({'object': o}, modifier=d.name) if False else o.modifiers.move(o.modifiers.find(d.name), 0)
     # make the relaxed pose the bind pose, so any viewer shows it without animation
@@ -445,7 +542,7 @@ if os.environ.get('COOK_EXPORT') == '1':
         obj.parent = rig; obj.parent_type = 'BONE'; obj.parent_bone = bone
         obj.matrix_world = mw
     for o in list(sc.objects):
-        if o.name.startswith(('cook_iris', 'cook_headband', 'cook_knot', 'cook_toque')): pin(o, 'head')
+        if o.name.startswith(('cook_iris', 'cook_towel')): pin(o, 'head')
     # ladle in the right hand
     bpy.ops.mesh.primitive_cylinder_add(vertices=10, radius=0.008, depth=0.32, location=(0, 0, -0.15))
     handle = bpy.context.object; handle.name = 'cook_ladle'
@@ -526,7 +623,11 @@ if os.environ.get('COOK_EXPORT') == '1':
             cam.location = loc
             cam.rotation_euler = (Vector((-0.15, -0.2, 1.25)) - cam.location).to_track_quat('-Z', 'Y').to_euler()
             sc.render.filepath = OUT + f'stir_{view}_{f:02d}.png'; bpy.ops.render.render(write_still=True)
+    # textures sized for a figure a few hundred pixels tall, sent as WebP
+    for img in bpy.data.images:
+        if img.size[0] > 512: img.scale(512, max(1, int(512 * img.size[1] / img.size[0])))
     bpy.ops.export_scene.gltf(filepath=os.environ['COOK_GLB'], export_format='GLB', use_selection=True,
+                              export_image_format='WEBP', export_image_quality=80,
                               export_apply=True, export_rest_position_armature=True, export_animations=True,
                               export_yup=True)
     dg = bpy.context.evaluated_depsgraph_get()

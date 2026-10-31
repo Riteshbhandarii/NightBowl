@@ -125,7 +125,8 @@
     "backToStall": "Back to the stall",
     "allEntries": "← All entries",
     "draftDateLabel": "Coming soon",
-    "readingSuffix": "min read"
+    "readingSuffix": "min read",
+    "newsletterButtondown": ""
   },
   "scene": {
     "canvasLabel": "Interactive 3D ramen stall run by Ritesh Bhandari. Scroll down, or use the Open menu button, for a text version of everything.",
@@ -159,7 +160,11 @@
     "orderComplete": "Bowl finished. Another round?",
     "orderEatAgain": "Eat again",
     "orderDone": "Done",
-    "orderReopen": "Order food"
+    "orderReopen": "Order food",
+    "newsletterLine": "Want a heads-up when Ritesh writes something new?",
+    "newsletterPlaceholder": "you@email.com",
+    "newsletterAction": "Notify me",
+    "newsletterFeed": "Follow the Kitchen Log by RSS"
   },
   "chatter": {
     "cook": [

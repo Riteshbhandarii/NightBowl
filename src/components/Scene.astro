@@ -1,7 +1,9 @@
 ---
 // The 3D ramen stall. All wiring lives in ../lib/scene.js
 import { getCollection } from 'astro:content';
-import { CHATTER, NAVIGATION, SCENE, SITE } from '../data/content';
+import { CHATTER, LOG, NAVIGATION, SCENE, SITE } from '../data/content';
+// with a Buttondown username the line takes an email; without one it offers the RSS feed
+const newsletterUser = LOG.newsletterButtondown?.trim();
 
 const projects = (await getCollection('projects'))
   .sort((a, b) => a.data.order - b.data.order)
@@ -85,6 +87,17 @@ const sceneJson = JSON.stringify(sceneContent).replace(/</g, '\\u003c');
   <div id="visitorOrderComplete" class="visitor-order-choices" hidden>
     <button type="button" id="visitorOrderAgain">{SCENE.orderEatAgain}</button>
     <button type="button" id="visitorOrderDone">{SCENE.orderDone}</button>
+  </div>
+  <div class="visitor-newsletter" id="visitorNewsletter" hidden>
+    <p>{SCENE.newsletterLine}</p>
+    {newsletterUser ? (
+      <form action={`https://buttondown.com/api/emails/embed-subscribe/${encodeURIComponent(newsletterUser)}`} method="post" target="_blank">
+        <input type="email" name="email" aria-label="Email" placeholder={SCENE.newsletterPlaceholder} autocomplete="email" required />
+        <button type="submit">{SCENE.newsletterAction}</button>
+      </form>
+    ) : (
+      <a href="/log/rss.xml">{SCENE.newsletterFeed}</a>
+    )}
   </div>
 </aside>
 <div class="visitor-order" id="visitorOrderReopenPanel" hidden>

@@ -156,7 +156,9 @@ await session(viewport, async (ctx) => {
       await screenshot(send, 'diner-0-arrival-planted');
       await evaluate('window.__nightbowl.auditEnd()');
     }
-    await waitFor(evaluate, '!window.__nightbowl.selfCheck().turnover', `turnover ${index} completion`, 260);
+    // The cook walks to the stool and back at his 0.7 m/s pace twice (clear, then
+    // welcome), so the far stool takes about 25 s of cook walking on its own.
+    await waitFor(evaluate, '!window.__nightbowl.selfCheck().turnover', `turnover ${index} completion`, 700);
   }
 
   assert.ok(await evaluate('window.__nightbowl.testEmptyBowl(0)'), 'cook service did not start');
@@ -194,7 +196,9 @@ await session(viewport, async (ctx) => {
   // auditBegin/auditEnd intentionally freeze the scene clock for pose shots.
   // A real long task starves frames without pausing time: retain the >0.5m
   // displacement and planted-foot thresholds against that actual condition.
-  await evaluate('(() => { const end=performance.now()+700; while(performance.now()<end){} })()');
+  // The cook walks at 0.7 m/s after turning on the spot, so the starved stretch
+  // must be long enough for one frame to carry him well over half a metre.
+  await evaluate('(() => { const end=performance.now()+3000; while(performance.now()<end){} })()');
   await evaluate('new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))');
   const afterSparse = await evaluate("window.__nightbowl.auditLocomotion('cook')");
   const rootTravel = horizontal(beforeSparse.root, afterSparse.root);

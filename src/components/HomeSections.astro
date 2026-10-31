@@ -27,7 +27,7 @@ const fmtDate = (d: Date) => d.toLocaleDateString('en-GB', { day: 'numeric', mon
   <header class="home-intro">
     {GUIDE.portrait && <img class="home-portrait" src={GUIDE.portrait} alt={GUIDE.portraitAlt} width="640" height="640" decoding="async" />}
     <div>
-    <p class="eyebrow-dot">{SITE.availability}</p>
+    <p class="availability">{SITE.availability}</p>
     <h1>{SITE.ownerName}</h1>
     <p class="home-role">{SITE.role}</p>
     <p class="home-line">{SITE.positioning}</p>

@@ -202,7 +202,6 @@ export function initScene(canvas, onHotspot, opts = {}) {
   const CHOPSTICK_GRIP_AT_BOWL = new THREE.Vector3(0.27, 0.12, 0.15);
   const CHOPSTICK_GRIP_AT_MOUTH = new THREE.Vector3(0.24, 0, 0.13);
   const POT_STIR_GRIP_OFFSET = new THREE.Vector3(0, 0.14, -0.23);
-  const POT_BRACE_OFFSET = new THREE.Vector3(0, 0.14, -0.10);
   const LAP_HAND_POINT = new THREE.Vector3(0, 0.12, 0.08);
   // During service the carried bowl is positioned from the two hands, so this
   // is intentionally a body-relative carry posture rather than an object reach.
@@ -238,7 +237,14 @@ export function initScene(canvas, onHotspot, opts = {}) {
   let serviceBowl = null;
   let serviceAudit = { started: false, lifted: false, filledCarry: false, completed: false };
   // Visitor meals stay outside the diner AI/refill/departure loop.
-  const visitorOrder = { status: 'choosing', dish: null, dismissed: false, firstBite: false, carrying: false, startedAt: 0, biteAt: 0 };
+  const visitorOrder = { status: 'choosing', dish: null, dismissed: false, firstBite: false, carrying: false, startedAt: 0, biteAt: 0,
+    clearQueued: false, clearing: null, ordered: false };
+  // The cook owes the visitor a walk (bringing the bowl, or taking the empty one
+  // away), so the room holds new jobs for him until he has set off.
+  function visitorWaiting() { return visitorOrder.status === 'queued' || visitorOrder.clearQueued; }
+  function visitorCookBusy() { return visitorOrder.status === 'serving' || !!visitorOrder.clearing; }
+  // He is taking the empty bowl away, and no new order has claimed it yet.
+  function clearingEmptyBowl() { return !!visitorOrder.clearing && ['done', 'choosing'].includes(visitorOrder.status); }
   const orderPanel = document.getElementById('visitorOrder');
   const orderTitle = document.getElementById('visitorOrderTitle');
   const orderChoices = document.getElementById('visitorOrderChoices');
@@ -247,6 +253,7 @@ export function initScene(canvas, onHotspot, opts = {}) {
   const orderComplete = document.getElementById('visitorOrderComplete');
   const orderAgain = document.getElementById('visitorOrderAgain');
   const orderDone = document.getElementById('visitorOrderDone');
+  const orderNewsletter = document.getElementById('visitorNewsletter');
   const orderReopenPanel = document.getElementById('visitorOrderReopenPanel');
   const orderReopen = document.getElementById('visitorOrderReopen');
   const _visitorSeat = new THREE.Vector3(SEAT.x, 1.09, 1.0);
@@ -568,15 +575,16 @@ export function initScene(canvas, onHotspot, opts = {}) {
     g.add(boxG);
     registerHotspot('bill', LABELS.navigation.bill, boxG, new THREE.Vector3(2.55, 1.36, 0.6));
 
+    // Clean cups waiting by the pot: the same cream stoneware the diners drink
+    // from, so the stall reads as one set. Irregular positions collect the
+    // clutter around the hot pot.
     const condiments = new THREE.InstancedMesh(
-      new THREE.CylinderGeometry(0.05, 0.07, 0.34, 12),
-      m(0x2f6f5e, { rough: 0.4, metal: 0.1 }),
+      new THREE.CylinderGeometry(0.07, 0.055, 0.13, 14),
+      m(0xd8c8a5, { rough: 0.86 }),
       3,
     );
-    // Keep the existing instanced jars, now on the worktop rather than hidden
-    // below it. Irregular positions collect the clutter around the hot pot.
     [[-3.03, 0.18], [-2.84, 0.43], [-2.28, 0.55]].forEach(([x, z], index) => {
-      condiments.setMatrixAt(index, new THREE.Matrix4().makeTranslation(x, 1.26, z));
+      condiments.setMatrixAt(index, new THREE.Matrix4().makeTranslation(x, 1.155, z));
     });
     counterCondiments = condiments;
     g.add(condiments);
@@ -1246,13 +1254,14 @@ export function initScene(canvas, onHotspot, opts = {}) {
       const ladle = npc?.userData.tools?.ladle;
       if (ladle) ladle.userData.setStir(circle);
       const grip = objectPointInTorso(npc, ladle?.userData.grip, _ikWorld.set(0, 0, 0), _ikGrip)
-        || _ikGrip.copy(pot).add(POT_STIR_GRIP_OFFSET).setX(npc.userData.rig.armR.sh.position.x);
-      reachArm(p, 'r', grip.y, grip.z, 0, grip.x, npc.userData.rig.armR.sh.position.x);
-      // The free hand braces the near handle instead of vanishing beside the
-      // apron. It stays outside the hot rim while remaining visible front-on.
-      _ikFreeHand.copy(pot).add(POT_BRACE_OFFSET);
-      reachArm(p, 'l', _ikFreeHand.y, _ikFreeHand.z, 0.28);
-      p.lElZ = -0.12;
+        || _ikGrip.copy(pot).add(POT_STIR_GRIP_OFFSET).setX(npc.userData.rig.armL.sh.position.x);
+      // the pot is on his left: he stirs with that hand, not reaching across his body
+      reachArm(p, 'l', grip.y, grip.z, 0, grip.x, npc.userData.rig.armL.sh.position.x);
+      // The free hand rests at the near edge of the work surface in front of him.
+      // A longer reach put it 2.5 cm into the counter; aiming it at the counter
+      // point the way chat does folded the arm up to his chin.
+      reachArm(p, 'r', 0.17, 0.22, -0.16);
+      p.rElZ = 0;
       p.torsoX = 0.10;
       p.torsoY = -0.13;
       p.headX = 0.16;
@@ -1263,21 +1272,45 @@ export function initScene(canvas, onHotspot, opts = {}) {
       p.torsoY = Math.sin(tl * 0.7) * 0.12;
       p.headX = -0.05 + Math.sin(tl * 2.6) * 0.05;
       p.headY = Math.sin(tl * 0.9) * 0.16;
+      // both hands rest on the counter edge; he talks with his head and shoulders,
+      // with only a small lift of the right hand now and then
       const counter = counterPointInTorso(npc, 0.22, _ikCounter);
-      if (counter) reachArm(p, 'r', counter.y + 0.05 + Math.sin(tl * 2.4) * 0.05,
-        counter.z + 0.05 + Math.sin(tl * 3.1) * 0.04, -0.2 + Math.cos(tl * 1.7) * 0.16);
+      if (counter) {
+        const lift = Math.max(0, Math.sin(tl * 1.3)) * 0.035;
+        reachArm(p, 'r', counter.y + 0.06 + lift, counter.z + 0.03, -0.14);
+        reachArm(p, 'l', counter.y + 0.06, counter.z + 0.03, 0.14);
+      }
       p.mouth = flap(tl, npc.userData.ai.mouthPhase);
     },
     wipe(p, tl, npc) {
-      p.torsoX = 0.24;
+      // circles on the counter with the cloth under his palm; he glances at the
+      // work, he is not reading anything
+      p.torsoX = 0.18;
       p.torsoY = -0.12;
-      p.headX = 0.34;
+      p.headX = 0.2;
       const counter = counterPointInTorso(npc, 0.22, _ikCounter);
-      if (counter) reachArm(p, 'r', counter.y + 0.065, counter.z + 0.05,
-        Math.sin(tl * 1.7) * 0.18);
+      if (counter) reachArm(p, 'r', counter.y + 0.058, counter.z + 0.07 + Math.cos(tl * 3.2) * 0.06,
+        Math.sin(tl * 3.2) * 0.22);
       p.rWrX = 2.20;
     },
-    serve(p) {
+    serve(p, tl) {
+      // Arms come up only while a bowl is in his hands (reaching for it, carrying
+      // it, setting it down). Walking out to the diner and back home he walks
+      // with relaxed arms instead of holding an empty carry pose.
+      const hold = service ? [service.T.lift, service.T.place + 0.15]
+        : visitorOrder.status === 'serving' ? [0.7, visitorSchedule().back]
+        : visitorOrder.clearing ? [visitorClearSchedule().leg, Infinity]
+        : activeTurnover && !serviceBowl?.visible ? [Infinity, Infinity] : [0, Infinity];
+      if (tl < hold[0] || tl > hold[1]) {
+        // empty-handed walk: arms hang and swing opposite the steps
+        const walking = guide.userData.serviceWalking ? guide.userData.walkAmount ?? 1 : 0;
+        const phase = (guide.userData.walk?.distance ?? 0) / WALK_STRIDE * Math.PI * 2;
+        p.lShX = Math.sin(phase + Math.PI) * 0.3 * walking; p.lShZ = 0.07;
+        p.rShX = Math.sin(phase) * 0.3 * walking; p.rShZ = -0.07;
+        p.lElX = -0.22; p.rElX = -0.22; p.lElZ = 0; p.rElZ = 0;
+        p.torsoX = 0.03; p.headX = 0.05;
+        return;
+      }
       // Keep each hand on its own side of the bowl and below the face. The old
       // pose crossed both arms onto the same point and lifted the bowl over
       // the cook's eyes.
@@ -1296,7 +1329,6 @@ export function initScene(canvas, onHotspot, opts = {}) {
   const DINER_PLAN = [
     { act: 'eat', w: 5, dur: [28, 42] },
     { act: 'pause', w: 2, dur: [2.5, 4.5] },
-    { act: 'drink', w: 1, dur: [2.6, 3.4] },
   ];
   const COOK_PLAN = [
     { act: 'stir', w: 5, dur: [5, 10] },
@@ -1377,49 +1409,68 @@ export function initScene(canvas, onHotspot, opts = {}) {
     const bowl = diner.userData.table?.bowl;
     if (!bowl) return;
     service = { diner, bowl, startedAt: nowSec(), homeX: guide.position.x, lifted: false, filled: false, placed: false };
+    service.T = serviceSchedule(service);
     serviceAudit = { started: true, lifted: false, filledCarry: false, completed: false };
     guide.userData.ai.locked = true;
     diner.userData.ai.locked = true;
-    setAct(guide, 'serve', 6.2);
-    setAct(diner, 'lookUp', 6.2);
+    setAct(guide, 'serve', service.T.end + 0.2);
+    setAct(diner, 'lookUp', service.T.end + 0.2);
     setBowlFill(serviceBowl, 0);
     serviceBowl.visible = false;
     guide.userData.walkHomeRotation = guide.rotation.y;
     beginWalk(guide);
   }
 
+  // An easy walking pace for the cook. Each leg takes as long as its distance
+  // needs, so a far diner is a longer walk, not a faster one.
+  const COOK_PACE = 0.7; // m/s
+  const walkLeg = (d) => Math.max(1.0, 0.35 + Math.abs(d) / COOK_PACE);
+  function serviceSchedule(s) {
+    const dinerX = s.diner.position.x;
+    const workX = dinerX + (dinerX < 0 ? 0.28 : -0.28);
+    const potX = (cookingPot ? cookingPot.getWorldPosition(_potStationWorld).x : s.homeX) + 0.7;
+    const T = { workX, potX };
+    T.lift = walkLeg(workX - s.homeX);
+    T.toPot = T.lift + 0.65;
+    T.atPot = T.toPot + walkLeg(potX - workX);
+    T.fill = T.atPot + 0.3;
+    T.back = T.atPot + 0.7;
+    T.atDiner = T.back + walkLeg(potX - workX);
+    T.place = T.atDiner + 0.65;
+    T.end = T.place + walkLeg(workX - s.homeX);
+    return T;
+  }
+
   function tickService() {
     if (!service) {
-      if (phase !== 'seated' || beat || visitorOrder.status === 'queued') return;
+      if (phase !== 'seated' || beat || visitorWaiting()) return;
       const empty = diners.find((d) => d.userData.ai?.needsService);
       if (empty) beginService(empty);
       return;
     }
     const s = service;
     const t = nowSec() - s.startedAt;
-    const dinerX = s.diner.position.x;
-    const workX = dinerX + (dinerX < 0 ? 0.28 : -0.28);
-    const potX = cookingPot ? cookingPot.getWorldPosition(_potStationWorld).x : guide.position.x;
+    const T = s.T, workX = T.workX, potStop = T.potX;
 
     // The three things that actually change state latch on elapsed time and run
     // in ascending order, so one slow frame that jumps past a whole phase still
     // performs every step. Gating them on which branch a frame lands in meant a
     // skipped frame left the cook walking to the pot empty-handed.
-    if (t >= 1.0 && !s.lifted) {
+    if (t >= T.lift && !s.lifted) {
       setBowlVisible(s.bowl, false);
       serviceBowl.visible = true;
       setBowlFill(serviceBowl, 0);
       s.lifted = true;
       serviceAudit.lifted = true;
     }
-    if (t >= 2.85 && !s.filled) {
+    if (t >= T.fill && !s.filled) {
       setBowlFill(serviceBowl, 1);
       s.filled = true;
       // The bowl the cook refills must be the one they are holding, with the
       // seat left empty: that ordering is the thing worth asserting.
       serviceAudit.filledCarry = s.lifted && serviceBowl.visible && !s.bowl.visible;
     }
-    if (t >= 4.8 && !s.placed) {
+    if (t >= T.place && !s.placed) {
       setBowlFill(s.bowl, 1);
       s.diner.userData.ai.emptyCounted = false;
       setBowlVisible(s.bowl, true);
@@ -1430,21 +1481,21 @@ export function initScene(canvas, onHotspot, opts = {}) {
     // Each translation spends its opening beat turning, then advances a gait
     // from the distance actually covered. At a station the cook turns back to
     // the counter before lifting, filling or placing the bowl.
-    if (t < 1.0) cookTravelX(s.homeX, workX, t);
-    else if (t < 1.65) {
+    if (t < T.lift) cookTravelX(s.homeX, workX, t / T.lift);
+    else if (t < T.toPot) {
       guide.position.x = workX;
-      faceCookAtStation(s.homeX, workX, t - 1.0);
-    } else if (t < 2.55) cookTravelX(workX, potX + 0.7, (t - 1.65) / 0.9);
-    else if (t < 3.25) {
-      guide.position.x = potX + 0.7;
-      faceCookAtStation(workX, potX + 0.7, t - 2.55);
-    } else if (t < 4.15) cookTravelX(potX + 0.7, workX, (t - 3.25) / 0.9);
-    else if (t < 4.8) {
+      faceCookAtStation(s.homeX, workX, t - T.lift);
+    } else if (t < T.atPot) cookTravelX(workX, potStop, (t - T.toPot) / (T.atPot - T.toPot));
+    else if (t < T.back) {
+      guide.position.x = potStop;
+      faceCookAtStation(workX, potStop, t - T.atPot);
+    } else if (t < T.atDiner) cookTravelX(potStop, workX, (t - T.back) / (T.atDiner - T.back));
+    else if (t < T.place) {
       guide.position.x = workX;
-      faceCookAtStation(potX + 0.7, workX, t - 4.15);
-    } else cookTravelX(workX, s.homeX, (t - 4.8) / 1.2);
+      faceCookAtStation(potStop, workX, t - T.atDiner);
+    } else cookTravelX(workX, s.homeX, (t - T.place) / (T.end - T.place));
 
-    if (t >= 6.0) {
+    if (t >= T.end) {
       guide.position.x = s.homeX;
       s.diner.userData.ai.needsService = false;
       s.diner.userData.ai.locked = false;
@@ -1473,6 +1524,27 @@ export function initScene(canvas, onHotspot, opts = {}) {
     return _carryHands.copy(_handR).sub(_handL).dot(_carryAxis);
   }
   const SERVICE_BOWL_DROP = 0.33;
+  // A bowl moving between the counter and the cook's hands rises a little off
+  // the worktop and never sinks below it while any of it is over the counter.
+  // A straight line from the seat to his hands (lower than the worktop) slid it
+  // through the wood.
+  const _counterBox = new THREE.Box3();
+  const BOWL_R = 0.2;
+  function overCounter(p) {
+    if (!counterTop) return p;
+    if (_counterBox.isEmpty()) visibleBox(counterTop, _counterBox);
+    const dx = Math.max(_counterBox.min.x - p.x, 0, p.x - _counterBox.max.x);
+    const dz = Math.max(_counterBox.min.z - p.z, 0, p.z - _counterBox.max.z);
+    // full support while the bowl overlaps the top, easing off over 12 cm past its edge
+    const w = 1 - Math.min(1, Math.max(0, (Math.hypot(dx, dz) - BOWL_R) / 0.12));
+    if (w > 0) p.y = Math.max(p.y, mix(p.y, _counterBox.max.y + 0.005, w));
+    return p;
+  }
+  function liftBetween(out, from, to, u) {
+    out.copy(from).lerp(to, u);
+    out.y += Math.sin(Math.PI * u) * 0.06;
+    return overCounter(out);
+  }
   function syncServiceBowl() {
     if (!serviceBowl?.visible || !guideRig) return;
     guide.updateMatrixWorld(true);
@@ -1485,21 +1557,23 @@ export function initScene(canvas, onHotspot, opts = {}) {
     if (service) {
       const t = nowSec() - service.startedAt;
       service.bowl.getWorldPosition(_seatBowl);
-      if (t < 1.65) serviceBowl.position.copy(_seatBowl).lerp(_carry, ease01((t - 1.0) / 0.65));
-      else if (t < 4.15) serviceBowl.position.copy(_carry);
-      else serviceBowl.position.copy(_carry).lerp(_seatBowl, ease01((t - 4.15) / 0.65));
+      const T = service.T;
+      if (t < T.toPot) liftBetween(serviceBowl.position, _seatBowl, _carry, ease01((t - T.lift) / 0.65));
+      else if (t < T.atDiner) overCounter(serviceBowl.position.copy(_carry));
+      else liftBetween(serviceBowl.position, _carry, _seatBowl, ease01((t - T.atDiner) / 0.65));
       return;
     }
     const tr = activeTurnover;
     if (!tr || (tr.phase !== 'clear' && tr.phase !== 'welcome')) return;
     const t = nowSec() - tr.phaseAt;
+    const C = turnoverCookTimes(tr);
     tr.diner.userData.table.bowl.getWorldPosition(_seatBowl);
     if (tr.phase === 'clear') {
-      serviceBowl.position.copy(_seatBowl).lerp(_carry, ease01((t - 0.7) / 0.55));
-    } else if (t < 1.4) {
-      serviceBowl.position.copy(_carry);
+      liftBetween(serviceBowl.position, _seatBowl, _carry, ease01((t - C.leg) / 0.55));
+    } else if (t < C.setDown) {
+      overCounter(serviceBowl.position.copy(_carry));
     } else {
-      serviceBowl.position.copy(_carry).lerp(_seatBowl, ease01((t - 1.4) / 0.65));
+      liftBetween(serviceBowl.position, _carry, _seatBowl, ease01((t - C.setDown) / 0.65));
     }
   }
 
@@ -1513,6 +1587,8 @@ export function initScene(canvas, onHotspot, opts = {}) {
     for (const button of orderChoices.querySelectorAll('button')) button.disabled = !!visitorOrder.dish;
     orderSkip.hidden = visitorOrder.status !== 'choosing';
     if (orderComplete) orderComplete.hidden = visitorOrder.status !== 'done';
+    // once they have ordered, a quiet line about new Kitchen Log entries
+    if (orderNewsletter) orderNewsletter.hidden = !visitorOrder.ordered;
     orderStatus.textContent = visitorOrder.status === 'queued' ? LABELS.orderQueued
       : visitorOrder.status === 'serving' ? LABELS.orderServing
         : visitorOrder.status === 'done' && visitorOrder.firstBite ? LABELS.orderComplete
@@ -1524,6 +1600,8 @@ export function initScene(canvas, onHotspot, opts = {}) {
     if (!bowl) {
       bowl = buildRamenBowl(false, true, dish);
       bowl.userData.seatX = SEAT.x;
+      // a cup comes with the bowl, as at the regulars' places, and goes with it
+      bowl.add(pos(mug(0.07, 0.055, 0.13, 0xd8c8a5), 0.24, 0.11, 0.01));
       bowl.userData.steam = addSteam(_visitorSeat.clone().add(new THREE.Vector3(0, 0.22, 0)), 0.13, 2);
       you.userData.table.bowl = bowl;
       scene.add(bowl);
@@ -1537,6 +1615,8 @@ export function initScene(canvas, onHotspot, opts = {}) {
     if (disposed || phase !== 'seated' || visitorOrder.dismissed || visitorOrder.dish || !['house', 'veggie'].includes(dish)) return false;
     visitorOrder.dish = dish;
     visitorOrder.firstBite = false;
+    visitorOrder.clearQueued = false; // the new bowl replaces the empty one
+    visitorOrder.ordered = true;
     delete visitorOrder.completedAt;
     const bowl = visitorBowl(dish);
     bowl.userData.dish = dish;
@@ -1564,28 +1644,37 @@ export function initScene(canvas, onHotspot, opts = {}) {
   }
 
   function tickVisitorService() {
+    if (visitorOrder.clearQueued && !service && !activeTurnover && !beat) {
+      visitorOrder.clearQueued = false;
+      visitorOrder.clearing = { startedAt: nowSec(), homeX: guide.position.x };
+      guide.userData.ai.locked = true;
+      setAct(guide, 'serve', visitorClearSchedule().end + 0.2);
+      guide.userData.walkHomeRotation = guide.rotation.y;
+      beginWalk(guide);
+    }
+    if (visitorOrder.clearing) { tickVisitorClear(); return; }
     if (visitorOrder.status === 'queued') {
       if (service || activeTurnover || beat) return;
       visitorOrder.status = 'serving';
       visitorOrder.startedAt = nowSec();
       visitorOrder.homeX = guide.position.x;
       guide.userData.ai.locked = true;
-      setAct(guide, 'serve', 6.2);
+      setAct(guide, 'serve', visitorSchedule().end + 0.2);
       guide.userData.walkHomeRotation = guide.rotation.y;
       beginWalk(guide);
       updateOrderUI();
     }
     if (visitorOrder.status !== 'serving') return;
     const t = nowSec() - visitorOrder.startedAt;
-    const workX = SEAT.x - 0.28;
-    if (t < 1.4) guide.position.x = visitorOrder.homeX;
-    else if (t < 3.4) cookTravelX(visitorOrder.homeX, workX, (t - 1.4) / 2);
-    else if (t < 4.1) {
-      guide.position.x = workX;
-      faceCookAtStation(visitorOrder.homeX, workX, t - 3.4);
-    } else cookTravelX(workX, visitorOrder.homeX, (t - 4.1) / 1.9);
+    const V = visitorSchedule();
+    if (t < V.go) guide.position.x = visitorOrder.homeX;
+    else if (t < V.there) cookTravelX(visitorOrder.homeX, V.workX, (t - V.go) / (V.there - V.go));
+    else if (t < V.back) {
+      guide.position.x = V.workX;
+      faceCookAtStation(visitorOrder.homeX, V.workX, t - V.there);
+    } else cookTravelX(V.workX, visitorOrder.homeX, (t - V.back) / (V.end - V.back));
     if (t >= 0.7) setBowlVisible(you.userData.table.bowl, true);
-    if (t >= 6) {
+    if (t >= V.end) {
       guide.position.x = visitorOrder.homeX;
       guide.userData.ai.locked = false;
       setAct(guide, 'stir', rnd(6, 10));
@@ -1595,19 +1684,74 @@ export function initScene(canvas, onHotspot, opts = {}) {
     }
   }
 
+  // Once the visitor says they're done, the cook walks round, lifts the empty
+  // bowl and carries it back to his station.
+  function visitorClearSchedule() {
+    const workX = SEAT.x - 0.28;
+    const leg = walkLeg(workX - visitorOrder.clearing.homeX);
+    return { workX, leg, lifted: leg + 0.55, end: 2 * leg + 0.55 };
+  }
+
+  function tickVisitorClear() {
+    const c = visitorOrder.clearing;
+    const t = nowSec() - c.startedAt;
+    const C = visitorClearSchedule();
+    if (t < C.leg) cookTravelX(c.homeX, C.workX, t / C.leg);
+    else if (t < C.lifted) {
+      guide.position.x = C.workX;
+      faceCookAtStation(c.homeX, C.workX, t - C.leg);
+    } else cookTravelX(C.workX, c.homeX, (t - C.lifted) / C.leg);
+    if (t >= C.end) {
+      guide.position.x = c.homeX;
+      guide.userData.ai.locked = false;
+      setAct(guide, 'stir', rnd(6, 10));
+      finishCookWalk();
+      // a new order may already have taken this bowl over; only clear an empty one
+      if (clearingEmptyBowl()) {
+        const bowl = you.userData.table.bowl;
+        setBowlVisible(bowl, false);
+        bowl.position.copy(_visitorSeat);
+        bowl.userData.steam.position.copy(_visitorSeat).add(_ikWorld.set(0, 0.22, 0));
+      }
+      visitorOrder.clearing = null;
+      nextBeatAt = nowSec() + rnd(3, 6);
+    }
+  }
+
+  function visitorSchedule() {
+    const workX = SEAT.x - 0.28;
+    const leg = walkLeg(workX - visitorOrder.homeX);
+    return { workX, go: 1.4, there: 1.4 + leg, back: 1.4 + leg + 0.7, end: 1.4 + 2 * leg + 0.7 };
+  }
+
   function syncVisitorBowl() {
+    if (clearingEmptyBowl()) {
+      const t = nowSec() - visitorOrder.clearing.startedAt;
+      const C = visitorClearSchedule();
+      if (t < C.leg) return;
+      const bowl = you.userData.table.bowl;
+      guide.updateMatrixWorld(true);
+      guideRig.armL.hand.getWorldPosition(_handL);
+      guideRig.armR.hand.getWorldPosition(_handR);
+      _carry.copy(_handL).add(_handR).multiplyScalar(0.5);
+      _carry.y -= 0.18;
+      liftBetween(bowl.position, _visitorSeat, _carry, ease01((t - C.leg) / 0.55));
+      bowl.userData.steam.position.copy(bowl.position).add(_ikWorld.set(0, 0.22, 0));
+      return;
+    }
     if (visitorOrder.status !== 'serving') return;
     const bowl = you.userData.table.bowl;
     const t = nowSec() - visitorOrder.startedAt;
-    visitorOrder.carrying = t >= 1.4 && t < 3.4;
+    const V = visitorSchedule();
+    visitorOrder.carrying = t >= V.go && t < V.there;
     guide.updateMatrixWorld(true);
     guideRig.armL.hand.getWorldPosition(_handL);
     guideRig.armR.hand.getWorldPosition(_handR);
     _carry.copy(_handL).add(_handR).multiplyScalar(0.5);
     _carry.y -= 0.18; // Visitor bowl's unscaled rim is 18cm above its base.
-    if (t < 1.4) bowl.position.copy(_visitorPrep).lerp(_carry, ease01((t - 0.7) / 0.7));
-    else if (t < 3.4) bowl.position.copy(_carry);
-    else bowl.position.copy(_carry).lerp(_visitorSeat, ease01((t - 3.4) / 0.7));
+    if (t < 1.4) liftBetween(bowl.position, _visitorPrep, _carry, ease01((t - 0.7) / 0.7));
+    else if (t < V.there) overCounter(bowl.position.copy(_carry));
+    else liftBetween(bowl.position, _carry, _visitorSeat, ease01((t - V.there) / 0.7));
     bowl.userData.steam.position.copy(bowl.position).add(_ikWorld.set(0, 0.22, 0));
   }
 
@@ -1661,6 +1805,8 @@ export function initScene(canvas, onHotspot, opts = {}) {
   const onOrderDone = () => {
     if (visitorOrder.status !== 'done') return;
     visitorOrder.dismissed = true;
+    // the cook comes round and takes the empty bowl away
+    if (guideRig && you.userData.table.bowl?.visible && !visitorOrder.clearing) visitorOrder.clearQueued = true;
     updateOrderUI();
   };
   const onOrderReopen = () => {
@@ -1777,7 +1923,7 @@ export function initScene(canvas, onHotspot, opts = {}) {
     if (REDUCED) return;
     if (!nextBeatAt) nextBeatAt = nowSec() + 6;
     if (beat) { tickBeat(); return; }
-    if (visitorOrder.status === 'queued') return;
+    if (visitorWaiting()) return;
     if (nowSec() >= nextBeatAt) chooseBeat();
   }
 
@@ -1931,7 +2077,7 @@ export function initScene(canvas, onHotspot, opts = {}) {
 
   function beginTurnover(diner) {
     const ai = diner.userData.ai;
-    if (!ai || activeTurnover || service || beat || visitorOrder.status === 'queued') return false;
+    if (!ai || activeTurnover || service || beat || visitorWaiting()) return false;
     ai.locked = true;
     ai.needsService = false;
     setAct(diner, 'pause', 60);
@@ -1981,9 +2127,23 @@ export function initScene(canvas, onHotspot, opts = {}) {
     activeTurnover = null;
   }
 
-  function startTurnoverCook(fill) {
+  // The cook's legs of a turnover walk at his service pace, like service does.
+  // Fixed times had him jogging whenever the stool was far from the pot.
+  function turnoverCookTimes(tr) {
+    const workX = tr.seatX + (tr.seatX < 0 ? 0.28 : -0.28);
+    const leg = walkLeg(workX - tr.guideHomeX);
+    return {
+      workX, leg,
+      // clear: walk over, lift the empty bowl, walk it back
+      lifted: leg + 0.55, clearEnd: 2 * leg + 0.55,
+      // welcome: carry the full bowl over, set it down, walk back
+      setDown: leg + 0.2, placed: leg + 0.85, welcomeEnd: 2 * leg + 0.85,
+    };
+  }
+
+  function startTurnoverCook(fill, duration) {
     guide.userData.ai.locked = true;
-    setAct(guide, 'serve', 4);
+    setAct(guide, 'serve', duration);
     setBowlFill(serviceBowl, fill);
     serviceBowl.visible = true;
   }
@@ -2046,22 +2206,23 @@ export function initScene(canvas, onHotspot, opts = {}) {
         diner.userData.ai.customerGeneration++;
         setCustomerAppearance(diner);
         guide.position.x = tr.guideHomeX;
-        setAct(guide, 'serve', 4);
+        const C = turnoverCookTimes(tr);
+        setAct(guide, 'serve', C.clearEnd + 0.2);
         guide.userData.ai.locked = true;
         guide.userData.walkHomeRotation = guide.rotation.y;
         beginWalk(guide);
-        setTurnoverPhase(tr, 'clear', 2.6);
+        setTurnoverPhase(tr, 'clear', C.clearEnd);
       }
     } else if (tr.phase === 'clear') {
-      const workX = tr.seatX + (tr.seatX < 0 ? 0.28 : -0.28);
-      if (elapsed < 0.7) cookTravelX(tr.guideHomeX, workX, elapsed / 0.7);
-      else if (elapsed < 1.25) {
-        guide.position.x = workX;
-        faceCookAtStation(tr.guideHomeX, workX, elapsed - 0.7);
-      } else cookTravelX(workX, tr.guideHomeX, (elapsed - 1.25) / 1.15);
-      if (elapsed >= 0.7 && !tr.bowlCleared) {
+      const C = turnoverCookTimes(tr);
+      if (elapsed < C.leg) cookTravelX(tr.guideHomeX, C.workX, elapsed / C.leg);
+      else if (elapsed < C.lifted) {
+        guide.position.x = C.workX;
+        faceCookAtStation(tr.guideHomeX, C.workX, elapsed - C.leg);
+      } else cookTravelX(C.workX, tr.guideHomeX, (elapsed - C.lifted) / C.leg);
+      if (elapsed >= C.leg && !tr.bowlCleared) {
         setBowlVisible(diner.userData.table.bowl, false);
-        startTurnoverCook(0);
+        startTurnoverCook(0, C.clearEnd - elapsed + 0.2);
         tr.bowlCleared = true;
       }
       if (elapsed >= tr.duration) {
@@ -2104,17 +2265,20 @@ export function initScene(canvas, onHotspot, opts = {}) {
       if (elapsed >= tr.duration) {
         diner.position.z = CUSTOMER_Z;
         setAct(diner, 'lookUp', 4);
-        startTurnoverCook(1);
-        setTurnoverPhase(tr, 'welcome', 3.1);
+        const C = turnoverCookTimes(tr);
+        startTurnoverCook(1, C.welcomeEnd + 0.2);
+        guide.userData.walkHomeRotation = guide.rotation.y;
+        beginWalk(guide);
+        setTurnoverPhase(tr, 'welcome', C.welcomeEnd);
       }
     } else if (tr.phase === 'welcome') {
-      const workX = tr.seatX + (tr.seatX < 0 ? 0.28 : -0.28);
-      if (elapsed < 1.2) cookTravelX(tr.guideHomeX, workX, elapsed / 1.2);
-      else if (elapsed < 2.05) {
-        guide.position.x = workX;
-        faceCookAtStation(tr.guideHomeX, workX, elapsed - 1.2);
-      } else cookTravelX(workX, tr.guideHomeX, (elapsed - 2.05) / 0.95);
-      if (elapsed >= 2.05 && !tr.bowlPlaced) {
+      const C = turnoverCookTimes(tr);
+      if (elapsed < C.leg) cookTravelX(tr.guideHomeX, C.workX, elapsed / C.leg);
+      else if (elapsed < C.placed) {
+        guide.position.x = C.workX;
+        faceCookAtStation(tr.guideHomeX, C.workX, elapsed - C.leg);
+      } else cookTravelX(C.workX, tr.guideHomeX, (elapsed - C.placed) / C.leg);
+      if (elapsed >= C.placed && !tr.bowlPlaced) {
         setBowlFill(diner.userData.table.bowl, 1);
         setBowlVisible(diner.userData.table.bowl, true);
         serviceBowl.visible = false;
@@ -2571,7 +2735,7 @@ export function initScene(canvas, onHotspot, opts = {}) {
     ladle.userData.grip = new THREE.Object3D();
     const ladleEnd = objectPointInTorso(guide, cookingPot, POT_BROTH_POINT, new THREE.Vector3());
     ladle.userData.grip.position.copy(ladleEnd).add(POT_STIR_GRIP_OFFSET);
-    ladle.userData.grip.position.x = guideRig.armR.sh.position.x;
+    ladle.userData.grip.position.x = guideRig.armL.sh.position.x;
     ladle.add(ladle.userData.grip);
     // The scoop terminates below the open rim and near the broth centre. The
     // old endpoint sat behind the closed lid, so neither contact was readable.
@@ -2587,6 +2751,17 @@ export function initScene(canvas, onHotspot, opts = {}) {
     ladle.userData.scoop.position.copy(ladleEnd);
     ladle.add(ladle.userData.scoop);
     ladle.userData.center = new THREE.Vector3();
+    // re-aim the handle so it runs from the scoop through a given grip (torso
+    // space), and `past` beyond it, out the top of the fist
+    ladle.userData.gripAt = (grip, past = 0) => {
+      const end = ladle.userData.lastEnd || ladleEnd;
+      ladle.userData.grip.position.copy(grip);
+      const top = grip.clone().addScaledVector(end.clone().sub(grip).normalize(), -past);
+      const vector = end.clone().sub(top);
+      handle.position.copy(top).addScaledVector(vector, 0.5);
+      handle.scale.y = vector.length() / ladleVector.length();
+      handle.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), vector.clone().normalize());
+    };
     ladle.userData.end = new THREE.Vector3();
     // Pivot the handle from the hand while the scoop traces a visible circle
     // below the broth surface. Moving the entire utensil a centimetre made it
@@ -2598,7 +2773,7 @@ export function initScene(canvas, onHotspot, opts = {}) {
       end.z += Math.sin(angle) * 0.055;
       end.y += Math.sin(angle * 2) * 0.012;
       ladle.userData.grip.position.copy(center).add(POT_STIR_GRIP_OFFSET);
-      ladle.userData.grip.position.x = guideRig.armR.sh.position.x;
+      ladle.userData.grip.position.x = guideRig.armL.sh.position.x;
       ladle.userData.grip.position.y += Math.sin(angle) * 0.012;
       ladle.userData.grip.position.z += Math.cos(angle) * 0.012;
       const vector = end.clone().sub(ladle.userData.grip.position);
@@ -2607,13 +2782,14 @@ export function initScene(canvas, onHotspot, opts = {}) {
       handle.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), vector.clone().normalize());
       scoop.position.copy(end);
       ladle.userData.scoop.position.copy(end);
+      ladle.userData.lastEnd = end;
     };
     guideRig.torso.add(ladle);
-    const cloth = pos(box(0.16, 0.012, 0.12, 0xd7c9a6, { rough: 1 }), 0, -0.30, 0.08);
+    const cloth = pos(box(0.22, 0.012, 0.18, 0xe9e4d8, { rough: 1 }), 0, -0.30, 0.08);
     cloth.rotation.x = 0.16;
     cloth.visible = false;
     guideRig.armR.wrist.add(cloth);
-    guide.userData.tools = { ladle, ladleHand: 'R', cloth };
+    guide.userData.tools = { ladle, ladleHand: 'L', cloth };
     addBlobShadow(guide, 0.4, 0.7);
     initAI(guide, 'cook', standingPose);
     scene.add(guide);
@@ -2625,22 +2801,262 @@ export function initScene(canvas, onHotspot, opts = {}) {
   // Preview of the Blender-built cook (issue #79): the new model rides on the
   // stand-in's root so it keeps its place and walk; the stand-in's own body is
   // hidden. Only loaded when the URL asks for it.
+  // Preview of the Blender-built cook (issue #79). The code-built stand-in keeps
+  // doing every job (stirring, carrying, serving, refilling, walking) with its
+  // tested poses and its props; the new skeleton copies the stand-in's limb
+  // directions every frame, so the new body does the same thing in the same place.
+  // Only the stand-in's own body is hidden: the ladle, cloth and bowls it holds stay.
+  let pilotCook = null;
+  const COOK_CAM = new URLSearchParams(window.location.search).get('cookcam');
   function dressPilotCook(standIn) {
     new GLTFLoader().load('/models/cook-pilot.glb', (gltf) => {
       if (disposed) { disposeResources(gltf.scene); return; }
-      const pilot = gltf.scene;
-      pilot.traverse((n) => { if (n.isMesh) { n.frustumCulled = false; n.userData.pilot = true; } });
-      standIn.traverse((n) => { if (n.isMesh && !n.userData.pilot && n.geometry !== _blobGeo) n.visible = false; });
-      pilot.position.set(-0.2, 0, 0.08); // a step nearer the pot than the stand-in stood
-      standIn.add(pilot);
-      pilot.traverse((n) => { n.userData.hotspot = 'guide'; });
-      // the stir loop baked in Blender; the frame loop already advances guideMixer
-      const stir = gltf.animations.find((a) => /stir/i.test(a.name)) || gltf.animations[0];
-      if (stir) {
-        guideMixer = new THREE.AnimationMixer(pilot);
-        guideMixer.clipAction(stir).play();
+      const model = gltf.scene;
+      model.traverse((n) => {
+        if (!n.isMesh) return;
+        n.frustumCulled = false;
+        if (/ladle/i.test(n.name)) n.visible = false; // the stand-in's ladle is the real one
+        // glTF keeps only the garments' shading texture; tint it back to the cloth colour
+        for (const mat of [].concat(n.material)) {
+          const tint = { cook_tee: 0x111113, cook_trousers: 0x2a2a2e }[mat.name];
+          if (tint != null) mat.color.setHex(tint);
+          else if (/short0/i.test(mat.name)) mat.color.setRGB(0.16, 0.13, 0.11); // the hair mesh
+        }
+      });
+      const rig = standIn.userData.rig;
+      for (const part of [rig.hip, rig.torso, rig.head, rig.armL.sh, rig.armR.sh, rig.legL.hp, rig.legR.hp]) {
+        part.traverse((n) => { if (n.isMesh && !n.userData.prop) n.userData.standInBody = true; });
+      }
+      // props hang off the wrists and torso; keep them visible
+      for (const t of Object.values(standIn.userData.tools || {})) t?.traverse?.((n) => { n.userData.standInBody = false; });
+      // Hide the stand-in's body by its material, not the mesh: props hang off its
+      // hands (order slip, wipe cloth) and a hidden mesh would hide them too.
+      standIn.traverse((n) => {
+        if (!n.userData.standInBody) return;
+        n.material = [].concat(n.material).map((m) => { const c = m.clone(); c.visible = false; return c; });
+        if (n.material.length === 1) n.material = n.material[0];
+      });
+      // match the stand-in's height so hands land where its props are
+      const box = new THREE.Box3().setFromObject(model);
+      model.scale.setScalar(1.62 / (box.max.y - box.min.y));
+      standIn.add(model);
+      model.traverse((n) => { n.userData.hotspot = 'guide'; });
+      standIn.updateMatrixWorld(true);
+      pilotCook = bindPilot(model, standIn);
+    });
+  }
+
+  const _qa = new THREE.Quaternion(), _qb = new THREE.Quaternion(), _qc = new THREE.Quaternion();
+  const _va = new THREE.Vector3(), _vb = new THREE.Vector3();
+  function bindPilot(model, standIn) {
+    const bones = {};
+    model.traverse((n) => { if (n.isBone) bones[n.name] = n; });
+    const rig = standIn.userData.rig;
+    const worldPos = (o) => o.getWorldPosition(new THREE.Vector3());
+    // pair each side by where it sits, not by name
+    const lx = worldPos(bones.upperarm_l).x, rx = worldPos(bones.upperarm_r).x;
+    const near = (x) => (Math.abs(x - worldPos(rig.armL.sh).x) < Math.abs(x - worldPos(rig.armR.sh).x) ? 'L' : 'R');
+    const arm = { [near(lx)]: 'l', [near(rx)]: 'r' };
+    const leg = arm; // legs share the arms' sides
+    const chain = [];
+    // a bone aims from its joint toward the next joint of the stand-in
+    const aim = (bone, child, from, to) => {
+      if (!bone || !child) return;
+      const restDir = worldPos(child).sub(worldPos(bone)).normalize();
+      const restQ = bone.getWorldQuaternion(new THREE.Quaternion());
+      chain.push({ kind: 'aim', bone, restDir, restQ, from, to });
+    };
+    // a bone turns with a stand-in part (torso, head, hands)
+    const follow = (bone, part) => {
+      if (!bone) return;
+      chain.push({ kind: 'follow', bone, part,
+        restBone: bone.getWorldQuaternion(new THREE.Quaternion()),
+        // the stand-in's parts sit unrotated in its rest pose, so their rest is their parent's turn
+        restPart: part.parent.getWorldQuaternion(new THREE.Quaternion()) });
+    };
+    follow(bones.spine_01, rig.torso);
+    follow(bones.head, rig.head);
+    // Limbs are solved with two-bone IK onto the stand-in's hands and feet, so
+    // his palms land exactly where the props are held and his feet plant where
+    // the stand-in's planted steps land (copying limb angles alone put his longer
+    // arms and legs somewhere else: hands off the ladle, feet sliding).
+    const limb = (upper, lower, end, target, pole, endOffset) => {
+      if (!upper || !lower || !end) return;
+      const S = worldPos(upper), E = worldPos(lower), T = worldPos(end);
+      chain.push({ kind: 'ik', upper, lower, target, pole, endOffset,
+        a: S.distanceTo(E), b: E.distanceTo(T),
+        restDirU: E.clone().sub(S).normalize(), restQU: upper.getWorldQuaternion(new THREE.Quaternion()),
+        restDirL: T.clone().sub(E).normalize(), restQL: lower.getWorldQuaternion(new THREE.Quaternion()) });
+    };
+    for (const S of ['L', 'R']) {
+      const b = arm[S], a = rig['arm' + S], g = rig['leg' + S];
+      limb(bones['upperarm_' + b], bones['lowerarm_' + b], bones['hand_' + b], a.hand, a.elbow, 'palm');
+      limb(bones['thigh_' + leg[S]], bones['calf_' + leg[S]], bones['foot_' + leg[S]], g.shoe, g.knee, 'ankle');
+      // a working hand: fingers closed loosely round whatever it holds
+      for (const f of ['index', 'middle', 'ring', 'pinky'])
+        for (const k of ['01', '02', '03']) bones[`${f}_${k}_${b}`]?.rotateX(0.95);
+      for (const k of ['02', '03']) bones[`thumb_${k}_${b}`]?.rotateX(0.45);
+    }
+    const fist = (side) => ({
+      wrist: bones['hand_' + side], knuckle: bones['middle_01_' + side], restQ: bones['hand_' + side].quaternion.clone(),
+      index: bones['index_01_' + side], pinky: bones['pinky_01_' + side],
+      curl: ['01', '02', '03'].map((k) => bones[`middle_${k}_${side}`]).filter(Boolean),
+    });
+    // How far his belly and apron stand out in front of the pelvis, measured on
+    // the skinned meshes in the rest pose. Only vertices that move with the trunk
+    // count, so hands hanging in front of the apron don't inflate it.
+    const trunk = new Set(['pelvis', 'spine_01', 'spine_02', 'thigh_l', 'thigh_r']);
+    const hip = worldPos(bones.pelvis);
+    const fwd = new THREE.Vector3(0, 0, 1).transformDirection(standIn.matrixWorld).setY(0).normalize();
+    let belly = 0;
+    model.traverse((n) => {
+      if (!n.isSkinnedMesh || /ladle/i.test(n.name)) return;
+      const { skinIndex, skinWeight, position } = n.geometry.attributes;
+      for (let i = 0; i < position.count; i++) {
+        let top = 0;
+        for (let k = 1; k < 4; k++) if (skinWeight.getComponent(i, k) > skinWeight.getComponent(i, top)) top = k;
+        if (!trunk.has(n.skeleton.bones[skinIndex.getComponent(i, top)]?.name)) continue;
+        n.getVertexPosition(i, _va).applyMatrix4(n.matrixWorld);
+        if (_va.y < hip.y - 0.05 || _va.y > hip.y + 0.3) continue;
+        belly = Math.max(belly, _va.sub(hip).dot(fwd));
       }
     });
+    return { chain, model, belly, pelvis: bones.pelvis, fists: { L: fist(arm.L), R: fist(arm.R) } };
+  }
+
+  const _ikS = new THREE.Vector3(), _ikT = new THREE.Vector3(), _ikP = new THREE.Vector3(), _ikE = new THREE.Vector3(), _ikD = new THREE.Vector3();
+  function setWorldRot(bone, restDir, restQ, dir) {
+    _qb.setFromUnitVectors(restDir, dir).multiply(restQ);
+    const parentQ = bone.parent.getWorldQuaternion(_qa);
+    bone.quaternion.copy(parentQ.invert().multiply(_qb));
+    bone.updateMatrixWorld(true);
+  }
+  const _rim = new THREE.Box3(), _side = new THREE.Vector3();
+  // The bowl in his hands right now, from the moment he picks it up until he
+  // lets go of it. `carrying` is the stretch where he walks with it.
+  const _held = { bowl: null, carrying: false };
+  function heldBowl() {
+    _held.bowl = null; _held.carrying = false;
+    if (service && serviceBowl?.visible) {
+      const t = nowSec() - service.startedAt, T = service.T;
+      if (t >= T.lift && t < T.place) { _held.bowl = serviceBowl; _held.carrying = t >= T.toPot && t < T.atDiner; }
+    } else if (activeTurnover && serviceBowl?.visible) {
+      const t = nowSec() - activeTurnover.phaseAt, C = turnoverCookTimes(activeTurnover);
+      _held.bowl = serviceBowl;
+      _held.carrying = activeTurnover.phase === 'clear' ? t >= C.lifted : t < C.leg;
+    } else if (clearingEmptyBowl()) {
+      const t = nowSec() - visitorOrder.clearing.startedAt, C = visitorClearSchedule();
+      if (t >= C.leg) { _held.bowl = you.userData.table.bowl; _held.carrying = t >= C.lifted; }
+    } else if (visitorOrder.status === 'serving') {
+      const t = nowSec() - visitorOrder.startedAt, V = visitorSchedule();
+      if (t >= 0.7 && t < V.there + 0.7) { _held.bowl = you.userData.table.bowl; _held.carrying = visitorOrder.carrying; }
+    }
+    return _held.bowl;
+  }
+  function solveLimb(c) {
+    c.upper.getWorldPosition(_ikS);
+    c.target.getWorldPosition(_ikT);
+    c.pole.getWorldPosition(_ikP);
+    const bowl = c.endOffset === 'palm' && heldBowl();
+    if (bowl) {
+      // carrying: each palm on its own side of the bowl, just under the rim
+      visibleBox(bowl.getObjectByName('bowl') || bowl, _rim);
+      _rim.getCenter(_ikT);
+      _side.set(1, 0, 0).transformDirection(guide.matrixWorld);
+      const half = (_rim.max.x - _rim.min.x) * 0.5;
+      const sign = c.target === guideRig.armR.hand ? 1 : -1;
+      // palm on the side of the bowl just under the rim; the wrist sits outside it
+      _ikT.addScaledVector(_side, sign * (half + 0.075)).setY(_rim.max.y - 0.05);
+      // elbows hang down and a little out, like someone carrying something hot
+      _ikP.copy(_ikS).addScaledVector(_side, sign * 0.22);
+      _ikP.y -= 0.45;
+    } else if (c.endOffset === 'palm') {
+      // the stand-in's hand is a palm; the wrist sits a palm's length back toward the elbow
+      _ikD.copy(_ikT).sub(_ikP).normalize();
+      _ikT.addScaledVector(_ikD, -0.075);
+    } else {
+      _ikT.y += 0.07; // the stand-in's shoe centre is under the ankle
+    }
+    const dir = _ikD.copy(_ikT).sub(_ikS);
+    const d = Math.min(Math.max(dir.length(), 1e-3), c.a + c.b - 1e-4);
+    dir.normalize();
+    const cosA = Math.max(-1, Math.min(1, (c.a * c.a + d * d - c.b * c.b) / (2 * c.a * d)));
+    const sinA = Math.sqrt(1 - cosA * cosA);
+    const n = _ikP.sub(_ikS); n.addScaledVector(dir, -n.dot(dir));
+    if (n.lengthSq() < 1e-8) n.set(0, 0, 1); n.normalize();
+    _ikE.copy(_ikS).addScaledVector(dir, c.a * cosA).addScaledVector(n, c.a * sinA);
+    setWorldRot(c.upper, c.restDirU, c.restQU, _vb.copy(_ikE).sub(_ikS).normalize());
+    _ikT.copy(_ikS).addScaledVector(dir, d);
+    setWorldRot(c.lower, c.restDirL, c.restQL, _vb.copy(_ikT).sub(_ikE).normalize());
+  }
+
+  // The new cook carries a bowl close in front of his stomach, where his arms
+  // can actually hold it, rather than out where the stand-in's longer reach put it.
+  // Its near edge stays a few centimetres clear of his belly and apron.
+  const _fwd = new THREE.Vector3(), _hip = new THREE.Vector3(), _bowlSize = new THREE.Vector3();
+  function carryBowlForPilot() {
+    const bowl = heldBowl();
+    if (!bowl || !_held.carrying) return;
+    _fwd.set(0, 0, 1).transformDirection(guide.matrixWorld).setY(0).normalize();
+    pilotCook.pelvis.getWorldPosition(_hip);
+    visibleBox(bowl.getObjectByName('bowl') || bowl, _rim).getSize(_bowlSize);
+    bowl.position.copy(_hip).addScaledVector(_fwd, pilotCook.belly + _bowlSize.x * 0.5 + 0.04);
+    bowl.position.y = _hip.y + 0.08;
+    overCounter(bowl.position);
+    bowl.updateMatrixWorld(true);
+  }
+
+  // After the arms are solved, close his hand round the ladle: turn the hand so
+  // the handle runs across the palm under the curled fingers, index side up,
+  // then run the handle through the middle of that curl and out past the thumb.
+  const _fist = new THREE.Vector3(), _knuckle = new THREE.Vector3(), _scoopW = new THREE.Vector3();
+  const _across = new THREE.Vector3(), _handleUp = new THREE.Vector3(), _turn = new THREE.Quaternion();
+  function fistHole(f, out) {
+    // the space the fingers close round: between the palm and the middle finger's joints
+    f.wrist.getWorldPosition(out).lerp(f.knuckle.getWorldPosition(_knuckle), 0.8);
+    for (const b of f.curl) out.add(b.getWorldPosition(_knuckle));
+    return out.multiplyScalar(1 / (f.curl.length + 1));
+  }
+  function gripLadle() {
+    for (const f of Object.values(pilotCook.fists)) { f.wrist.quaternion.copy(f.restQ); f.wrist.updateMatrixWorld(true); }
+    const tools = guide?.userData.tools;
+    const ladle = tools?.ladle;
+    if (!ladle?.visible || !ladle.userData.gripAt) return;
+    const f = pilotCook.fists[tools.ladleHand === 'L' ? 'L' : 'R'];
+    guideRig.torso.localToWorld(_scoopW.copy(ladle.userData.lastEnd || ladle.userData.scoop.position));
+    if (f.index && f.pinky) {
+      for (let i = 0; i < 2; i++) {
+        _handleUp.copy(fistHole(f, _fist)).sub(_scoopW).normalize();
+        _across.copy(f.index.getWorldPosition(_knuckle)).sub(f.pinky.getWorldPosition(_va)).normalize();
+        _turn.setFromUnitVectors(_across, _handleUp).multiply(f.wrist.getWorldQuaternion(_qa));
+        f.wrist.quaternion.copy(f.wrist.parent.getWorldQuaternion(_qc).invert().multiply(_turn));
+        f.wrist.updateMatrixWorld(true);
+      }
+    }
+    ladle.userData.gripAt(guideRig.torso.worldToLocal(fistHole(f, _fist)), 0.07);
+  }
+
+  function drivePilot() {
+    if (!pilotCook) return;
+    // the body rides the stand-in's hips, so each step dips like a real step
+    // and the planted foot stays put instead of the leg stretching to reach it
+    pilotCook.model.position.y = guideRig.hip.position.y - 0.8;
+    carryBowlForPilot();
+    for (const c of pilotCook.chain) {
+      if (c.kind === 'ik') { solveLimb(c); continue; }
+      const parentQ = c.bone.parent.getWorldQuaternion(_qa);
+      if (c.kind === 'aim') {
+        const to = c.to.getWorldPosition(_va), from = c.from.getWorldPosition(_vb);
+        const dir = to.sub(from).normalize();
+        _qb.setFromUnitVectors(c.restDir, dir).multiply(c.restQ); // world rotation wanted
+      } else {
+        const now = c.part.getWorldQuaternion(_qc);
+        _qb.copy(now).multiply(c.restPart.clone().invert()).multiply(c.restBone);
+      }
+      c.bone.quaternion.copy(parentQ.invert().multiply(_qb));
+      c.bone.updateMatrixWorld(true);
+    }
+    gripLadle();
   }
 
   function loadCook() {
@@ -2693,10 +3109,7 @@ export function initScene(canvas, onHotspot, opts = {}) {
       const el = document.createElement('button');
       el.className = 'pin';
       el.setAttribute('aria-label', 'Open ' + hs.label);
-      const dot = document.createElement('span');
-      dot.className = 'dot';
-      dot.setAttribute('aria-hidden', 'true');
-      el.append(dot, document.createTextNode(labelFor(hs.key)));
+      el.textContent = labelFor(hs.key);
       el.addEventListener('click', () => focusThenOpen(hs));
       el.addEventListener('mouseenter', () => { hs._hover = true; });
       el.addEventListener('mouseleave', () => { hs._hover = false; });
@@ -3217,8 +3630,8 @@ export function initScene(canvas, onHotspot, opts = {}) {
       // the director only performs for someone who is actually sitting down
       if (phase === 'seated') {
         tickVisitorService();
-        if (visitorOrder.status !== 'serving') tickTurnover();
-        if (!activeTurnover && visitorOrder.status !== 'serving') {
+        if (!visitorCookBusy()) tickTurnover();
+        if (!activeTurnover && !visitorCookBusy()) {
           tickService();
           if (!service) tickDirector();
         }
@@ -3281,6 +3694,14 @@ export function initScene(canvas, onHotspot, opts = {}) {
     updateHover();
     if (phase === 'seated') { updatePins(); updateYouPin(); }
     else { updateSeatPin(t); updateYouPin(); }
+    drivePilot();
+    if (COOK_CAM && guide) {
+      // preview aid: a close camera on the cook (?cookcam=1, or =2 from his side)
+      const at = guide.getWorldPosition(_va);
+      if (COOK_CAM === '2') camera.position.set(at.x - 1.3, at.y + 1.45, at.z + 0.9);
+      else camera.position.set(at.x + 0.35, at.y + 1.5, at.z + 1.55);
+      camera.lookAt(at.x - 0.15, at.y + 1.2, at.z);
+    }
     if (!auditSkipRender) renderer.render(scene, camera);
   }
   orderChoices?.addEventListener('click', onOrderClick);
@@ -3765,7 +4186,7 @@ export function initScene(canvas, onHotspot, opts = {}) {
         visibleBox(serviceBowl, _carryBowlBox);
         const serviceTime = nowSec() - service.startedAt;
         serviceCarryPose = {
-          carrying: serviceTime >= 1.65 && serviceTime < 4.15,
+          carrying: serviceTime >= service.T.toPot && serviceTime < service.T.atDiner,
           handSeparation: carryHandSeparation(),
           bowlTop: _carryBowlBox.max.y,
           headY: _carryHead.y,
