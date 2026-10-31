@@ -198,7 +198,7 @@ await session(viewport, async (ctx) => {
   // displacement and planted-foot thresholds against that actual condition.
   // The cook walks at 0.7 m/s after turning on the spot, so the starved stretch
   // must be long enough for one frame to carry him well over half a metre.
-  await evaluate('(() => { const end=performance.now()+1800; while(performance.now()<end){} })()');
+  await evaluate('(() => { const end=performance.now()+3000; while(performance.now()<end){} })()');
   await evaluate('new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))');
   const afterSparse = await evaluate("window.__nightbowl.auditLocomotion('cook')");
   const rootTravel = horizontal(beforeSparse.root, afterSparse.root);
