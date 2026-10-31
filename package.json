@@ -64,5 +64,8 @@
     "@astrojs/cloudflare": "^14.3.4",
     "typescript": "^6.0.3",
     "wrangler": "^4.148.0"
+  },
+  "overrides": {
+    "minimatch": "^11.0.3"
   }
 }
