@@ -1257,8 +1257,9 @@ export function initScene(canvas, onHotspot, opts = {}) {
         || _ikGrip.copy(pot).add(POT_STIR_GRIP_OFFSET).setX(npc.userData.rig.armL.sh.position.x);
       // the pot is on his left: he stirs with that hand, not reaching across his body
       reachArm(p, 'l', grip.y, grip.z, 0, grip.x, npc.userData.rig.armL.sh.position.x);
-      // The free hand rests on the work surface in front of him.
-      reachArm(p, 'r', 0.17, 0.30, -0.16);
+      // The free hand rests on the work surface in front of him: on it, not in it.
+      const counter = counterPointInTorso(npc, 0.22, _ikCounter);
+      if (counter) reachArm(p, 'r', counter.y + 0.06, counter.z + 0.03, -0.16);
       p.rElZ = 0;
       p.torsoX = 0.10;
       p.torsoY = -0.13;
@@ -1287,7 +1288,7 @@ export function initScene(canvas, onHotspot, opts = {}) {
       p.torsoY = -0.12;
       p.headX = 0.2;
       const counter = counterPointInTorso(npc, 0.22, _ikCounter);
-      if (counter) reachArm(p, 'r', counter.y + 0.065, counter.z + 0.07 + Math.cos(tl * 3.2) * 0.06,
+      if (counter) reachArm(p, 'r', counter.y + 0.058, counter.z + 0.07 + Math.cos(tl * 3.2) * 0.06,
         Math.sin(tl * 3.2) * 0.22);
       p.rWrX = 2.20;
     },

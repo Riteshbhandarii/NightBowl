@@ -156,7 +156,9 @@ await session(viewport, async (ctx) => {
       await screenshot(send, 'diner-0-arrival-planted');
       await evaluate('window.__nightbowl.auditEnd()');
     }
-    await waitFor(evaluate, '!window.__nightbowl.selfCheck().turnover', `turnover ${index} completion`, 260);
+    // The cook walks to the stool and back at his 0.7 m/s pace twice (clear, then
+    // welcome), so the far stool takes about 25 s of cook walking on its own.
+    await waitFor(evaluate, '!window.__nightbowl.selfCheck().turnover', `turnover ${index} completion`, 700);
   }
 
   assert.ok(await evaluate('window.__nightbowl.testEmptyBowl(0)'), 'cook service did not start');
