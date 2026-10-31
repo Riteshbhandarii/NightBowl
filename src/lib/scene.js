@@ -237,7 +237,14 @@ export function initScene(canvas, onHotspot, opts = {}) {
   let serviceBowl = null;
   let serviceAudit = { started: false, lifted: false, filledCarry: false, completed: false };
   // Visitor meals stay outside the diner AI/refill/departure loop.
-  const visitorOrder = { status: 'choosing', dish: null, dismissed: false, firstBite: false, carrying: false, startedAt: 0, biteAt: 0 };
+  const visitorOrder = { status: 'choosing', dish: null, dismissed: false, firstBite: false, carrying: false, startedAt: 0, biteAt: 0,
+    clearQueued: false, clearing: null, ordered: false };
+  // The cook owes the visitor a walk (bringing the bowl, or taking the empty one
+  // away), so the room holds new jobs for him until he has set off.
+  function visitorWaiting() { return visitorOrder.status === 'queued' || visitorOrder.clearQueued; }
+  function visitorCookBusy() { return visitorOrder.status === 'serving' || !!visitorOrder.clearing; }
+  // He is taking the empty bowl away, and no new order has claimed it yet.
+  function clearingEmptyBowl() { return !!visitorOrder.clearing && ['done', 'choosing'].includes(visitorOrder.status); }
   const orderPanel = document.getElementById('visitorOrder');
   const orderTitle = document.getElementById('visitorOrderTitle');
   const orderChoices = document.getElementById('visitorOrderChoices');
@@ -246,6 +253,7 @@ export function initScene(canvas, onHotspot, opts = {}) {
   const orderComplete = document.getElementById('visitorOrderComplete');
   const orderAgain = document.getElementById('visitorOrderAgain');
   const orderDone = document.getElementById('visitorOrderDone');
+  const orderNewsletter = document.getElementById('visitorNewsletter');
   const orderReopenPanel = document.getElementById('visitorOrderReopenPanel');
   const orderReopen = document.getElementById('visitorOrderReopen');
   const _visitorSeat = new THREE.Vector3(SEAT.x, 1.09, 1.0);
@@ -567,15 +575,16 @@ export function initScene(canvas, onHotspot, opts = {}) {
     g.add(boxG);
     registerHotspot('bill', LABELS.navigation.bill, boxG, new THREE.Vector3(2.55, 1.36, 0.6));
 
+    // Clean cups waiting by the pot: the same cream stoneware the diners drink
+    // from, so the stall reads as one set. Irregular positions collect the
+    // clutter around the hot pot.
     const condiments = new THREE.InstancedMesh(
-      new THREE.CylinderGeometry(0.05, 0.07, 0.34, 12),
-      m(0x2f6f5e, { rough: 0.4, metal: 0.1 }),
+      new THREE.CylinderGeometry(0.07, 0.055, 0.13, 14),
+      m(0xd8c8a5, { rough: 0.86 }),
       3,
     );
-    // Keep the existing instanced jars, now on the worktop rather than hidden
-    // below it. Irregular positions collect the clutter around the hot pot.
     [[-3.03, 0.18], [-2.84, 0.43], [-2.28, 0.55]].forEach(([x, z], index) => {
-      condiments.setMatrixAt(index, new THREE.Matrix4().makeTranslation(x, 1.26, z));
+      condiments.setMatrixAt(index, new THREE.Matrix4().makeTranslation(x, 1.155, z));
     });
     counterCondiments = condiments;
     g.add(condiments);
@@ -1282,20 +1291,14 @@ export function initScene(canvas, onHotspot, opts = {}) {
         Math.sin(tl * 3.2) * 0.22);
       p.rWrX = 2.20;
     },
-    ticket(p) {
-      // reads the order slip held at chest height, then goes to cook
-      reachArm(p, 'r', 0.33, 0.27, -0.10);
-      reachArm(p, 'l', 0.28, 0.22, 0.25);
-      p.rWrX = -0.9;
-      p.torsoX = 0.04;
-      p.headX = 0.42;
-    },
     serve(p, tl) {
       // Arms come up only while a bowl is in his hands (reaching for it, carrying
       // it, setting it down). Walking out to the diner and back home he walks
       // with relaxed arms instead of holding an empty carry pose.
       const hold = service ? [service.T.lift, service.T.place + 0.15]
-        : visitorOrder.status === 'serving' ? [0.7, visitorSchedule().back] : [0, Infinity];
+        : visitorOrder.status === 'serving' ? [0.7, visitorSchedule().back]
+        : visitorOrder.clearing ? [visitorClearSchedule().leg, Infinity]
+        : activeTurnover && !serviceBowl?.visible ? [Infinity, Infinity] : [0, Infinity];
       if (tl < hold[0] || tl > hold[1]) {
         // empty-handed walk: arms hang and swing opposite the steps
         const walking = guide.userData.serviceWalking ? guide.userData.walkAmount ?? 1 : 0;
@@ -1324,7 +1327,6 @@ export function initScene(canvas, onHotspot, opts = {}) {
   const DINER_PLAN = [
     { act: 'eat', w: 5, dur: [28, 42] },
     { act: 'pause', w: 2, dur: [2.5, 4.5] },
-    { act: 'drink', w: 1, dur: [2.6, 3.4] },
   ];
   const COOK_PLAN = [
     { act: 'stir', w: 5, dur: [5, 10] },
@@ -1397,7 +1399,6 @@ export function initScene(canvas, onHotspot, opts = {}) {
     } else if (npc.userData.tools) {
       npc.userData.tools.ladle.visible = ai.act === 'stir';
       npc.userData.tools.cloth.visible = ai.act === 'wipe';
-      if (npc.userData.tools.ticket) npc.userData.tools.ticket.visible = ai.act === 'ticket';
     }
   }
 
@@ -1440,7 +1441,7 @@ export function initScene(canvas, onHotspot, opts = {}) {
 
   function tickService() {
     if (!service) {
-      if (phase !== 'seated' || beat || visitorOrder.status === 'queued') return;
+      if (phase !== 'seated' || beat || visitorWaiting()) return;
       const empty = diners.find((d) => d.userData.ai?.needsService);
       if (empty) beginService(empty);
       return;
@@ -1521,6 +1522,27 @@ export function initScene(canvas, onHotspot, opts = {}) {
     return _carryHands.copy(_handR).sub(_handL).dot(_carryAxis);
   }
   const SERVICE_BOWL_DROP = 0.33;
+  // A bowl moving between the counter and the cook's hands rises a little off
+  // the worktop and never sinks below it while any of it is over the counter.
+  // A straight line from the seat to his hands (lower than the worktop) slid it
+  // through the wood.
+  const _counterBox = new THREE.Box3();
+  const BOWL_R = 0.2;
+  function overCounter(p) {
+    if (!counterTop) return p;
+    if (_counterBox.isEmpty()) visibleBox(counterTop, _counterBox);
+    const dx = Math.max(_counterBox.min.x - p.x, 0, p.x - _counterBox.max.x);
+    const dz = Math.max(_counterBox.min.z - p.z, 0, p.z - _counterBox.max.z);
+    // full support while the bowl overlaps the top, easing off over 12 cm past its edge
+    const w = 1 - Math.min(1, Math.max(0, (Math.hypot(dx, dz) - BOWL_R) / 0.12));
+    if (w > 0) p.y = Math.max(p.y, mix(p.y, _counterBox.max.y + 0.005, w));
+    return p;
+  }
+  function liftBetween(out, from, to, u) {
+    out.copy(from).lerp(to, u);
+    out.y += Math.sin(Math.PI * u) * 0.06;
+    return overCounter(out);
+  }
   function syncServiceBowl() {
     if (!serviceBowl?.visible || !guideRig) return;
     guide.updateMatrixWorld(true);
@@ -1534,21 +1556,22 @@ export function initScene(canvas, onHotspot, opts = {}) {
       const t = nowSec() - service.startedAt;
       service.bowl.getWorldPosition(_seatBowl);
       const T = service.T;
-      if (t < T.toPot) serviceBowl.position.copy(_seatBowl).lerp(_carry, ease01((t - T.lift) / 0.65));
-      else if (t < T.atDiner) serviceBowl.position.copy(_carry);
-      else serviceBowl.position.copy(_carry).lerp(_seatBowl, ease01((t - T.atDiner) / 0.65));
+      if (t < T.toPot) liftBetween(serviceBowl.position, _seatBowl, _carry, ease01((t - T.lift) / 0.65));
+      else if (t < T.atDiner) overCounter(serviceBowl.position.copy(_carry));
+      else liftBetween(serviceBowl.position, _carry, _seatBowl, ease01((t - T.atDiner) / 0.65));
       return;
     }
     const tr = activeTurnover;
     if (!tr || (tr.phase !== 'clear' && tr.phase !== 'welcome')) return;
     const t = nowSec() - tr.phaseAt;
+    const C = turnoverCookTimes(tr);
     tr.diner.userData.table.bowl.getWorldPosition(_seatBowl);
     if (tr.phase === 'clear') {
-      serviceBowl.position.copy(_seatBowl).lerp(_carry, ease01((t - 0.7) / 0.55));
-    } else if (t < 1.4) {
-      serviceBowl.position.copy(_carry);
+      liftBetween(serviceBowl.position, _seatBowl, _carry, ease01((t - C.leg) / 0.55));
+    } else if (t < C.setDown) {
+      overCounter(serviceBowl.position.copy(_carry));
     } else {
-      serviceBowl.position.copy(_carry).lerp(_seatBowl, ease01((t - 1.4) / 0.65));
+      liftBetween(serviceBowl.position, _carry, _seatBowl, ease01((t - C.setDown) / 0.65));
     }
   }
 
@@ -1562,6 +1585,8 @@ export function initScene(canvas, onHotspot, opts = {}) {
     for (const button of orderChoices.querySelectorAll('button')) button.disabled = !!visitorOrder.dish;
     orderSkip.hidden = visitorOrder.status !== 'choosing';
     if (orderComplete) orderComplete.hidden = visitorOrder.status !== 'done';
+    // once they have ordered, a quiet line about new Kitchen Log entries
+    if (orderNewsletter) orderNewsletter.hidden = !visitorOrder.ordered;
     orderStatus.textContent = visitorOrder.status === 'queued' ? LABELS.orderQueued
       : visitorOrder.status === 'serving' ? LABELS.orderServing
         : visitorOrder.status === 'done' && visitorOrder.firstBite ? LABELS.orderComplete
@@ -1573,6 +1598,8 @@ export function initScene(canvas, onHotspot, opts = {}) {
     if (!bowl) {
       bowl = buildRamenBowl(false, true, dish);
       bowl.userData.seatX = SEAT.x;
+      // a cup comes with the bowl, as at the regulars' places, and goes with it
+      bowl.add(pos(mug(0.07, 0.055, 0.13, 0xd8c8a5), 0.24, 0.11, 0.01));
       bowl.userData.steam = addSteam(_visitorSeat.clone().add(new THREE.Vector3(0, 0.22, 0)), 0.13, 2);
       you.userData.table.bowl = bowl;
       scene.add(bowl);
@@ -1586,6 +1613,8 @@ export function initScene(canvas, onHotspot, opts = {}) {
     if (disposed || phase !== 'seated' || visitorOrder.dismissed || visitorOrder.dish || !['house', 'veggie'].includes(dish)) return false;
     visitorOrder.dish = dish;
     visitorOrder.firstBite = false;
+    visitorOrder.clearQueued = false; // the new bowl replaces the empty one
+    visitorOrder.ordered = true;
     delete visitorOrder.completedAt;
     const bowl = visitorBowl(dish);
     bowl.userData.dish = dish;
@@ -1613,17 +1642,17 @@ export function initScene(canvas, onHotspot, opts = {}) {
   }
 
   function tickVisitorService() {
+    if (visitorOrder.clearQueued && !service && !activeTurnover && !beat) {
+      visitorOrder.clearQueued = false;
+      visitorOrder.clearing = { startedAt: nowSec(), homeX: guide.position.x };
+      guide.userData.ai.locked = true;
+      setAct(guide, 'serve', visitorClearSchedule().end + 0.2);
+      guide.userData.walkHomeRotation = guide.rotation.y;
+      beginWalk(guide);
+    }
+    if (visitorOrder.clearing) { tickVisitorClear(); return; }
     if (visitorOrder.status === 'queued') {
       if (service || activeTurnover || beat) return;
-      // he reads the order slip first
-      if (!visitorOrder.ticketAt) {
-        visitorOrder.ticketAt = nowSec();
-        guide.userData.ai.locked = true;
-        setAct(guide, 'ticket', 2.2);
-        return;
-      }
-      if (nowSec() - visitorOrder.ticketAt < 2.2) return;
-      delete visitorOrder.ticketAt;
       visitorOrder.status = 'serving';
       visitorOrder.startedAt = nowSec();
       visitorOrder.homeX = guide.position.x;
@@ -1653,6 +1682,40 @@ export function initScene(canvas, onHotspot, opts = {}) {
     }
   }
 
+  // Once the visitor says they're done, the cook walks round, lifts the empty
+  // bowl and carries it back to his station.
+  function visitorClearSchedule() {
+    const workX = SEAT.x - 0.28;
+    const leg = walkLeg(workX - visitorOrder.clearing.homeX);
+    return { workX, leg, lifted: leg + 0.55, end: 2 * leg + 0.55 };
+  }
+
+  function tickVisitorClear() {
+    const c = visitorOrder.clearing;
+    const t = nowSec() - c.startedAt;
+    const C = visitorClearSchedule();
+    if (t < C.leg) cookTravelX(c.homeX, C.workX, t / C.leg);
+    else if (t < C.lifted) {
+      guide.position.x = C.workX;
+      faceCookAtStation(c.homeX, C.workX, t - C.leg);
+    } else cookTravelX(C.workX, c.homeX, (t - C.lifted) / C.leg);
+    if (t >= C.end) {
+      guide.position.x = c.homeX;
+      guide.userData.ai.locked = false;
+      setAct(guide, 'stir', rnd(6, 10));
+      finishCookWalk();
+      // a new order may already have taken this bowl over; only clear an empty one
+      if (clearingEmptyBowl()) {
+        const bowl = you.userData.table.bowl;
+        setBowlVisible(bowl, false);
+        bowl.position.copy(_visitorSeat);
+        bowl.userData.steam.position.copy(_visitorSeat).add(_ikWorld.set(0, 0.22, 0));
+      }
+      visitorOrder.clearing = null;
+      nextBeatAt = nowSec() + rnd(3, 6);
+    }
+  }
+
   function visitorSchedule() {
     const workX = SEAT.x - 0.28;
     const leg = walkLeg(workX - visitorOrder.homeX);
@@ -1660,6 +1723,20 @@ export function initScene(canvas, onHotspot, opts = {}) {
   }
 
   function syncVisitorBowl() {
+    if (clearingEmptyBowl()) {
+      const t = nowSec() - visitorOrder.clearing.startedAt;
+      const C = visitorClearSchedule();
+      if (t < C.leg) return;
+      const bowl = you.userData.table.bowl;
+      guide.updateMatrixWorld(true);
+      guideRig.armL.hand.getWorldPosition(_handL);
+      guideRig.armR.hand.getWorldPosition(_handR);
+      _carry.copy(_handL).add(_handR).multiplyScalar(0.5);
+      _carry.y -= 0.18;
+      liftBetween(bowl.position, _visitorSeat, _carry, ease01((t - C.leg) / 0.55));
+      bowl.userData.steam.position.copy(bowl.position).add(_ikWorld.set(0, 0.22, 0));
+      return;
+    }
     if (visitorOrder.status !== 'serving') return;
     const bowl = you.userData.table.bowl;
     const t = nowSec() - visitorOrder.startedAt;
@@ -1670,9 +1747,9 @@ export function initScene(canvas, onHotspot, opts = {}) {
     guideRig.armR.hand.getWorldPosition(_handR);
     _carry.copy(_handL).add(_handR).multiplyScalar(0.5);
     _carry.y -= 0.18; // Visitor bowl's unscaled rim is 18cm above its base.
-    if (t < 1.4) bowl.position.copy(_visitorPrep).lerp(_carry, ease01((t - 0.7) / 0.7));
-    else if (t < V.there) bowl.position.copy(_carry);
-    else bowl.position.copy(_carry).lerp(_visitorSeat, ease01((t - V.there) / 0.7));
+    if (t < 1.4) liftBetween(bowl.position, _visitorPrep, _carry, ease01((t - 0.7) / 0.7));
+    else if (t < V.there) overCounter(bowl.position.copy(_carry));
+    else liftBetween(bowl.position, _carry, _visitorSeat, ease01((t - V.there) / 0.7));
     bowl.userData.steam.position.copy(bowl.position).add(_ikWorld.set(0, 0.22, 0));
   }
 
@@ -1726,6 +1803,8 @@ export function initScene(canvas, onHotspot, opts = {}) {
   const onOrderDone = () => {
     if (visitorOrder.status !== 'done') return;
     visitorOrder.dismissed = true;
+    // the cook comes round and takes the empty bowl away
+    if (guideRig && you.userData.table.bowl?.visible && !visitorOrder.clearing) visitorOrder.clearQueued = true;
     updateOrderUI();
   };
   const onOrderReopen = () => {
@@ -1842,7 +1921,7 @@ export function initScene(canvas, onHotspot, opts = {}) {
     if (REDUCED) return;
     if (!nextBeatAt) nextBeatAt = nowSec() + 6;
     if (beat) { tickBeat(); return; }
-    if (visitorOrder.status === 'queued') return;
+    if (visitorWaiting()) return;
     if (nowSec() >= nextBeatAt) chooseBeat();
   }
 
@@ -1996,7 +2075,7 @@ export function initScene(canvas, onHotspot, opts = {}) {
 
   function beginTurnover(diner) {
     const ai = diner.userData.ai;
-    if (!ai || activeTurnover || service || beat || visitorOrder.status === 'queued') return false;
+    if (!ai || activeTurnover || service || beat || visitorWaiting()) return false;
     ai.locked = true;
     ai.needsService = false;
     setAct(diner, 'pause', 60);
@@ -2046,9 +2125,23 @@ export function initScene(canvas, onHotspot, opts = {}) {
     activeTurnover = null;
   }
 
-  function startTurnoverCook(fill) {
+  // The cook's legs of a turnover walk at his service pace, like service does.
+  // Fixed times had him jogging whenever the stool was far from the pot.
+  function turnoverCookTimes(tr) {
+    const workX = tr.seatX + (tr.seatX < 0 ? 0.28 : -0.28);
+    const leg = walkLeg(workX - tr.guideHomeX);
+    return {
+      workX, leg,
+      // clear: walk over, lift the empty bowl, walk it back
+      lifted: leg + 0.55, clearEnd: 2 * leg + 0.55,
+      // welcome: carry the full bowl over, set it down, walk back
+      setDown: leg + 0.2, placed: leg + 0.85, welcomeEnd: 2 * leg + 0.85,
+    };
+  }
+
+  function startTurnoverCook(fill, duration) {
     guide.userData.ai.locked = true;
-    setAct(guide, 'serve', 4);
+    setAct(guide, 'serve', duration);
     setBowlFill(serviceBowl, fill);
     serviceBowl.visible = true;
   }
@@ -2111,22 +2204,23 @@ export function initScene(canvas, onHotspot, opts = {}) {
         diner.userData.ai.customerGeneration++;
         setCustomerAppearance(diner);
         guide.position.x = tr.guideHomeX;
-        setAct(guide, 'serve', 4);
+        const C = turnoverCookTimes(tr);
+        setAct(guide, 'serve', C.clearEnd + 0.2);
         guide.userData.ai.locked = true;
         guide.userData.walkHomeRotation = guide.rotation.y;
         beginWalk(guide);
-        setTurnoverPhase(tr, 'clear', 2.6);
+        setTurnoverPhase(tr, 'clear', C.clearEnd);
       }
     } else if (tr.phase === 'clear') {
-      const workX = tr.seatX + (tr.seatX < 0 ? 0.28 : -0.28);
-      if (elapsed < 0.7) cookTravelX(tr.guideHomeX, workX, elapsed / 0.7);
-      else if (elapsed < 1.25) {
-        guide.position.x = workX;
-        faceCookAtStation(tr.guideHomeX, workX, elapsed - 0.7);
-      } else cookTravelX(workX, tr.guideHomeX, (elapsed - 1.25) / 1.15);
-      if (elapsed >= 0.7 && !tr.bowlCleared) {
+      const C = turnoverCookTimes(tr);
+      if (elapsed < C.leg) cookTravelX(tr.guideHomeX, C.workX, elapsed / C.leg);
+      else if (elapsed < C.lifted) {
+        guide.position.x = C.workX;
+        faceCookAtStation(tr.guideHomeX, C.workX, elapsed - C.leg);
+      } else cookTravelX(C.workX, tr.guideHomeX, (elapsed - C.lifted) / C.leg);
+      if (elapsed >= C.leg && !tr.bowlCleared) {
         setBowlVisible(diner.userData.table.bowl, false);
-        startTurnoverCook(0);
+        startTurnoverCook(0, C.clearEnd - elapsed + 0.2);
         tr.bowlCleared = true;
       }
       if (elapsed >= tr.duration) {
@@ -2169,17 +2263,20 @@ export function initScene(canvas, onHotspot, opts = {}) {
       if (elapsed >= tr.duration) {
         diner.position.z = CUSTOMER_Z;
         setAct(diner, 'lookUp', 4);
-        startTurnoverCook(1);
-        setTurnoverPhase(tr, 'welcome', 3.1);
+        const C = turnoverCookTimes(tr);
+        startTurnoverCook(1, C.welcomeEnd + 0.2);
+        guide.userData.walkHomeRotation = guide.rotation.y;
+        beginWalk(guide);
+        setTurnoverPhase(tr, 'welcome', C.welcomeEnd);
       }
     } else if (tr.phase === 'welcome') {
-      const workX = tr.seatX + (tr.seatX < 0 ? 0.28 : -0.28);
-      if (elapsed < 1.2) cookTravelX(tr.guideHomeX, workX, elapsed / 1.2);
-      else if (elapsed < 2.05) {
-        guide.position.x = workX;
-        faceCookAtStation(tr.guideHomeX, workX, elapsed - 1.2);
-      } else cookTravelX(workX, tr.guideHomeX, (elapsed - 2.05) / 0.95);
-      if (elapsed >= 2.05 && !tr.bowlPlaced) {
+      const C = turnoverCookTimes(tr);
+      if (elapsed < C.leg) cookTravelX(tr.guideHomeX, C.workX, elapsed / C.leg);
+      else if (elapsed < C.placed) {
+        guide.position.x = C.workX;
+        faceCookAtStation(tr.guideHomeX, C.workX, elapsed - C.leg);
+      } else cookTravelX(C.workX, tr.guideHomeX, (elapsed - C.placed) / C.leg);
+      if (elapsed >= C.placed && !tr.bowlPlaced) {
         setBowlFill(diner.userData.table.bowl, 1);
         setBowlVisible(diner.userData.table.bowl, true);
         serviceBowl.visible = false;
@@ -2652,12 +2749,14 @@ export function initScene(canvas, onHotspot, opts = {}) {
     ladle.userData.scoop.position.copy(ladleEnd);
     ladle.add(ladle.userData.scoop);
     ladle.userData.center = new THREE.Vector3();
-    // re-aim the handle so it runs from a given grip (torso space) to the scoop
-    ladle.userData.gripAt = (grip) => {
+    // re-aim the handle so it runs from the scoop through a given grip (torso
+    // space), and `past` beyond it, out the top of the fist
+    ladle.userData.gripAt = (grip, past = 0) => {
       const end = ladle.userData.lastEnd || ladleEnd;
       ladle.userData.grip.position.copy(grip);
-      const vector = end.clone().sub(grip);
-      handle.position.copy(grip).addScaledVector(vector, 0.5);
+      const top = grip.clone().addScaledVector(end.clone().sub(grip).normalize(), -past);
+      const vector = end.clone().sub(top);
+      handle.position.copy(top).addScaledVector(vector, 0.5);
       handle.scale.y = vector.length() / ladleVector.length();
       handle.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), vector.clone().normalize());
     };
@@ -2688,19 +2787,7 @@ export function initScene(canvas, onHotspot, opts = {}) {
     cloth.rotation.x = 0.16;
     cloth.visible = false;
     guideRig.armR.wrist.add(cloth);
-    // the order slip he reads when the visitor orders
-    const ticket = new THREE.Group();
-    const slip = pos(box(0.1, 0.14, 0.003, 0xf6f2e8, { rough: 1 }), 0, 0, 0);
-    ticket.add(slip);
-    for (let i = 0; i < 4; i++) ticket.add(pos(box(0.05 - (i % 2) * 0.015, 0.006, 0.004, 0x3a3530, { rough: 1 }), -0.004, 0.03 - i * 0.017, 0.001));
-    // the wrist group sits inside the squashed hand sphere: undo its scale and hold
-    // the slip just past the fingertips, face up toward his eyes
-    ticket.scale.set(1 / 0.78, 1 / 1.25, 1 / 0.6);
-    ticket.position.set(0, -0.045, 0.05);
-    ticket.rotation.x = -0.7;
-    ticket.visible = false;
-    guideRig.armR.wrist.add(ticket);
-    guide.userData.tools = { ladle, ladleHand: 'L', cloth, ticket };
+    guide.userData.tools = { ladle, ladleHand: 'L', cloth };
     addBlobShadow(guide, 0.4, 0.7);
     initAI(guide, 'cook', standingPose);
     scene.add(guide);
@@ -2808,8 +2895,31 @@ export function initScene(canvas, onHotspot, opts = {}) {
         for (const k of ['01', '02', '03']) bones[`${f}_${k}_${b}`]?.rotateX(0.95);
       for (const k of ['02', '03']) bones[`thumb_${k}_${b}`]?.rotateX(0.45);
     }
-    const fist = (side) => ({ wrist: bones['hand_' + side], knuckle: bones['middle_01_' + side] });
-    return { chain, model, pelvis: bones.pelvis, fists: { L: fist(arm.L), R: fist(arm.R) } };
+    const fist = (side) => ({
+      wrist: bones['hand_' + side], knuckle: bones['middle_01_' + side], restQ: bones['hand_' + side].quaternion.clone(),
+      index: bones['index_01_' + side], pinky: bones['pinky_01_' + side],
+      curl: ['01', '02', '03'].map((k) => bones[`middle_${k}_${side}`]).filter(Boolean),
+    });
+    // How far his belly and apron stand out in front of the pelvis, measured on
+    // the skinned meshes in the rest pose. Only vertices that move with the trunk
+    // count, so hands hanging in front of the apron don't inflate it.
+    const trunk = new Set(['pelvis', 'spine_01', 'spine_02', 'thigh_l', 'thigh_r']);
+    const hip = worldPos(bones.pelvis);
+    const fwd = new THREE.Vector3(0, 0, 1).transformDirection(standIn.matrixWorld).setY(0).normalize();
+    let belly = 0;
+    model.traverse((n) => {
+      if (!n.isSkinnedMesh || /ladle/i.test(n.name)) return;
+      const { skinIndex, skinWeight, position } = n.geometry.attributes;
+      for (let i = 0; i < position.count; i++) {
+        let top = 0;
+        for (let k = 1; k < 4; k++) if (skinWeight.getComponent(i, k) > skinWeight.getComponent(i, top)) top = k;
+        if (!trunk.has(n.skeleton.bones[skinIndex.getComponent(i, top)]?.name)) continue;
+        n.getVertexPosition(i, _va).applyMatrix4(n.matrixWorld);
+        if (_va.y < hip.y - 0.05 || _va.y > hip.y + 0.3) continue;
+        belly = Math.max(belly, _va.sub(hip).dot(fwd));
+      }
+    });
+    return { chain, model, belly, pelvis: bones.pelvis, fists: { L: fist(arm.L), R: fist(arm.R) } };
   }
 
   const _ikS = new THREE.Vector3(), _ikT = new THREE.Vector3(), _ikP = new THREE.Vector3(), _ikE = new THREE.Vector3(), _ikD = new THREE.Vector3();
@@ -2829,7 +2939,12 @@ export function initScene(canvas, onHotspot, opts = {}) {
       const t = nowSec() - service.startedAt, T = service.T;
       if (t >= T.lift && t < T.place) { _held.bowl = serviceBowl; _held.carrying = t >= T.toPot && t < T.atDiner; }
     } else if (activeTurnover && serviceBowl?.visible) {
+      const t = nowSec() - activeTurnover.phaseAt, C = turnoverCookTimes(activeTurnover);
       _held.bowl = serviceBowl;
+      _held.carrying = activeTurnover.phase === 'clear' ? t >= C.lifted : t < C.leg;
+    } else if (clearingEmptyBowl()) {
+      const t = nowSec() - visitorOrder.clearing.startedAt, C = visitorClearSchedule();
+      if (t >= C.leg) { _held.bowl = you.userData.table.bowl; _held.carrying = t >= C.lifted; }
     } else if (visitorOrder.status === 'serving') {
       const t = nowSec() - visitorOrder.startedAt, V = visitorSchedule();
       if (t >= 0.7 && t < V.there + 0.7) { _held.bowl = you.userData.table.bowl; _held.carrying = visitorOrder.carrying; }
@@ -2875,26 +2990,48 @@ export function initScene(canvas, onHotspot, opts = {}) {
 
   // The new cook carries a bowl close in front of his stomach, where his arms
   // can actually hold it, rather than out where the stand-in's longer reach put it.
-  const _fwd = new THREE.Vector3(), _hip = new THREE.Vector3();
+  // Its near edge stays a few centimetres clear of his belly and apron.
+  const _fwd = new THREE.Vector3(), _hip = new THREE.Vector3(), _bowlSize = new THREE.Vector3();
   function carryBowlForPilot() {
     const bowl = heldBowl();
     if (!bowl || !_held.carrying) return;
     _fwd.set(0, 0, 1).transformDirection(guide.matrixWorld).setY(0).normalize();
     pilotCook.pelvis.getWorldPosition(_hip);
-    bowl.position.copy(_hip).addScaledVector(_fwd, 0.3);
+    visibleBox(bowl.getObjectByName('bowl') || bowl, _rim).getSize(_bowlSize);
+    bowl.position.copy(_hip).addScaledVector(_fwd, pilotCook.belly + _bowlSize.x * 0.5 + 0.04);
     bowl.position.y = _hip.y + 0.08;
+    overCounter(bowl.position);
     bowl.updateMatrixWorld(true);
   }
 
-  // after the arms are solved, run the ladle handle through the middle of his fist
-  const _fist = new THREE.Vector3(), _knuckle = new THREE.Vector3();
+  // After the arms are solved, close his hand round the ladle: turn the hand so
+  // the handle runs across the palm under the curled fingers, index side up,
+  // then run the handle through the middle of that curl and out past the thumb.
+  const _fist = new THREE.Vector3(), _knuckle = new THREE.Vector3(), _scoopW = new THREE.Vector3();
+  const _across = new THREE.Vector3(), _handleUp = new THREE.Vector3(), _turn = new THREE.Quaternion();
+  function fistHole(f, out) {
+    // the space the fingers close round: between the palm and the middle finger's joints
+    f.wrist.getWorldPosition(out).lerp(f.knuckle.getWorldPosition(_knuckle), 0.8);
+    for (const b of f.curl) out.add(b.getWorldPosition(_knuckle));
+    return out.multiplyScalar(1 / (f.curl.length + 1));
+  }
   function gripLadle() {
+    for (const f of Object.values(pilotCook.fists)) { f.wrist.quaternion.copy(f.restQ); f.wrist.updateMatrixWorld(true); }
     const tools = guide?.userData.tools;
     const ladle = tools?.ladle;
     if (!ladle?.visible || !ladle.userData.gripAt) return;
-    const fist = pilotCook.fists[tools.ladleHand === 'L' ? 'L' : 'R'];
-    fist.wrist.getWorldPosition(_fist).lerp(fist.knuckle.getWorldPosition(_knuckle), 0.75);
-    ladle.userData.gripAt(guideRig.torso.worldToLocal(_fist));
+    const f = pilotCook.fists[tools.ladleHand === 'L' ? 'L' : 'R'];
+    guideRig.torso.localToWorld(_scoopW.copy(ladle.userData.lastEnd || ladle.userData.scoop.position));
+    if (f.index && f.pinky) {
+      for (let i = 0; i < 2; i++) {
+        _handleUp.copy(fistHole(f, _fist)).sub(_scoopW).normalize();
+        _across.copy(f.index.getWorldPosition(_knuckle)).sub(f.pinky.getWorldPosition(_va)).normalize();
+        _turn.setFromUnitVectors(_across, _handleUp).multiply(f.wrist.getWorldQuaternion(_qa));
+        f.wrist.quaternion.copy(f.wrist.parent.getWorldQuaternion(_qc).invert().multiply(_turn));
+        f.wrist.updateMatrixWorld(true);
+      }
+    }
+    ladle.userData.gripAt(guideRig.torso.worldToLocal(fistHole(f, _fist)), 0.07);
   }
 
   function drivePilot() {
@@ -2970,10 +3107,7 @@ export function initScene(canvas, onHotspot, opts = {}) {
       const el = document.createElement('button');
       el.className = 'pin';
       el.setAttribute('aria-label', 'Open ' + hs.label);
-      const dot = document.createElement('span');
-      dot.className = 'dot';
-      dot.setAttribute('aria-hidden', 'true');
-      el.append(dot, document.createTextNode(labelFor(hs.key)));
+      el.textContent = labelFor(hs.key);
       el.addEventListener('click', () => focusThenOpen(hs));
       el.addEventListener('mouseenter', () => { hs._hover = true; });
       el.addEventListener('mouseleave', () => { hs._hover = false; });
@@ -3494,8 +3628,8 @@ export function initScene(canvas, onHotspot, opts = {}) {
       // the director only performs for someone who is actually sitting down
       if (phase === 'seated') {
         tickVisitorService();
-        if (visitorOrder.status !== 'serving') tickTurnover();
-        if (!activeTurnover && visitorOrder.status !== 'serving') {
+        if (!visitorCookBusy()) tickTurnover();
+        if (!activeTurnover && !visitorCookBusy()) {
           tickService();
           if (!service) tickDirector();
         }
@@ -3828,7 +3962,6 @@ export function initScene(canvas, onHotspot, opts = {}) {
       if (npc.userData.tools) {
         npc.userData.tools.ladle.visible = act === 'stir';
         npc.userData.tools.cloth.visible = act === 'wipe';
-        if (npc.userData.tools.ticket) npc.userData.tools.ticket.visible = act === 'ticket';
       }
 
       if (act === 'eat') syncChopstickGrip(npc);

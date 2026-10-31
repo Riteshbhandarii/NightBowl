@@ -434,7 +434,7 @@ await session([], async (ctx) => {
   check('counter run is offset with a bright, cluttered working end',
     composition.runs.every((run) => run.x < -0.15 && run.x + run.width / 2 < 2.9)
       && composition.potX < -2 && composition.cookX < -1.5
-      && composition.condiments.every((jar) => jar.x < -2 && jar.y > 1.2)
+      && composition.condiments.every((jar) => jar.x < -2 && jar.y > 1.09)
       && Math.abs(before.lanterns[0].x - composition.potX) < 0.3
       && before.lanterns[0].intensity > before.lanterns[2].intensity,
     JSON.stringify(composition));
