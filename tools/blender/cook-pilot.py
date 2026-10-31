@@ -368,65 +368,82 @@ for side in ('helper-l-eye', 'helper-r-eye'):
     d = bpy.context.object; d.name = 'cook_iris_' + side[-5]; d.data.materials.append(IRIS)
     d.parent = rig; d.matrix_parent_inverse = rig.matrix_world.inverted()
 
-# toque blanche, from the references: a tall white pleated hat on a fitted band, with a soft
-# crown that puffs out over the pleats. It sits level on the brow.
-band_z = top - 0.072
-ring = [p for p in head_pts if abs(p.z - band_z) < 0.006]
-cxy = Vector((sum(p.x for p in ring) / len(ring), sum(p.y for p in ring) / len(ring), band_z))
-head_hull = hull2d([(p.x, p.y) for p in head_pts if abs(p.z - band_z) < 0.03])
-rad = 0.0  # per-angle radius below; the fitted band follows the skull, the pleats round it out
-band_r = [ray_hull(head_hull, (cxy.x, cxy.y), 2 * math.pi * k / 96) + 0.020 for k in range(96)]
-mean_r = sum(band_r) / len(band_r)
-# head towel, tied the way ramen cooks wear it: a twisted towel round the brow,
-# knotted at the back, hair showing above it
+# head towel, tied the way ramen cooks wear it (nejiri hachimaki): a towel twisted into a rope,
+# pulled tight over the hair, low on the brow and lower still at the back, knotted behind
 from mathutils.bvhtree import BVHTree
 TOWEL = mat('cook_towel', (0.03, 0.03, 0.035), 0.95)
-TILT = math.radians(-12)                       # higher at the brow, lower at the back
-z0 = top - 0.075
+z0 = top - 0.082                               # at the brow
+DROP = 0.022                                   # how much lower it sits at the back
 dg = bpy.context.evaluated_depsgraph_get()
-skin_bvh = BVHTree.FromObject(body, dg)
-centre = Vector((head_c.x, head_c.y, z0))
-ring_pts = []
-N_RING = 64
+def world_bvh(objs):
+    verts, polys = [], []
+    for ob in objs:
+        ev = ob.evaluated_get(dg); me = ev.to_mesh(); n = len(verts)
+        verts += [ob.matrix_world @ v.co for v in me.vertices]
+        polys += [[n + i for i in p.vertices] for p in me.polygons]
+        ev.to_mesh_clear()
+    return BVHTree.FromPolygons(verts, polys)
+# the outer surface is the hair where there is hair and the skin elsewhere
+head_bvh = world_bvh([body, bpy.data.objects['cook_hairmesh']])
+STRAND, TWIST_R, PITCH = 0.0068, 0.0058, 0.05  # two strands wound round each other
+N_RING = 96
+path = []
 for k in range(N_RING):
     a = 2 * math.pi * k / N_RING
-    d = Vector((math.cos(a), math.sin(a), math.sin(a) * math.tan(-TILT) * 0))
-    # sample the head surface on the tilted plane: aim from inside the head outward
-    o = centre + Vector((0, 0, -math.sin(a) * math.tan(TILT) * 0.1))
-    hit = skin_bvh.ray_cast(o + d * 0.25, -d)  # from outside, back toward the centre
+    d = Vector((math.cos(a), math.sin(a), 0))
+    z = z0 - DROP * (1 + math.sin(a)) / 2         # -y is the face, +y the back of the head
+    hit = head_bvh.ray_cast(Vector((head_c.x, head_c.y, z)) + d * 0.25, -d)  # from outside, inward
     if hit[0] is None: continue
-    ring_pts.append(hit[0] + d * 0.014)
-cu = bpy.data.curves.new('cook_toque', 'CURVE'); cu.dimensions = '3D'
-cu.bevel_depth = 0.011; cu.bevel_resolution = 4
-sp = cu.splines.new('POLY'); sp.points.add(len(ring_pts) - 1); sp.use_cyclic_u = True
-for k, p in enumerate(ring_pts):
-    sp.points[k].co = (p.x, p.y, p.z, 1)
-    sp.points[k].radius = 1.0 + 0.10 * math.sin(k * 2 * math.pi / 5)  # the twist of a rolled towel
-wrap = bpy.data.objects.new('cook_toque', cu); bpy.context.collection.objects.link(wrap)
-bpy.ops.object.select_all(action='DESELECT'); wrap.select_set(True); bpy.context.view_layer.objects.active = wrap
-bpy.ops.object.convert(target='MESH'); wrap = bpy.context.object
-wrap.data.materials.clear(); wrap.data.materials.append(TOWEL)
-for p in wrap.data.polygons: p.use_smooth = True
-# knot and the two loose ends at the back
-back = max(ring_pts, key=lambda p: p.y)
-bpy.ops.mesh.primitive_uv_sphere_add(segments=14, ring_count=10, radius=0.024, location=back + Vector((0, 0.01, 0)))
-knot = bpy.context.object; knot.name = 'cook_toque_knot'; knot.scale = (1.35, 0.85, 0.95); knot.data.materials.append(TOWEL)
+    path.append((hit[0], d))
+# smooth out the lumps of the hair, then press the rope half into it so it reads as tied tight
+for _ in range(3):
+    path = [((path[k - 1][0] + 2 * path[k][0] + path[(k + 1) % len(path)][0]) / 4, path[k][1]) for k in range(len(path))]
+path = [(p + d * (TWIST_R + STRAND) * 0.45, d) for p, d in path]
+
+def tube(name, pts, bevel, cyclic=False, radii=None):
+    cu = bpy.data.curves.new(name, 'CURVE'); cu.dimensions = '3D'
+    cu.bevel_depth = bevel; cu.bevel_resolution = 2; cu.use_fill_caps = not cyclic
+    sp = cu.splines.new('POLY'); sp.points.add(len(pts) - 1); sp.use_cyclic_u = cyclic
+    for k, p in enumerate(pts):
+        sp.points[k].co = (p.x, p.y, p.z, 1)
+        if radii: sp.points[k].radius = radii[k]
+    ob = bpy.data.objects.new(name, cu); bpy.context.collection.objects.link(ob)
+    bpy.ops.object.select_all(action='DESELECT'); ob.select_set(True); bpy.context.view_layer.objects.active = ob
+    bpy.ops.object.convert(target='MESH'); ob = bpy.context.object
+    ob.data.materials.clear(); ob.data.materials.append(TOWEL)
+    for p in ob.data.polygons: p.use_smooth = True
+    return ob
+
+def twisted(pts, outward, s0=0.0, cyclic=False, r=TWIST_R):
+    # two strands spiralling round the centre line, half a turn apart
+    strands = ([], [])
+    s = s0
+    for k, p in enumerate(pts):
+        if k: s += (p - pts[k - 1]).length
+        nxt, prv = pts[(k + 1) % len(pts)] if cyclic or k + 1 < len(pts) else p, pts[k - 1] if cyclic or k else p
+        t = (nxt - prv).normalized()
+        n = (outward[k] - t * outward[k].dot(t)).normalized(); b = t.cross(n)
+        for j, st in enumerate(strands):
+            ph = 2 * math.pi * s / PITCH + j * math.pi
+            st.append(p + (n * math.cos(ph) + b * math.sin(ph)) * r)
+    return strands
+
+for j, st in enumerate(twisted([p for p, _ in path], [d for _, d in path], cyclic=True)):
+    tube(f'cook_towel_{j}', st, STRAND, cyclic=True)
+# the knot at the back, and the two short ends sticking out of it, twisted and fraying open at the cut
+back, back_d = max(path, key=lambda q: q[0].y)
+bpy.ops.mesh.primitive_uv_sphere_add(segments=16, ring_count=10, radius=0.021, location=back + back_d * 0.01)
+knot = bpy.context.object; knot.name = 'cook_towel_knot'; knot.scale = (1.5, 0.7, 1.0); knot.data.materials.append(TOWEL)
 for p in knot.data.polygons: p.use_smooth = True
 for sgn in (-1, 1):
-    # the two loose ends: short, narrow strips hanging from the knot, close to the head
-    bpy.ops.mesh.primitive_cube_add(size=1, location=back + Vector((sgn * 0.012, 0.006, -0.042)))
-    t = bpy.context.object; t.name = f'cook_toque_tail_{sgn}'; t.scale = (0.022, 0.004, 0.06); t.rotation_euler = (0.12, 0, sgn * 0.18)
-    t.data.materials.append(TOWEL)
-    for p in t.data.polygons: p.use_smooth = True
-def under_wrap(w): return False  # the band sits on the hair; nothing is trimmed
-toque = wrap
-for o in [o for o in bpy.data.objects if o.name.startswith('cook_toque')]:
+    start = back + back_d * 0.012
+    end = start + Vector((sgn * 0.034, 0.022, -0.038))
+    pts = [start.lerp(end, i / 10) + Vector((0, 0.006, 0)) * math.sin(math.pi * i / 10) for i in range(11)]
+    for j, st in enumerate(twisted(pts, [Vector((sgn, 0.6, 0)).normalized()] * len(pts), s0=sgn * 0.01, r=TWIST_R * 0.55)):
+        tube(f'cook_towel_end_{sgn}_{j}', st, STRAND, radii=[0.9 + 0.35 * (i / 10) ** 2 for i in range(11)])
+for o in [o for o in bpy.data.objects if o.name.startswith('cook_towel')]:
     o.parent = rig; o.matrix_parent_inverse = rig.matrix_world.inverted()
-# the hair under the hat is never seen; drop it so none of it pokes through the band
-for hair in [bpy.data.objects['cook_hair'], bpy.data.objects['cook_hairmesh']]:
-  bm = bmesh.new(); bm.from_mesh(hair.data)
-  bmesh.ops.delete(bm, geom=[v for v in bm.verts if under_wrap(hair.matrix_world @ v.co)], context='VERTS')
-  bm.to_mesh(hair.data); bm.free()
+
 hair = bpy.data.objects['cook_hair']
 bm = bmesh.new(); bm.from_mesh(hair.data)
 bmesh.ops.delete(bm, geom=[v for v in bm.verts if (hair.matrix_world @ v.co).z > z0 + 0.01], context='VERTS')
@@ -501,7 +518,7 @@ if os.environ.get('COOK_EXPORT') == '1':
     # lighter for the web: collapse the dense skin and cloth, keep the rig and the hands
     for o in [o for o in sc.objects if o.type == 'MESH' and o.name.startswith('cook_')]:
         for m in [m for m in o.modifiers if m.type == 'SUBSURF']: o.modifiers.remove(m)  # smooth shading is enough on the web
-    for o in [o for o in sc.objects if o.type == 'MESH' and o.name.startswith(('cook_body', 'cook_jacket', 'cook_trousers', 'cook_hair', 'cook_sleeve', 'cook_apron', 'cook_toque'))]:
+    for o in [o for o in sc.objects if o.type == 'MESH' and o.name.startswith(('cook_body', 'cook_jacket', 'cook_trousers', 'cook_hair', 'cook_sleeve', 'cook_apron'))]:
         d = o.modifiers.new('web', 'DECIMATE'); d.ratio = float(os.environ.get('COOK_RATIO', '0.35')) if o.name in ('cook_body', 'cook_trousers', 'cook_hair') else 0.6
         while o.modifiers[0] != d: bpy.ops.object.modifier_move_up({'object': o}, modifier=d.name) if False else o.modifiers.move(o.modifiers.find(d.name), 0)
     # make the relaxed pose the bind pose, so any viewer shows it without animation
@@ -525,7 +542,7 @@ if os.environ.get('COOK_EXPORT') == '1':
         obj.parent = rig; obj.parent_type = 'BONE'; obj.parent_bone = bone
         obj.matrix_world = mw
     for o in list(sc.objects):
-        if o.name.startswith(('cook_iris', 'cook_headband', 'cook_knot', 'cook_toque')): pin(o, 'head')
+        if o.name.startswith(('cook_iris', 'cook_towel')): pin(o, 'head')
     # ladle in the right hand
     bpy.ops.mesh.primitive_cylinder_add(vertices=10, radius=0.008, depth=0.32, location=(0, 0, -0.15))
     handle = bpy.context.object; handle.name = 'cook_ladle'
