@@ -1257,9 +1257,10 @@ export function initScene(canvas, onHotspot, opts = {}) {
         || _ikGrip.copy(pot).add(POT_STIR_GRIP_OFFSET).setX(npc.userData.rig.armL.sh.position.x);
       // the pot is on his left: he stirs with that hand, not reaching across his body
       reachArm(p, 'l', grip.y, grip.z, 0, grip.x, npc.userData.rig.armL.sh.position.x);
-      // The free hand rests on the work surface in front of him: on it, not in it.
-      const counter = counterPointInTorso(npc, 0.22, _ikCounter);
-      if (counter) reachArm(p, 'r', counter.y + 0.06, counter.z + 0.03, -0.16);
+      // The free hand rests at the near edge of the work surface in front of him.
+      // A longer reach put it 2.5 cm into the counter; aiming it at the counter
+      // point the way chat does folded the arm up to his chin.
+      reachArm(p, 'r', 0.17, 0.22, -0.16);
       p.rElZ = 0;
       p.torsoX = 0.10;
       p.torsoY = -0.13;
