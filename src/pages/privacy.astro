@@ -1,6 +1,6 @@
 ---
 import ReadingLayout from '../layouts/ReadingLayout.astro';
-import { CONTACT, SITE } from '../data/content';
+import { CONTACT, LOG, SITE } from '../data/content';
 ---
 
 <ReadingLayout title="Privacy" description={`How ${SITE.name} handles your data: no cookies and no tracking.`}>
@@ -20,6 +20,13 @@ import { CONTACT, SITE } from '../data/content';
       <h2>Hosting and fonts</h2>
       <p>The site is hosted on Cloudflare. Like any web host, Cloudflare processes your IP address to deliver the pages and protect the site from attacks.</p>
       <p>Fonts are currently loaded from Google Fonts, so your browser also connects to Google, which receives your IP address. See <a href="https://policies.google.com/privacy" target="_blank" rel="noopener">Google's privacy policy</a>.</p>
+
+      {LOG.newsletterButtondown?.trim() && (
+        <>
+          <h2>Kitchen Log emails</h2>
+          <p>If you sign up after ordering at the stall, your email address goes to <a href="https://buttondown.com/legal/privacy" target="_blank" rel="noopener">Buttondown</a>, which sends a short note when a new Kitchen Log entry is published. It is used for nothing else, and every email has an unsubscribe link.</p>
+        </>
+      )}
 
       <h2>Who is responsible</h2>
       <p>{SITE.ownerName}{CONTACT.email && <>, reachable at <a href={`mailto:${encodeURIComponent(CONTACT.email)}`}>{CONTACT.email}</a></>}. If you email me, I use your message only to reply.</p>

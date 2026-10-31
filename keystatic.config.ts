@@ -288,6 +288,10 @@ export default config({
           allEntries: requiredText('All-entries link'),
           draftDateLabel: requiredText('Draft date label'),
           readingSuffix: requiredText('Reading-time suffix'),
+          newsletterButtondown: fields.text({
+            label: 'Buttondown username',
+            description: 'Turns on the email sign-up after a visitor orders. Leave empty to offer the RSS feed only. Set up RSS-to-email in Buttondown with /log/rss.xml so each new entry goes out on its own.',
+          }),
         }, { label: 'Kitchen Log labels and introductions' }),
         scene: fields.object({
           canvasLabel: fields.text({ label: 'Accessible scene description', multiline: true, validation: { isRequired: true } }),
@@ -319,6 +323,10 @@ export default config({
           orderEatAgain: requiredText('Repeat meal action'),
           orderDone: requiredText('Finish meal action'),
           orderReopen: requiredText('Reopen visitor order'),
+          newsletterLine: requiredText('Newsletter line', 'Shown under the order once the visitor has ordered.'),
+          newsletterPlaceholder: requiredText('Newsletter email placeholder'),
+          newsletterAction: requiredText('Newsletter button'),
+          newsletterFeed: requiredText('RSS link label'),
         }, { label: '3D scene signs and prompts' }),
         chatter: fields.object({
           cook: fields.array(requiredText('Cook line'), { label: 'Cook lines', itemLabel: ({ value }) => value || 'New line' }),
