@@ -1,9 +1,9 @@
 ---
-// Kitchen Log email sign-up. A centred card that appears a moment after the visitor first
-// moves, scrolls or touches the page, so they have to answer it. It is a proper modal dialog:
-// focus moves into it and stays there, Escape or "No thanks" closes it, and it stays away for
-// 30 days after that (for good once someone has signed up). It only renders when a Buttondown
-// username is set in src/content/site/log.json.
+// Kitchen Log email sign-up. A see-through centred card that appears once the visitor has been
+// on the page for 15 seconds: just a line, an email field and a button. It is a proper modal
+// dialog: focus moves into it and stays there, Escape or the close button dismisses it, and it
+// stays away for 30 days after that (for good once someone has signed up). It only renders when
+// a Buttondown username is set in src/content/site/log.json.
 import { LOG } from '../data/content';
 const user = LOG.newsletterButtondown?.trim();
 ---
@@ -12,16 +12,15 @@ const user = LOG.newsletterButtondown?.trim();
   <>
     <div class="sub-pop" id="subPop" hidden>
       <div class="sub-pop-card" role="dialog" aria-modal="true" aria-labelledby="subPopTitle">
-        <button type="button" class="sub-pop-close" id="subPopClose" aria-label={LOG.popupDismiss}>×</button>
+        <button type="button" class="sub-pop-close" id="subPopClose" aria-label={LOG.popupClose}>×</button>
         <div id="subPopAsk">
           <h2 id="subPopTitle">{LOG.popupTitle}</h2>
-          <p>{LOG.popupLine}</p>
           <form action={`https://buttondown.com/api/emails/embed-subscribe/${encodeURIComponent(user)}`} method="post" target="nbSubFrame" id="subPopForm">
             <input type="hidden" name="embed" value="1" />
             <input type="email" name="email" id="subPopEmail" aria-label="Email" placeholder={LOG.popupPlaceholder} autocomplete="email" required />
             <button type="submit">{LOG.popupAction}</button>
           </form>
-          <p class="sub-pop-fine"><button type="button" class="sub-pop-no" id="subPopNo">{LOG.popupDismiss}</button> · <a href="/privacy/">{LOG.popupPrivacy}</a></p>
+          <a class="sub-pop-fine" href="/privacy/">{LOG.popupPrivacy}</a>
         </div>
         <p class="sub-pop-thanks" id="subPopThanks" role="status" hidden>{LOG.popupThanks}</p>
       </div>
@@ -49,24 +48,9 @@ const user = LOG.newsletterButtondown?.trim();
             document.documentElement.style.overflow = 'hidden';
             requestAnimationFrame(() => { wrap.classList.add('in'); email.focus({ preventScroll: true }); });
           };
-          // "Starts moving": the first real movement, scroll, touch or key press. A short beat later it opens.
-          let lastX = -1, lastY = -1;
-          const begin = () => { if (!timer && !shown) timer = window.setTimeout(show, 1200); };
-          const onMove = (event: PointerEvent) => {
-            if (lastX < 0) { lastX = event.clientX; lastY = event.clientY; return; }
-            if (Math.abs(event.clientX - lastX) + Math.abs(event.clientY - lastY) > 12) begin();
-          };
-          function stopWaiting() {
-            removeEventListener('pointermove', onMove);
-            removeEventListener('scroll', begin);
-            removeEventListener('pointerdown', begin);
-            removeEventListener('keydown', begin);
-            clearTimeout(timer);
-          }
-          addEventListener('pointermove', onMove, { passive: true });
-          addEventListener('scroll', begin, { passive: true });
-          addEventListener('pointerdown', begin, { passive: true });
-          addEventListener('keydown', begin);
+          // Shown once the visitor has been on the page for 15 seconds.
+          timer = window.setTimeout(show, 15000);
+          function stopWaiting() { clearTimeout(timer); }
 
           const hide = (state: string) => {
             remember(state);
@@ -75,8 +59,7 @@ const user = LOG.newsletterButtondown?.trim();
             setTimeout(() => { wrap.hidden = true; (returnTo as HTMLElement | null)?.focus?.({ preventScroll: true }); }, 250);
           };
           document.getElementById('subPopClose')?.addEventListener('click', () => hide('dismissed'));
-          document.getElementById('subPopNo')?.addEventListener('click', () => hide('dismissed'));
-          wrap.addEventListener('keydown', (event) => {
+                    wrap.addEventListener('keydown', (event) => {
             if (event.key === 'Escape') { hide('dismissed'); return; }
             if (event.key !== 'Tab') return;
             // Keep Tab inside the dialog while it is open.
