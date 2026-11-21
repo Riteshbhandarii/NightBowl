@@ -1,14 +1,13 @@
 import assert from 'node:assert/strict';
 import { execFileSync, spawn } from 'node:child_process';
-import { readFileSync, writeFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { session, sleep } from './lib/chrome.mjs';
+import { readSiteCopy, restoreSiteCopy, snapshotSiteCopy, writeSiteCopy } from './lib/site-copy.mjs';
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
-const copyPath = join(root, 'src/content/site.json');
-const original = readFileSync(copyPath, 'utf8');
-const copy = JSON.parse(original);
+const original = snapshotSiteCopy(root);
+const copy = readSiteCopy(root);
 const text = 'Literal </ScRiPt><script>window.__nightbowlInjected=true</script> < & " नेपाली';
 const build = () => execFileSync('npm', ['run', 'build'], { cwd: root, stdio: 'inherit' });
 const port = 42000 + Math.floor(Math.random() * 10000);
@@ -18,7 +17,7 @@ try {
   copy.site.name = text;
   copy.scene.mainSignLine = text;
   copy.chatter.cook[0] = text;
-  writeFileSync(copyPath, `${JSON.stringify(copy, null, 2)}\n`);
+  writeSiteCopy(root, copy);
   build();
   server = spawn(process.execPath, ['scripts/serve.mjs'], {
     cwd: root, env: { ...process.env, HOST: '127.0.0.1', PORT: String(port) }, stdio: 'ignore',
@@ -47,8 +46,8 @@ try {
   });
 } finally {
   server?.kill('SIGTERM');
-  writeFileSync(copyPath, original);
+  restoreSiteCopy(original);
   build();
 }
-assert.equal(readFileSync(copyPath, 'utf8'), original, 'owner copy is restored');
+assert.deepEqual(snapshotSiteCopy(root), original, 'owner copy is restored');
 console.log('scene content: script boundaries stay safe and literal Unicode/HTML-like text round trips');

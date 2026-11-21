@@ -209,7 +209,7 @@ try {
     check('CMS shows the NightBowl collections',
       /Kitchen Log/i.test(state.text) && /Menu projects/i.test(state.text),
       state.text.slice(0, 240).replace(/\s+/g, ' '));
-    check('CMS shows editable singleton copy', /Site copy/i.test(state.text));
+    check('CMS shows editable singleton copy', /Site identity/i.test(state.text) && /The Guide/i.test(state.text) && /Scene chatter/i.test(state.text));
     const postsLink = state.links.find((link) => /Kitchen Log/i.test(link.text));
     check('Kitchen Log collection is navigable', !!postsLink, JSON.stringify(state.links.slice(0, 8)));
     if (postsLink) {

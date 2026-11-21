@@ -5,12 +5,12 @@
    ============================================================ */
 
 :root {
-  --paper: #221d17;
-  --paper-2: #2b241c;
-  --paper-edge: #15110c;
-  --ink: #efe4d0;
-  --ink-soft: #a99d87;
-  --line: #3b3226;
+  --paper: #111113;
+  --paper-2: #18181b;
+  --paper-edge: #0a0a0b;
+  --ink: #ededed;
+  --ink-soft: #a1a1aa;
+  --line: #27272a;
   --accent: #ef9a4c;
   --accent-2: #e0b06a;
   --book-shadow: rgba(0, 0, 0, 0.55);
@@ -582,15 +582,15 @@ img { max-width: 100%; }
   border: 1.5px solid var(--accent);
   border-radius: 3px;
   background: var(--paper-2);
-  background: color-mix(in srgb, var(--accent) 8%, var(--paper));
+  background: color-mix(in srgb, var(--accent) 4%, var(--paper));
 }
 .special h3 { margin: 0 0 8px; font-family: 'Zilla Slab', serif; font-size: 12px; letter-spacing: 0.2em; text-transform: uppercase; color: var(--accent); }
 .special .item .name { font-size: 15px; }
 
 .page[data-section='log'] {
-  background-color: color-mix(in srgb, var(--paper) 84%, #d8cab2);
+  background-color: color-mix(in srgb, var(--paper) 84%, #d8d8dc);
   background-image:
-    linear-gradient(rgba(122, 94, 54, 0.07) 1px, transparent 1px),
+    linear-gradient(rgba(255, 255, 255, 0.04) 1px, transparent 1px),
     radial-gradient(120% 80% at 0% 0%, rgba(255, 255, 255, 0.14), transparent 60%);
   background-size: 100% 28px, auto;
 }
@@ -604,7 +604,7 @@ img { max-width: 100%; }
   height: 20px;
   transform: translateX(-50%) rotate(-1.5deg);
   background: rgba(210, 184, 128, 0.38);
-  border: 1px solid rgba(122, 94, 54, 0.16);
+  border: 1px solid rgba(255, 255, 255, 0.12);
 }
 .log-sheet-intro { padding: 24px 4px 0; }
 .log-index-link {

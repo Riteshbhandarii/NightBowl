@@ -1,0 +1,21 @@
+{
+  "title": "Today’s specials",
+  "items": [
+    {
+      "name": "Final-year thesis",
+      "note": "almost done",
+      "line": "A machine learning study of used car part prices. In final review with my supervisor."
+    },
+    {
+      "name": "CoRe research group",
+      "note": "on the pass",
+      "line": "Student assistant since May 2026. Features and release tooling for an on-premises AI desktop app, internal tools that run local language models, and the GPU servers and edge devices under them."
+    },
+    {
+      "name": "Fundamentals, deep track",
+      "note": "slow braise",
+      "line": "Rebuilding the maths and statistics under all of it, from the ground up."
+    }
+  ],
+  "draftCopy": false
+}
