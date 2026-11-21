@@ -2,7 +2,7 @@
 //  - the owner page lists subscribers and counts the ones who will receive email
 //  - sending needs the confirmation box, a published post and a same-site request
 //  - a send is one draft then one send, with the owner's key, and nothing else is called
-//  - the sign-up popup appears after scrolling, can be dismissed, and then stays away
+//  - the sign-up popup opens centred after the visitor moves, traps focus, can be dismissed, then stays away
 // It sets a Buttondown username in src/content/site/log.json for the run and restores it.
 import assert from 'node:assert/strict';
 import { execFileSync, spawn } from 'node:child_process';
@@ -99,31 +99,39 @@ try {
 
   await session({ width: 1280, height: 800 }, async (ctx) => {
     const shown = () => ctx.evaluate(`(()=>{const c=document.getElementById('subPop');return !!c&&!c.hidden&&c.classList.contains('in')})()`);
+    const ready = async () => { for (let i = 0; i < 100; i++) { if (await ctx.evaluate(`document.readyState==='complete'`)) break; await sleep(100); } await sleep(400); };
+    const wiggle = async () => { for (const [x, y] of [[100, 100], [300, 260], [640, 400]]) { await ctx.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x, y }); await sleep(50); } };
     await ctx.send('Page.navigate', { url: `${base}/privacy/` });
-    for (let i = 0; i < 100; i++) { if (await ctx.evaluate(`document.readyState==='complete'`)) break; await sleep(100); }
-    await sleep(500);
-    assert.equal(await shown(), false, 'popup does not show on arrival');
-    await ctx.evaluate(`window.scrollTo(0, document.documentElement.scrollHeight)`);
-    await sleep(800);
-    assert.equal(await shown(), true, 'popup shows after the visitor scrolls well down the page');
-    assert.equal(await ctx.evaluate(`document.activeElement === document.body`), true, 'popup does not steal focus');
-    const box = await ctx.evaluate(`(()=>{const r=document.getElementById('subPop').getBoundingClientRect();return {left:r.left,right:r.right,top:r.top,bottom:r.bottom,w:innerWidth,h:innerHeight}})()`);
-    assert.ok(box.left > box.w / 2 && box.right <= box.w && box.bottom <= box.h, 'popup sits inside the viewport, bottom-right');
+    await ready();
+    await sleep(1800);
+    assert.equal(await shown(), false, 'popup waits until the visitor moves');
+    await wiggle();
+    await sleep(2200);
+    assert.equal(await shown(), true, 'popup opens a moment after the visitor starts moving');
+    const box = await ctx.evaluate(`(()=>{const r=document.querySelector('.sub-pop-card').getBoundingClientRect();return {cx:(r.left+r.right)/2,cy:(r.top+r.bottom)/2,w:innerWidth,h:innerHeight}})()`);
+    assert.ok(Math.abs(box.cx - box.w / 2) < 4 && Math.abs(box.cy - box.h / 2) < 4, 'popup is centred on the screen');
+    assert.equal(await ctx.evaluate(`document.activeElement && document.activeElement.id`), 'subPopEmail', 'focus moves into the dialog');
+    await ctx.send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Tab', code: 'Tab', windowsVirtualKeyCode: 9 });
+    await ctx.send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Tab', code: 'Tab', windowsVirtualKeyCode: 9 });
+    for (let i = 0; i < 6; i++) { await ctx.send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Tab', code: 'Tab', windowsVirtualKeyCode: 9 }); await ctx.send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Tab', code: 'Tab', windowsVirtualKeyCode: 9 }); }
+    assert.equal(await ctx.evaluate(`!!document.activeElement.closest('#subPop')`), true, 'Tab stays inside the dialog');
     await snap(ctx, 'popup.png');
-    await ctx.evaluate(`document.getElementById('subPopNo').click()`);
+    await ctx.send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27 });
+    await ctx.send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27 });
     await sleep(600);
-    assert.equal(await shown(), false, 'No thanks hides it');
+    assert.equal(await shown(), false, 'Escape closes it');
+    assert.equal(await ctx.evaluate(`document.documentElement.style.overflow`), '', 'page scrolling is restored');
     await ctx.send('Page.reload');
-    for (let i = 0; i < 100; i++) { if (await ctx.evaluate(`document.readyState==='complete'`)) break; await sleep(100); }
-    await ctx.evaluate(`window.scrollTo(0, document.documentElement.scrollHeight)`);
-    await sleep(800);
+    await ready();
+    await wiggle();
+    await sleep(2200);
     assert.equal(await shown(), false, 'a dismissed popup stays away');
     assert.deepEqual(ctx.errors, []);
     await ctx.send('Page.navigate', { url: `${base}/admin/subscribers` });
     await sleep(1500);
     await snap(ctx, 'owner-page.png');
   });
-  console.log('  ok   popup: appears after scrolling, never steals focus, stays away once dismissed');
+  console.log('  ok   popup: opens after the visitor moves, centred, traps focus, Escape closes, stays away once dismissed');
 } finally {
   writeFileSync(logPath, original);
   server?.kill('SIGTERM');
