@@ -71,6 +71,29 @@ Project and site-copy saves work the same way. Their Preview action opens the
 menu book in preview mode. Local changes are visible immediately; production
 changes become visible when the connected deployment finishes.
 
+## Kitchen Log emails
+
+Visitors who scroll well down a page, or linger, see a small sign-up card (it never takes
+focus; "No thanks" keeps it away for 30 days). Sign-ups go to Buttondown, which sends the
+confirmation email and handles unsubscribes. Nothing is emailed automatically.
+
+Switch it on:
+
+1. Create a Buttondown newsletter and put its username in `newsletterButtondown` in
+   `src/content/site/log.json`. Until it is set, no card appears.
+2. In Buttondown, turn **off** RSS-to-email, or every new post will email subscribers by itself.
+3. Create an API key (Buttondown, Settings, API) and set it as `BUTTONDOWN_API_KEY`:
+   in `.env` locally, `npx wrangler secret put BUTTONDOWN_API_KEY` in production.
+
+Owner page: `/admin/subscribers` (a **Subscribers** button sits at the bottom left of the
+admin). It uses the same GitHub sign-in as the admin, so only people with write access to the
+repository can open it. It lists everyone who signed up, how many will actually receive email,
+and a **Send to subscribers** form: pick a published post, tick the confirmation box, press
+Send. That creates one draft in Buttondown and sends it, with the post's excerpt and a link.
+Sending the same post twice emails everyone twice; the page does not remember what was sent.
+
+`npm run check:subscribers` runs the whole flow against a fake Buttondown.
+
 ## Production sign-in
 
 Production uses Keystatic's GitHub mode. Only GitHub users with write access to

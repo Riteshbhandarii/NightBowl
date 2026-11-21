@@ -52,3 +52,21 @@ export const ADMIN_GLOW_JS = `
   document.addEventListener('pointerleave', () => root.style.setProperty('--nb-glow', '0'));
 })();
 `;
+
+export const ADMIN_SUBSCRIBERS_LINK = `
+(() => {
+  if (!location.pathname.startsWith('/keystatic')) return;
+  const add = () => {
+    if (document.getElementById('nb-subscribers-link') || !document.body) return;
+    const a = document.createElement('a');
+    a.id = 'nb-subscribers-link';
+    a.href = '/admin/subscribers';
+    a.textContent = 'Subscribers';
+    a.style.cssText = 'position:fixed;left:24px;bottom:22px;z-index:20;font:500 14px/1 system-ui,sans-serif;color:#ededed;text-decoration:none;padding:9px 14px;border:1px solid #2a2a2a;border-radius:9px;background:#0d0d0d';
+    if (innerWidth < 900) a.style.display = 'none';
+    document.body.appendChild(a);
+  };
+  document.addEventListener('DOMContentLoaded', add);
+  new MutationObserver(add).observe(document.documentElement, { childList: true, subtree: true });
+})();
+`;

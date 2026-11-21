@@ -10,5 +10,10 @@
   "allEntries": "← All entries",
   "draftDateLabel": "Coming soon",
   "readingSuffix": "min read",
+  "popupTitle": "Get notified about new posts",
+  "popupPlaceholder": "Your email",
+  "popupAction": "Subscribe",
+  "popupThanks": "Thanks. Check your inbox to confirm.",
+  "popupClose": "Close",
   "newsletterButtondown": ""
 }

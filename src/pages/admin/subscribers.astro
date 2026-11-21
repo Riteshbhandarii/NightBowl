@@ -1,0 +1,163 @@
+---
+// Owner-only: who has subscribed to the Kitchen Log, and a button to email them about a post.
+// Nothing here runs by itself; an email goes out only when the owner presses Send.
+import { getCollection } from 'astro:content';
+import { BUTTONDOWN_API_BASE, BUTTONDOWN_API_KEY } from 'astro:env/server';
+import { isOwner, sameOrigin } from '../../lib/admin-auth';
+import { listSubscribers, receivesEmail, sendEmail } from '../../lib/buttondown';
+
+export const prerender = false;
+
+if (!(await isOwner(Astro.request, (name) => Astro.cookies.get(name)?.value))) {
+  return Astro.redirect('/keystatic');
+}
+
+const cfg = BUTTONDOWN_API_KEY ? { apiKey: BUTTONDOWN_API_KEY, base: BUTTONDOWN_API_BASE } : undefined;
+const origin = Astro.site?.origin ?? Astro.url.origin;
+const slugOf = (id: string) => id.replace(/\.(md|mdx)$/, '');
+const posts = (await getCollection('posts'))
+  .filter((post) => post.data.status === 'published')
+  .sort((a, b) => b.data.date.getTime() - a.data.date.getTime());
+
+let subscribers: Awaited<ReturnType<typeof listSubscribers>>['subscribers'] = [];
+let truncated = false;
+let loadError = '';
+if (cfg) {
+  try { ({ subscribers, truncated } = await listSubscribers(cfg)); }
+  catch (error) { loadError = (error as Error).message; }
+}
+const recipients = subscribers.filter(receivesEmail).length;
+
+let outcome: { ok: boolean; message: string } | undefined;
+if (Astro.request.method === 'POST') {
+  const form = await Astro.request.formData();
+  const slug = String(form.get('slug') ?? '');
+  const post = posts.find((candidate) => slugOf(candidate.id) === slug);
+  if (!sameOrigin(Astro.request, Astro.url.origin)) outcome = { ok: false, message: 'Request refused: it did not come from this page.' };
+  else if (!cfg) outcome = { ok: false, message: 'Add BUTTONDOWN_API_KEY first. Nothing was sent.' };
+  else if (!post) outcome = { ok: false, message: 'Pick a published post. Nothing was sent.' };
+  else if (form.get('confirm') !== 'yes') outcome = { ok: false, message: 'Tick the confirmation box. Nothing was sent.' };
+  else if (loadError || recipients === 0) outcome = { ok: false, message: 'There is nobody to send to, or the subscriber list could not be read. Nothing was sent.' };
+  else {
+    try {
+      await sendEmail(cfg, {
+        subject: `New in the Kitchen Log: ${post.data.title}`,
+        body: `${post.data.excerpt}\n\n[Read it in the Kitchen Log](${origin}/log/${slugOf(post.id)}/)`,
+      });
+      outcome = { ok: true, message: `Sent "${post.data.title}" to ${recipients} subscriber${recipients === 1 ? '' : 's'}.` };
+    } catch (error) {
+      outcome = { ok: false, message: `${(error as Error).message}. Check Buttondown before trying again, in case it went out.` };
+    }
+  }
+}
+const day = (iso: string) => (iso ? new Date(iso).toISOString().slice(0, 10) : '');
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex, nofollow" />
+    <title>Subscribers · NightBowl kitchen</title>
+    <style is:global>
+      :root { color-scheme: dark; }
+      * { box-sizing: border-box; }
+      body { margin: 0; background: #000; color: #ededed; font: 400 15px/1.5 'Geist', system-ui, -apple-system, 'Segoe UI', sans-serif; }
+      .wrap { width: min(900px, calc(100% - 40px)); margin: 0 auto; padding: 36px 0 80px; }
+      a { color: #ffad58; }
+      h1 { margin: 6px 0 4px; font-size: 26px; }
+      h2 { margin: 36px 0 12px; font-size: 16px; letter-spacing: 0.02em; }
+      .back { font-size: 13px; color: #a1a1aa; text-decoration: none; }
+      .muted { color: #a1a1aa; margin: 0 0 8px; }
+      .stats { display: flex; gap: 12px; margin: 18px 0; flex-wrap: wrap; }
+      .stat { flex: 1 1 140px; border: 1px solid #1d1d1d; border-radius: 10px; padding: 14px 16px; background: #080808; }
+      .stat b { display: block; font-size: 26px; }
+      table { width: 100%; border-collapse: collapse; font-size: 14px; }
+      th, td { text-align: left; padding: 9px 10px; border-bottom: 1px solid #1d1d1d; }
+      th { color: #a1a1aa; font-weight: 500; font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; }
+      .card { border: 1px solid #1d1d1d; border-radius: 10px; padding: 18px; background: #080808; }
+      select, button { font: inherit; border-radius: 8px; border: 1px solid #2a2a2a; background: #0d0d0d; color: #ededed; padding: 9px 12px; }
+      select { width: 100%; margin: 6px 0 14px; }
+      button.send { background: #ffad58; border-color: #ffad58; color: #000; font-weight: 600; cursor: pointer; }
+      button.send:disabled { opacity: 0.45; cursor: not-allowed; }
+      .preview { margin: 0 0 14px; padding: 12px 14px; border-left: 2px solid #ffad58; background: #0d0d0d; border-radius: 4px; font-size: 14px; }
+      .ok, .bad { padding: 12px 14px; border-radius: 8px; margin: 16px 0; }
+      .ok { background: #0f1f12; border: 1px solid #1f4a27; }
+      .bad { background: #200d0d; border: 1px solid #5a1f1f; }
+      label.check { display: flex; gap: 10px; align-items: flex-start; margin: 0 0 14px; }
+    </style>
+  </head>
+  <body>
+    <main class="wrap">
+      <a class="back" href="/keystatic">← Back to the admin</a>
+      <h1>Subscribers</h1>
+      <p class="muted">People who asked to hear about new Kitchen Log entries. Emails are sent by Buttondown, only when you press Send.</p>
+
+      {outcome && <div class={outcome.ok ? 'ok' : 'bad'} role="status">{outcome.message}</div>}
+
+      {!cfg && (
+        <div class="bad">
+          Not connected yet. Add <code>BUTTONDOWN_API_KEY</code> (Buttondown → Settings → API) as a Worker secret, or in <code>.env</code> locally.
+          Steps are in docs/development.md.
+        </div>
+      )}
+      {loadError && <div class="bad">Could not read the subscriber list. {loadError}</div>}
+
+      {cfg && !loadError && (
+        <>
+          <div class="stats">
+            <div class="stat"><b>{subscribers.length}{truncated ? '+' : ''}</b>signed up</div>
+            <div class="stat"><b>{recipients}</b>will receive emails</div>
+            <div class="stat"><b>{subscribers.length - recipients}</b>waiting to confirm or unsubscribed</div>
+          </div>
+
+          <h2>Notify subscribers</h2>
+          <form class="card" method="post" id="notify">
+            <label for="slug">Which post?</label>
+            <select name="slug" id="slug" required>
+              {posts.map((post) => <option value={slugOf(post.id)} data-title={post.data.title} data-excerpt={post.data.excerpt}>{post.data.title}</option>)}
+            </select>
+            <p class="muted">The email will say:</p>
+            <div class="preview" id="preview"></div>
+            <label class="check"><input type="checkbox" name="confirm" value="yes" id="confirm" />
+              <span>Send this to {recipients} subscriber{recipients === 1 ? '' : 's'} now. I know it cannot be undone and that sending the same post twice emails everyone twice.</span></label>
+            <button class="send" id="send" type="submit" disabled>Send to subscribers</button>
+          </form>
+
+          <h2>Everyone who signed up</h2>
+          {subscribers.length === 0 ? <p class="muted">Nobody yet.</p> : (
+            <table>
+              <thead><tr><th>Email</th><th>Status</th><th>Signed up</th></tr></thead>
+              <tbody>{subscribers.map((s) => <tr><td>{s.email}</td><td>{s.type}</td><td>{day(s.created)}</td></tr>)}</tbody>
+            </table>
+          )}
+          {truncated && <p class="muted">Showing the newest {subscribers.length}. The rest are in Buttondown.</p>}
+        </>
+      )}
+    </main>
+    <script is:inline>
+      (() => {
+        const select = document.getElementById('slug');
+        const preview = document.getElementById('preview');
+        const confirmBox = document.getElementById('confirm');
+        const send = document.getElementById('send');
+        const form = document.getElementById('notify');
+        if (!select) return;
+        const show = () => {
+          const option = select.selectedOptions[0];
+          preview.replaceChildren();
+          const subject = document.createElement('strong');
+          subject.textContent = 'New in the Kitchen Log: ' + option.dataset.title;
+          const body = document.createElement('div');
+          body.textContent = option.dataset.excerpt;
+          preview.append(subject, body);
+        };
+        select.addEventListener('change', show);
+        confirmBox.addEventListener('change', () => { send.disabled = !confirmBox.checked; });
+        form.addEventListener('submit', () => { send.disabled = true; send.textContent = 'Sending…'; });
+        show();
+      })();
+    </script>
+  </body>
+</html>

@@ -1,0 +1,89 @@
+---
+// Kitchen Log email sign-up. A plain centred box. It opens a few seconds after the
+// visitor orders a bowl at the stall, or after 30 seconds of browsing, whichever comes first. It is a proper modal
+// dialog: focus moves into it and stays there, Escape or the close button dismisses it, and it
+// stays away for 30 days after that (for good once someone has signed up). It only renders when
+// a Buttondown username is set in src/content/site/log.json.
+import { LOG } from '../data/content';
+const user = LOG.newsletterButtondown?.trim();
+---
+
+{user && (
+  <>
+    <div class="sub-pop" id="subPop" hidden>
+      <div class="sub-pop-card" role="dialog" aria-modal="true" aria-labelledby="subPopTitle">
+        <button type="button" class="sub-pop-close" id="subPopClose" aria-label={LOG.popupClose}>×</button>
+        <div id="subPopAsk">
+          <h2 id="subPopTitle">{LOG.popupTitle}</h2>
+          <form action={`https://buttondown.com/api/emails/embed-subscribe/${encodeURIComponent(user)}`} method="post" target="nbSubFrame" id="subPopForm">
+            <input type="hidden" name="embed" value="1" />
+            <input type="email" name="email" id="subPopEmail" aria-label="Email" placeholder={LOG.popupPlaceholder} autocomplete="email" required />
+            <button type="submit">{LOG.popupAction}</button>
+          </form>
+        </div>
+        <p class="sub-pop-thanks" id="subPopThanks" role="status" hidden>{LOG.popupThanks}</p>
+      </div>
+    </div>
+    <iframe name="nbSubFrame" title="" tabindex="-1" aria-hidden="true" hidden></iframe>
+    <script>
+      const KEY = 'nb-subscribe';
+      const wrap = document.getElementById('subPop');
+      if (wrap && !location.search.includes('nbtest')) {
+        // ?subscribe=preview is for the owner: it ignores an earlier dismissal and opens after 1.5 seconds.
+        // ?subscribe=reset forgets an earlier dismissal and then behaves exactly like a first visit.
+        if (location.search.includes('subscribe=reset')) { try { localStorage.removeItem(KEY); } catch { /* storage blocked */ } }
+        const preview = location.search.includes('subscribe=preview');
+        const saved = (() => { try { return JSON.parse(localStorage.getItem(KEY) || 'null'); } catch { return null; } })();
+        const quiet = !preview && saved && (saved.state === 'subscribed' || Date.now() - saved.at < 30 * 86400000);
+        if (!quiet) {
+          const email = document.getElementById('subPopEmail') as HTMLInputElement;
+          const remember = (state: string) => { try { localStorage.setItem(KEY, JSON.stringify({ state, at: Date.now() })); } catch { /* storage blocked */ } };
+          let shown = false;
+          let timer = 0;
+          let returnTo: Element | null = null;
+
+          const show = () => {
+            if (shown) return;
+            shown = true;
+            stopWaiting();
+            returnTo = document.activeElement;
+            wrap.hidden = false;
+            document.documentElement.style.overflow = 'hidden';
+            requestAnimationFrame(() => { wrap.classList.add('in'); email.focus({ preventScroll: true }); });
+          };
+          // Two ways in: the visitor picks a bowl at the stall (a few seconds later, once the
+          // order is under way), or they simply browse for 30 seconds.
+          timer = window.setTimeout(show, preview ? 1500 : 30000);
+          function stopWaiting() { clearTimeout(timer); clearTimeout(orderTimer); }
+          let orderTimer = 0;
+          document.querySelectorAll('[data-visitor-dish]').forEach((dish) => {
+            dish.addEventListener('click', () => { if (!shown && !orderTimer) orderTimer = window.setTimeout(show, 3000); });
+          });
+
+          const hide = (state: string) => {
+            remember(state);
+            wrap.classList.remove('in');
+            document.documentElement.style.overflow = '';
+            setTimeout(() => { wrap.hidden = true; (returnTo as HTMLElement | null)?.focus?.({ preventScroll: true }); }, 250);
+          };
+          document.getElementById('subPopClose')?.addEventListener('click', () => hide('dismissed'));
+                    wrap.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape') { hide('dismissed'); return; }
+            if (event.key !== 'Tab') return;
+            // Keep Tab inside the dialog while it is open.
+            const focusable = [...wrap.querySelectorAll<HTMLElement>('button, input, a[href]')].filter((el) => !el.closest('[hidden]'));
+            const first = focusable[0], last = focusable[focusable.length - 1];
+            if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+            else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+          });
+          document.getElementById('subPopForm')?.addEventListener('submit', () => {
+            remember('subscribed');
+            document.getElementById('subPopAsk')!.hidden = true;
+            document.getElementById('subPopThanks')!.hidden = false;
+            setTimeout(() => hide('subscribed'), 3500);
+          });
+        }
+      }
+    </script>
+  </>
+)}
