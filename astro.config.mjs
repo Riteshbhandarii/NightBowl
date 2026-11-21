@@ -1,5 +1,5 @@
 // @ts-check
-import { defineConfig } from 'astro/config';
+import { defineConfig, envField } from 'astro/config';
 import react from '@astrojs/react';
 import mdx from '@astrojs/mdx';
 import markdoc from '@astrojs/markdoc';
@@ -23,6 +23,13 @@ export default defineConfig({
   adapter: process.env.NIGHTBOWL_ADAPTER === 'cloudflare' ? cloudflare({ imageService: 'passthrough' }) : node({ mode: 'standalone' }),
   // No Astro sessions are used; this stops the Cloudflare adapter requiring a KV binding.
   session: false,
+  // Owner subscriber page. Secrets are Worker secrets in production, never in the repository.
+  env: {
+    schema: {
+      BUTTONDOWN_API_KEY: envField.string({ context: 'server', access: 'secret', optional: true }),
+      BUTTONDOWN_API_BASE: envField.string({ context: 'server', access: 'secret', optional: true }),
+    },
+  },
   integrations: [
     react(),
     mdx(),

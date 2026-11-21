@@ -1,0 +1,75 @@
+---
+// Kitchen Log email sign-up. A small card that slides in once a visitor has explored the page
+// (scrolled well down it, or lingered). It never takes focus, never blocks the page, and stays
+// away after "No thanks" for 30 days or for good once someone has signed up. It only renders
+// when a Buttondown username is set in src/content/site/log.json.
+import { LOG } from '../data/content';
+const user = LOG.newsletterButtondown?.trim();
+---
+
+{user && (
+  <>
+    <aside class="sub-pop" id="subPop" aria-label={LOG.popupTitle} hidden>
+      <button type="button" class="sub-pop-close" id="subPopClose" aria-label={LOG.popupDismiss}>×</button>
+      <div id="subPopAsk">
+        <h2>{LOG.popupTitle}</h2>
+        <p>{LOG.popupLine}</p>
+        <form action={`https://buttondown.com/api/emails/embed-subscribe/${encodeURIComponent(user)}`} method="post" target="nbSubFrame" id="subPopForm">
+          <input type="hidden" name="embed" value="1" />
+          <input type="email" name="email" aria-label="Email" placeholder={LOG.popupPlaceholder} autocomplete="email" required />
+          <button type="submit">{LOG.popupAction}</button>
+        </form>
+        <p class="sub-pop-fine"><button type="button" class="sub-pop-no" id="subPopNo">{LOG.popupDismiss}</button> · <a href="/privacy/">{LOG.popupPrivacy}</a></p>
+      </div>
+      <p class="sub-pop-thanks" id="subPopThanks" role="status" hidden>{LOG.popupThanks}</p>
+    </aside>
+    <iframe name="nbSubFrame" title="" tabindex="-1" aria-hidden="true" hidden></iframe>
+    <script>
+      const KEY = 'nb-subscribe';
+      const card = document.getElementById('subPop');
+      if (card && !location.search.includes('nbtest')) {
+        const saved = (() => { try { return JSON.parse(localStorage.getItem(KEY) || 'null'); } catch { return null; } })();
+        const quiet = saved && (saved.state === 'subscribed' || Date.now() - saved.at < 30 * 86400000);
+        if (!quiet) {
+          const remember = (state: string) => { try { localStorage.setItem(KEY, JSON.stringify({ state, at: Date.now() })); } catch { /* storage blocked */ } };
+          let shown = false;
+          const show = () => {
+            if (shown) return;
+            shown = true;
+            cleanup();
+            card.hidden = false;
+            requestAnimationFrame(() => card.classList.add('in'));
+          };
+          const onScroll = () => {
+            const depth = (scrollY + innerHeight) / Math.max(1, document.documentElement.scrollHeight);
+            if (scrollY > 200 && depth > 0.45) show();
+          };
+          // Lingering counts too, but only after the visitor has actually touched the page.
+          let touched = false;
+          let timer = 0;
+          const onTouch = () => { if (touched) return; touched = true; timer = window.setTimeout(show, 45000); };
+          const cleanup = () => {
+            removeEventListener('scroll', onScroll);
+            removeEventListener('pointerdown', onTouch);
+            removeEventListener('keydown', onTouch);
+            clearTimeout(timer);
+          };
+          addEventListener('scroll', onScroll, { passive: true });
+          addEventListener('pointerdown', onTouch, { passive: true });
+          addEventListener('keydown', onTouch);
+
+          const hide = (state: string) => { remember(state); card.classList.remove('in'); setTimeout(() => { card.hidden = true; }, 300); };
+          document.getElementById('subPopClose')?.addEventListener('click', () => hide('dismissed'));
+          document.getElementById('subPopNo')?.addEventListener('click', () => hide('dismissed'));
+          addEventListener('keydown', (event) => { if (event.key === 'Escape' && !card.hidden) hide('dismissed'); });
+          document.getElementById('subPopForm')?.addEventListener('submit', () => {
+            remember('subscribed');
+            document.getElementById('subPopAsk')!.hidden = true;
+            document.getElementById('subPopThanks')!.hidden = false;
+            setTimeout(() => hide('subscribed'), 6000);
+          });
+        }
+      }
+    </script>
+  </>
+)}

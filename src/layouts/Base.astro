@@ -1,6 +1,7 @@
 ---
 import '../styles/global.css';
 import { SITE } from '../data/content';
+import SubscribePopup from '../components/SubscribePopup.astro';
 
 interface Props {
   title: string;
@@ -54,5 +55,6 @@ const shareImage = canonical ? new URL('/images/nightbowl-card.png', Astro.site)
   </head>
   <body class={bodyClass}>
     <slot />
+    {!noindex && <SubscribePopup />}
   </body>
 </html>

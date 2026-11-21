@@ -10,5 +10,12 @@
   "allEntries": "← All entries",
   "draftDateLabel": "Coming soon",
   "readingSuffix": "min read",
+  "popupTitle": "New from the Kitchen Log, in your inbox",
+  "popupLine": "A short note when a new entry is up. Never more than that, and every email has an unsubscribe link.",
+  "popupPlaceholder": "you@example.com",
+  "popupAction": "Notify me",
+  "popupThanks": "Check your inbox and confirm, then you are on the list.",
+  "popupDismiss": "No thanks",
+  "popupPrivacy": "How your email is used",
   "newsletterButtondown": ""
 }
