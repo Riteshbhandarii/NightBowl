@@ -951,3 +951,4 @@ body.home-page.book-open { overflow: hidden; }
 .pins, .hint, .visitor-order, .home-peek, .say, .you-pin, .seat-pin { transition: opacity 0.35s ease; }
 .leaving .pins, .leaving .hint, .leaving .visitor-order, .leaving .home-peek,
 .leaving .say, .leaving .you-pin, .leaving .seat-pin { opacity: 0 !important; pointer-events: none !important; }
+.site-foot a.site-foot-owner { color: inherit; }

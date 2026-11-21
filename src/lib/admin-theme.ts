@@ -18,6 +18,8 @@ html, html.kui-scheme--auto, html .kui-scheme--auto, html .kui-scheme--light, ht
   --kui-color-scale-slate11: #ededed !important;
 }
 html, body, body > div { background-color: #000000 !important; }
+/* The admin is always dark, so the light/dark switch is hidden. */
+button[aria-label='theme'] { display: none !important; }
 /* A soft lantern-coloured light that follows the pointer. It sits above the page, never takes clicks. */
 html::after {
   content: '';
