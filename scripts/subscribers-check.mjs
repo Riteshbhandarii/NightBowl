@@ -123,9 +123,9 @@ try {
     await ready();
     await sleep(32000);
     assert.equal(await shown(), false, 'a dismissed popup stays away');
-    // Ordering a bowl at the stall opens it a few seconds later, long before the 30-second timer.
-    await ctx.evaluate(`localStorage.clear()`);
-    await ctx.send('Page.navigate', { url: `${base}/` });
+    // After a dismissal ?subscribe=reset starts over, then ordering a bowl opens it a few seconds
+    // later, long before the 30-second timer.
+    await ctx.send('Page.navigate', { url: `${base}/?subscribe=reset` });
     await ready();
     assert.equal(await shown(), false);
     await ctx.evaluate(`document.querySelector('[data-visitor-dish="house"]').click()`);

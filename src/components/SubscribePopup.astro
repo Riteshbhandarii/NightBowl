@@ -30,6 +30,8 @@ const user = LOG.newsletterButtondown?.trim();
       const wrap = document.getElementById('subPop');
       if (wrap && !location.search.includes('nbtest')) {
         // ?subscribe=preview is for the owner: it ignores an earlier dismissal and opens after 1.5 seconds.
+        // ?subscribe=reset forgets an earlier dismissal and then behaves exactly like a first visit.
+        if (location.search.includes('subscribe=reset')) { try { localStorage.removeItem(KEY); } catch { /* storage blocked */ } }
         const preview = location.search.includes('subscribe=preview');
         const saved = (() => { try { return JSON.parse(localStorage.getItem(KEY) || 'null'); } catch { return null; } })();
         const quiet = !preview && saved && (saved.state === 'subscribed' || Date.now() - saved.at < 30 * 86400000);
