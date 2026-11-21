@@ -8,8 +8,8 @@ import { listSubscribers, receivesEmail, sendEmail } from '../../lib/buttondown'
 
 export const prerender = false;
 
-if (!(await isOwner(Astro.request, (name) => Astro.cookies.get(name)?.value))) {
-  return Astro.redirect('/keystatic');
+if (!(await isOwner((name) => Astro.cookies.get(name)?.value))) {
+  return Astro.redirect('/admin');
 }
 
 const cfg = BUTTONDOWN_API_KEY ? { apiKey: BUTTONDOWN_API_KEY, base: BUTTONDOWN_API_BASE } : undefined;

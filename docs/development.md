@@ -96,20 +96,12 @@ Sending the same post twice emails everyone twice; the page does not remember wh
 
 ## Production sign-in
 
-Production uses Keystatic's GitHub mode. Only GitHub users with write access to
-`Riteshbhandarii/NightBowl` can edit. Create the GitHub App from the local
-`/admin/` setup flow, then copy these values into the deployment environment
-(the names are also in `.env.example`):
-
-```text
-KEYSTATIC_GITHUB_CLIENT_ID
-KEYSTATIC_GITHUB_CLIENT_SECRET
-KEYSTATIC_SECRET
-PUBLIC_KEYSTATIC_GITHUB_APP_SLUG
-```
-
-Add the deployed `/api/keystatic/github/oauth/callback` URL to the GitHub App's
-callback URLs. Never commit `.env`; it is ignored.
+The © in the footer links to `/admin`, a password page. A correct password sets a signed
+12-hour cookie and opens `/keystatic` and `/admin/subscribers`; everything else under those
+paths and `/api/keystatic` answers 401 or redirects to `/admin` without it. Saving edits
+commits to GitHub using `OWNER_GITHUB_TOKEN`, a fine-grained token with Contents read/write
+on this one repo. Secrets live in GitHub repository secrets and the deploy workflow pushes
+them to the Worker (names in `.env.example`). Sign out with `/admin?logout`.
 
 CMS API responses carry `Cache-Control: private, no-store`, including auth
 redirects and errors. Preserve that policy at the production host/CDN.
@@ -152,8 +144,8 @@ Node or container host (Railway, Render, Fly.io, a VPS, or a Docker platform):
 
 Changing hosts later does not move or transform the content; it stays in GitHub.
 Moving specifically to Vercel later requires swapping `@astrojs/node` for
-`@astrojs/vercel`, copying the four environment variables, and adding the new
-OAuth callback URL to the GitHub App. The posts, projects, and site copy do not
+`@astrojs/vercel`, copying the environment variables (names in `.env.example`). The
+posts, projects, and site copy do not
 need conversion.
 
 Set `NIGHTBOWL_SITE_URL=https://your-approved-domain.tld` in the build environment

@@ -5,9 +5,10 @@
 #   CLOUDFLARE_API_TOKEN   token with the "Edit Cloudflare Workers" template
 #   CLOUDFLARE_ACCOUNT_ID  the Cloudflare account that owns the nightbowl Worker
 #
-# This builds with the Cloudflare adapter so /keystatic, /api/keystatic and
-# /admin/subscribers run in the Worker. Their secrets (Keystatic GitHub App,
-# BUTTONDOWN_API_KEY) are Worker secrets set with `wrangler secret put`.
+# This builds with the Cloudflare adapter so /admin (password sign-in), /keystatic and
+# /admin/subscribers run in the Worker. Repository secrets also needed, pushed to the
+# Worker on every deploy: ADMIN_PASSWORD, ADMIN_SESSION_SECRET, OWNER_GITHUB_TOKEN (a
+# fine-grained token with Contents read/write on this repo), KEYSTATIC_SECRET and the two
 
 name: Deploy
 
@@ -59,3 +60,17 @@ jobs:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           command: deploy
+          secrets: |
+            ADMIN_PASSWORD
+            ADMIN_SESSION_SECRET
+            OWNER_GITHUB_TOKEN
+            KEYSTATIC_SECRET
+            KEYSTATIC_GITHUB_CLIENT_ID
+            KEYSTATIC_GITHUB_CLIENT_SECRET
+        env:
+          ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
+          ADMIN_SESSION_SECRET: ${{ secrets.ADMIN_SESSION_SECRET }}
+          OWNER_GITHUB_TOKEN: ${{ secrets.OWNER_GITHUB_TOKEN }}
+          KEYSTATIC_SECRET: ${{ secrets.KEYSTATIC_SECRET }}
+          KEYSTATIC_GITHUB_CLIENT_ID: ${{ secrets.KEYSTATIC_GITHUB_CLIENT_ID }}
+          KEYSTATIC_GITHUB_CLIENT_SECRET: ${{ secrets.KEYSTATIC_GITHUB_CLIENT_SECRET }}

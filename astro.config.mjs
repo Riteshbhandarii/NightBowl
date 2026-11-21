@@ -27,6 +27,9 @@ export default defineConfig({
   env: {
     schema: {
       BUTTONDOWN_API_KEY: envField.string({ context: 'server', access: 'secret', optional: true }),
+      ADMIN_PASSWORD: envField.string({ context: 'server', access: 'secret', optional: true }),
+      ADMIN_SESSION_SECRET: envField.string({ context: 'server', access: 'secret', optional: true }),
+      OWNER_GITHUB_TOKEN: envField.string({ context: 'server', access: 'secret', optional: true }),
       BUTTONDOWN_API_BASE: envField.string({ context: 'server', access: 'secret', optional: true }),
     },
   },
