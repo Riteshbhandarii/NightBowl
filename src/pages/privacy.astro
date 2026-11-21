@@ -10,10 +10,13 @@ import { CONTACT, LOG, SITE } from '../data/content';
     <p class="reading-deck">This is a personal portfolio. It does not use cookies, analytics or advertising, and it does not build a profile of you.</p>
     <div class="project-body">
       <h2>What your browser stores</h2>
-      <p>Two small entries, both only so the site works the way you asked. Nothing is sent anywhere.</p>
+      <p>{LOG.newsletterButtondown?.trim() ? 'Three' : 'Two'} small entries, all only so the site works the way you asked. Nothing is sent anywhere.</p>
       <ul>
         <li><code>nightbowl:scene-motion</code> in local storage. Saved only if you press Pause motion, so the stall stays still next time. You can clear it in your browser settings.</li>
         <li><code>nightbowl:seated-this-visit</code> in session storage. Remembers that you already sat down, so the walk-in does not replay in this tab. It disappears when you close the tab.</li>
+        {LOG.newsletterButtondown?.trim() && (
+          <li><code>nb-subscribe</code> in local storage. Saved when you close or use the email sign-up box, so it does not ask you again for 30 days. You can clear it in your browser settings.</li>
+        )}
       </ul>
       <p>Because these are needed for features you use, they do not need consent under the EU ePrivacy rules. That is why there is no cookie banner.</p>
 
