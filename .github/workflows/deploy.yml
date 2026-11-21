@@ -5,8 +5,9 @@
 #   CLOUDFLARE_API_TOKEN   token with the "Edit Cloudflare Workers" template
 #   CLOUDFLARE_ACCOUNT_ID  the Cloudflare account that owns the nightbowl Worker
 #
-# This deploys the static build. Switch Build to `npm run build:cloudflare` once
-# the Keystatic GitHub App secrets are set on the Worker, so /keystatic works too.
+# This builds with the Cloudflare adapter so /keystatic, /api/keystatic and
+# /admin/subscribers run in the Worker. Their secrets (Keystatic GitHub App,
+# BUTTONDOWN_API_KEY) are Worker secrets set with `wrangler secret put`.
 
 name: Deploy
 
@@ -48,7 +49,7 @@ jobs:
         run: npm ci
 
       - name: Build
-        run: npm run build
+        run: npm run build:cloudflare
         env:
           NIGHTBOWL_SITE_URL: https://nightbowl.live
 

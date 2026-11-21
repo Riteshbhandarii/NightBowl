@@ -18,6 +18,11 @@ export function publicContact(bill: {
     if (!/^\/(?!\/)[a-zA-Z0-9_/-]+\.pdf$/.test(bill.cvUrl)) {
       throw new Error('The ready CV must be a local /path/to/file.pdf asset.');
     }
+    // The Cloudflare prerender runs inside workerd, which has no real disk. The normal
+    // Node build (CI) still checks the file; there the check is skipped.
+    if (typeof navigator !== 'undefined' && navigator.userAgent === 'Cloudflare-Workers') {
+      return { email: bill.emailConfirmed ? email : null, cv: bill.cvUrl };
+    }
     const publicRoot = resolve('public');
     const path = resolve(publicRoot, bill.cvUrl.slice(1));
     if (!path.startsWith(`${publicRoot}${sep}`)) throw new Error('Invalid CV asset path.');
