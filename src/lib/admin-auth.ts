@@ -10,5 +10,7 @@ export async function isOwner(getCookie: (name: string) => string | undefined): 
 
 /** A form post counts only from this site's own pages. */
 export function sameOrigin(request: Request, origin: string): boolean {
-  return request.headers.get('origin') === origin;
+  const sent = request.headers.get('origin');
+  if (!sent) return false;
+  return sent === origin || new URL(sent).host === request.headers.get('host');
 }
