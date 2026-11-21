@@ -1,7 +1,12 @@
 import { collection, config, fields, singleton } from '@keystatic/core';
+import { createElement } from 'react';
 
 const requiredText = (label: string, description?: string) =>
   fields.text({ label, description, validation: { isRequired: true } });
+
+// The pitch-black admin theme is injected by src/middleware.ts (see src/lib/admin-theme.ts).
+const brandMark = () => createElement('svg', { width: 24, height: 24, viewBox: '0 0 24 24', 'aria-hidden': true },
+  createElement('circle', { cx: 12, cy: 12, r: 6, fill: '#ffad58' }));
 
 // The admin holds writing: posts, projects and the copy an owner actually rewrites.
 // Interface labels (nav, buttons, scene signs, order card, Kitchen Log page labels) are
@@ -13,7 +18,7 @@ export default config({
     ? { kind: 'local' }
     : { kind: 'github', repo: 'Riteshbhandarii/NightBowl' },
   ui: {
-    brand: { name: 'NightBowl kitchen' },
+    brand: { name: 'NightBowl kitchen', mark: brandMark },
     navigation: {
       'Write and publish': ['posts', 'projects'],
       'Site': ['identity', 'home', 'menu'],
