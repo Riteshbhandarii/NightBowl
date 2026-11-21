@@ -1,23 +1,16 @@
-// The owner pages use the same sign-in as the Keystatic admin: the GitHub token Keystatic
-// stores in a cookie. It counts only if GitHub says that token can push to the repository.
-// In development Keystatic edits local files with no sign-in, so these pages are open too.
-const REPO = 'Riteshbhandarii/NightBowl'; // keep in step with the repo in keystatic.config.ts
+// Owner pages (/keystatic, /api/keystatic, /admin/subscribers) need the password sign-in at
+// /admin. In development Keystatic edits local files with no sign-in, so they are open too.
+import { ADMIN_SESSION_SECRET } from 'astro:env/server';
+import { SESSION_COOKIE, validSession } from './admin-session';
 
-export async function isOwner(request: Request, getCookie: (name: string) => string | undefined): Promise<boolean> {
+export async function isOwner(getCookie: (name: string) => string | undefined): Promise<boolean> {
   if (import.meta.env.DEV) return true;
-  const token = getCookie('keystatic-gh-access-token');
-  if (!token) return false;
-  try {
-    const response = await fetch(`https://api.github.com/repos/${REPO}`, {
-      headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json', 'User-Agent': 'nightbowl-owner-pages' },
-    });
-    if (!response.ok) return false;
-    return (await response.json())?.permissions?.push === true;
-  } catch { return false; }
+  return validSession(ADMIN_SESSION_SECRET, getCookie(SESSION_COOKIE));
 }
 
 /** A form post counts only from this site's own pages. */
 export function sameOrigin(request: Request, origin: string): boolean {
   const sent = request.headers.get('origin');
-  return sent === origin;
+  if (!sent) return false;
+  return sent === origin || new URL(sent).host === request.headers.get('host');
 }

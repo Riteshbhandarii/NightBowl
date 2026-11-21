@@ -1,3 +1,68 @@
 ---
-return Astro.redirect('/keystatic');
+// The quiet owner sign-in, reached from the © in the footer. One password.
+import { ADMIN_PASSWORD, ADMIN_SESSION_SECRET, OWNER_GITHUB_TOKEN } from 'astro:env/server';
+import { SESSION_COOKIE, SESSION_SECONDS, makeSession, sameSecret, validSession } from '../lib/admin-session';
+import { sameOrigin } from '../lib/admin-auth';
+
+export const prerender = false;
+Astro.response.headers.set('Cache-Control', 'private, no-store');
+
+if (import.meta.env.DEV) return Astro.redirect('/keystatic');
+
+const secure = Astro.url.protocol === 'https:';
+const cookieOptions = { path: '/', secure, sameSite: 'lax' as const, maxAge: SESSION_SECONDS };
+const configured = Boolean(ADMIN_PASSWORD && ADMIN_SESSION_SECRET && OWNER_GITHUB_TOKEN);
+
+if (Astro.url.searchParams.has('logout')) {
+  Astro.cookies.delete(SESSION_COOKIE, { path: '/' });
+  Astro.cookies.delete('keystatic-gh-access-token', { path: '/' });
+  return Astro.redirect('/admin');
+}
+if (await validSession(ADMIN_SESSION_SECRET, Astro.cookies.get(SESSION_COOKIE)?.value)) {
+  return Astro.redirect('/keystatic');
+}
+
+let message = '';
+if (Astro.request.method === 'POST') {
+  const form = await Astro.request.formData();
+  const attempt = String(form.get('password') ?? '');
+  if (!sameOrigin(Astro.request, Astro.url.origin)) message = 'Request refused.';
+  else if (!configured) message = 'Sign-in is not set up yet.';
+  else if (await sameSecret(attempt, ADMIN_PASSWORD!)) {
+    Astro.cookies.set(SESSION_COOKIE, await makeSession(ADMIN_SESSION_SECRET!), { ...cookieOptions, httpOnly: true });
+    // Keystatic saves to GitHub with this token from the browser, so it must be readable there.
+    Astro.cookies.set('keystatic-gh-access-token', OWNER_GITHUB_TOKEN!, cookieOptions);
+    return Astro.redirect('/keystatic');
+  } else {
+    await new Promise((done) => setTimeout(done, 800)); // slows guessing
+    message = 'Wrong password.';
+  }
+}
 ---
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex, nofollow" />
+    <title>Sign in</title>
+    <style>
+      html, body { margin: 0; height: 100%; background: #000; color: #ededed; font: 16px/1.4 system-ui, sans-serif; }
+      main { min-height: 100%; display: grid; place-items: center; }
+      form { width: min(320px, 86vw); display: grid; gap: 12px; }
+      input, button { font: inherit; padding: 12px 14px; border-radius: 10px; border: 1px solid #2a2a2a; background: #0d0d0d; color: inherit; }
+      input:focus { outline: 2px solid #555; }
+      button { background: #ededed; color: #000; border: 0; font-weight: 600; cursor: pointer; }
+      p { margin: 0; color: #e07a7a; font-size: 14px; min-height: 1.2em; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <form method="post" action="/admin">
+        <input type="password" name="password" aria-label="Password" placeholder="Password" autocomplete="current-password" autofocus required />
+        <button type="submit">Sign in</button>
+        <p role="alert">{message}</p>
+      </form>
+    </main>
+  </body>
+</html>

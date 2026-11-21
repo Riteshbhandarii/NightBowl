@@ -109,21 +109,13 @@ try {
         /(?:^|,)\s*private\s*(?:,|$)/i.test(cacheControl)
           && /(?:^|,)\s*no-store\s*(?:,|$)/i.test(cacheControl),
         `status=${response.status} cache-control=${cacheControl}`);
-      if (mode === 'production' && path.endsWith('/logout')) {
-        const cookies = response.headers.getSetCookie();
-        check(`logout preserves both cookie expirations${maxStale ? ' (max-stale)' : ''}`,
-          cookies.some((cookie) => cookie.startsWith('keystatic-gh-access-token='))
-            && cookies.some((cookie) => cookie.startsWith('keystatic-gh-refresh-token=')));
-        check('logout preserves its redirect', response.status === 307
-          && response.headers.get('location') === '/keystatic');
-      }
     }
   }
   const tree = await fetch(new URL('/api/keystatic/tree', base), {
     headers: { 'no-cors': '1' },
   });
-  check('local file-read API exists only in development',
-    tree.status === (mode === 'production' ? 404 : 200), `status=${tree.status}`);
+  check('local file-read API is open only in development, signed-out visitors get 401',
+    tree.status === (mode === 'production' ? 401 : 200), `status=${tree.status}`);
   check('successful local reads and denied production reads remain non-cacheable',
     tree.headers.get('cache-control') === 'private, no-store');
   if (mode === 'production') {
@@ -132,7 +124,7 @@ try {
       headers: { 'no-cors': '1', 'content-type': 'application/json' },
       body: JSON.stringify({ additions: [], deletions: [] }),
     });
-    check('production does not expose the local file-write API', update.status === 404);
+    check('production does not expose the local file-write API', update.status === 401);
     check('denied production writes remain non-cacheable',
       update.headers.get('cache-control') === 'private, no-store');
     const home = await fetch(new URL('/', base));
@@ -148,34 +140,26 @@ try {
     }
   }
   if (mode === 'production') {
-    const auth = await fetch(new URL('/api/keystatic/github/login', base), {
-      redirect: 'manual',
+    const editor = await fetch(new URL('/keystatic', base), { redirect: 'manual' });
+    check('signed-out /keystatic redirects to the password page',
+      [302, 303, 307, 308].includes(editor.status) && new URL(editor.headers.get('location') || '', base).pathname === '/admin',
+      `status=${editor.status} location=${editor.headers.get('location')}`);
+    const subscribers = await fetch(new URL('/admin/subscribers', base), { redirect: 'manual' });
+    check('signed-out /admin/subscribers redirects to the password page',
+      [302, 303, 307, 308].includes(subscribers.status) && new URL(subscribers.headers.get('location') || '', base).pathname === '/admin');
+    const login = await fetch(new URL('/admin', base));
+    const loginHtml = await login.text();
+    check('/admin shows a password form that is not cached and not indexed',
+      login.status === 200 && /type="password"/.test(loginHtml) && /noindex/.test(loginHtml)
+        && login.headers.get('cache-control') === 'private, no-store');
+    const forged = await fetch(new URL('/keystatic', base), {
+      redirect: 'manual', headers: { cookie: 'nb-admin=9999999999.deadbeef' },
     });
-    const authLocation = auth.headers.get('location') || '';
-    check('production auth API redirects to GitHub',
-      [302, 303, 307, 308].includes(auth.status)
-        && authLocation.startsWith('https://github.com/login/oauth/authorize'),
-      `status=${auth.status} location=${authLocation}`);
-    if (process.env.KEYSTATIC_GITHUB_CLIENT_ID) {
-      check('production auth redirect uses the configured client',
-        new URL(authLocation).searchParams.get('client_id') === process.env.KEYSTATIC_GITHUB_CLIENT_ID);
-    }
-    const states = [];
-    for (let client = 0; client < 2; client++) {
-      const login = await fetch(new URL('/api/keystatic/github/login?from=branch/main/collection/posts', base), {
-        redirect: 'manual',
-        headers: { 'cache-control': 'max-stale=999999' },
-      });
-      const location = login.headers.get('location');
-      const state = location ? new URL(location, base).searchParams.get('state') : null;
-      states.push(state);
-      check(`independent login ${client + 1} preserves its state cookie`, !!state
-        && login.headers.getSetCookie().some((cookie) => cookie.startsWith(`ks-${state}=`)));
-      check(`independent login ${client + 1} stays non-cacheable`,
-        login.headers.get('cache-control') === 'private, no-store');
-    }
-    check('independent login clients receive distinct OAuth states',
-      !!states[0] && !!states[1] && states[0] !== states[1]);
+    check('a forged sign-in cookie is refused', forged.status !== 200, `status=${forged.status}`);
+    const foreign = await fetch(new URL('/admin', base), {
+      method: 'POST', headers: { origin: 'https://evil.example', 'content-type': 'application/x-www-form-urlencoded' }, body: 'password=x',
+    });
+    check('a sign-in post from another site is refused', foreign.status === 403, `status=${foreign.status}`);
   }
 
   let body = '';
@@ -204,7 +188,8 @@ try {
     })),
   })`);
 
-  check('/admin redirects to the CMS', state.pathname.startsWith('/keystatic'), state.pathname);
+  check(mode === 'local' ? '/admin redirects to the CMS' : '/admin stays on the password page',
+    state.pathname.startsWith(mode === 'local' ? '/keystatic' : '/admin'), state.pathname);
   if (mode === 'local') {
     check('CMS shows the NightBowl collections',
       /Kitchen Log/i.test(state.text) && /Menu projects/i.test(state.text),
@@ -280,7 +265,7 @@ try {
         await evaluate(`!!document.querySelector('[contenteditable=true]') && /Save/.test(document.body.innerText)`));
     }
   } else {
-    check('production CMS requires GitHub authentication',
+    check('production CMS requires the password sign-in',
       /GitHub|log in|sign in/i.test(state.text),
       state.text.slice(0, 240).replace(/\s+/g, ' '));
   }

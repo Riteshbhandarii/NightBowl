@@ -23,10 +23,16 @@ export default defineConfig({
   adapter: process.env.NIGHTBOWL_ADAPTER === 'cloudflare' ? cloudflare({ imageService: 'passthrough' }) : node({ mode: 'standalone' }),
   // No Astro sessions are used; this stops the Cloudflare adapter requiring a KV binding.
   session: false,
+  // Hosts this site may be served from. Without this the Node server pretends every request
+  // is for localhost, and Astro's same-site form check refuses sign-in on any other address.
+  security: { allowedDomains: [{ hostname: 'nightbowl.live' }, { hostname: 'www.nightbowl.live' }, { hostname: 'localhost' }, { hostname: '127.0.0.1' }] },
   // Owner subscriber page. Secrets are Worker secrets in production, never in the repository.
   env: {
     schema: {
       BUTTONDOWN_API_KEY: envField.string({ context: 'server', access: 'secret', optional: true }),
+      ADMIN_PASSWORD: envField.string({ context: 'server', access: 'secret', optional: true }),
+      ADMIN_SESSION_SECRET: envField.string({ context: 'server', access: 'secret', optional: true }),
+      OWNER_GITHUB_TOKEN: envField.string({ context: 'server', access: 'secret', optional: true }),
       BUTTONDOWN_API_BASE: envField.string({ context: 'server', access: 'secret', optional: true }),
     },
   },

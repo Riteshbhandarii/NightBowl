@@ -18,7 +18,7 @@ const check = (name, ok) => {
 
 console.log('\ngenerated content routes');
 check('/log index exists', existsSync(join(distDir, 'log/index.html')));
-check('/admin redirect exists', existsSync(join(distDir, 'admin/index.html')));
+check('/admin is a live sign-in page, not a static file', !existsSync(join(distDir, 'admin/index.html')));
 check('production server entry exists', existsSync(join(distRoot, 'server/entry.mjs')));
 for (const route of ['menu', 'guide', 'bill']) check(`/${route} index exists`, existsSync(join(distDir, route, 'index.html')));
 check('sitemap exists only with a configured production origin', Boolean(sitemap) === Boolean(origin));

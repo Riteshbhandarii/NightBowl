@@ -1,7 +1,15 @@
 import { defineMiddleware } from 'astro:middleware';
+import { isOwner } from './lib/admin-auth';
 import { ADMIN_GLOW_JS, ADMIN_SUBSCRIBERS_LINK, ADMIN_THEME_CSS } from './lib/admin-theme';
 
 export const onRequest = defineMiddleware(async (context, next) => {
+  const { pathname } = context.url;
+  // Everything that edits or lists is behind the password sign-in at /admin.
+  if (/^\/(?:keystatic|api\/keystatic)(?:\/|$)/.test(pathname) && !(await isOwner((name) => context.cookies.get(name)?.value))) {
+    return pathname.startsWith('/api/')
+      ? new Response('Sign in at /admin', { status: 401, headers: { 'Cache-Control': 'private, no-store' } })
+      : context.redirect('/admin');
+  }
   const response = await next();
   if (/^\/keystatic(?:\/|$)/.test(context.url.pathname) && response.headers.get('content-type')?.includes('text/html')) {
     const html = await response.text();
