@@ -4,7 +4,7 @@ Ritesh Bhandari's portfolio + kitchen log, served from an interactive late-night
 ramen stall. Built with Astro + three.js, with a GitHub-backed Keystatic admin.
 
 `nightbowl` is a working title. Alternatives floated: "the usual", "open late",
-"counter seat". Change it through **Site copy and links** in `/admin/`.
+"counter seat". Change it through **Site identity** in `/admin/`.
 
 ## Run it
 
@@ -55,8 +55,9 @@ in this checkout directly. The admin contains:
 - **Menu projects** — edit the short public summary and separate source/demo
   links. Extended Markdown, contribution, context and stack appear only after
   explicitly publishing a case study at `/menu/<existing-slug>/`.
-- **Site copy and links** — edit the Guide, specials, Bill, social links, and
-  ambient character dialogue without touching source code.
+- **Site, Pages, Scene** — edit the site identity, home sections, menu text, the
+  Guide, the Bill, specials and ambient character dialogue without touching
+  source code. Short interface labels are deliberately not here; see below.
 
 The intended production workflow is strict:
 
@@ -98,7 +99,8 @@ advisory findings, regression checks and limits of the audit result.
 |------|------|
 | Projects on the menu | `src/content/projects/*.md` — one file each, frontmatter + one-paragraph body |
 | Blog posts | `src/content/posts/*.md` — `status: draft` shows a teaser only |
-| The Guide / The Bill / Specials / site name | `src/content/site.json` |
+| The Guide / The Bill / Specials / site name | `src/content/site/*.json`, one file per admin section |
+| Interface labels (nav, buttons, scene signs, order card, Kitchen Log page labels) | `src/content/site/{navigation,log,sceneSigns,visitorOrder}.json`, edited in code, not in the admin |
 | Colours + type | `src/styles/global.css` (`:root` tokens) |
 | The 3D scene | `src/lib/scene.js` |
 

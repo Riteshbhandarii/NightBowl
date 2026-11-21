@@ -4,11 +4,11 @@ import { existsSync, readFileSync, writeFileSync, unlinkSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { siteOrigin } from './lib/site-origin.mjs';
+import { readSiteCopy, restoreSiteCopy, snapshotSiteCopy, writeSiteCopy } from './lib/site-copy.mjs';
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
-const copyPath = join(root, 'src/content/site.json');
-const original = readFileSync(copyPath, 'utf8');
-const fixture = JSON.parse(original);
+const original = snapshotSiteCopy(root);
+const fixture = readSiteCopy(root);
 const fixtureUrl = `/nightbowl-download-fixture-${process.pid}.pdf`;
 const fixturePath = join(root, 'public', fixtureUrl.slice(1));
 assert.ok(!existsSync(fixturePath), 'never overwrite an existing public asset');
@@ -30,7 +30,7 @@ function build(site = '', failure) {
     execFileSync('node', ['scripts/check-build.mjs'], { cwd: root, env, stdio: 'inherit' });
   }
 }
-const save = () => writeFileSync(copyPath, `${JSON.stringify(fixture, null, 2)}\n`);
+const save = () => writeSiteCopy(root, fixture);
 
 assert.equal(siteOrigin(''), undefined);
 assert.equal(siteOrigin('https://nightbowl-fixture.dev/'), origin);
@@ -121,10 +121,10 @@ try {
   for (const path of ['/guide/', '/preview/', '/admin/', '/keystatic/', `/log/${draftSlug}/`]) assert.ok(!sitemap.includes(path));
   assert.ok(!sitemap.includes('nightbowl.example'));
 } finally {
-  writeFileSync(copyPath, original);
+  restoreSiteCopy(original);
   if (existsSync(fixturePath)) unlinkSync(fixturePath);
   if (existsSync(draftPostPath)) unlinkSync(draftPostPath);
   execFileSync('npm', ['run', 'build'], { cwd: root, stdio: 'inherit' });
 }
-assert.equal(readFileSync(copyPath, 'utf8'), original, 'test restores owner-controlled content');
+assert.deepEqual(snapshotSiteCopy(root), original, 'test restores owner-controlled content');
 console.log('launch checks: contact/CV rejection and publication guards, configured/unset identity, distinct metadata, original image and draft sitemap boundaries passed');

@@ -1,0 +1,20 @@
+{
+  "canvasLabel": "Interactive 3D ramen stall run by Ritesh Bhandari. Scroll down, or use the Open menu button, for a text version of everything.",
+  "loading": "lighting the lanterns…",
+  "hint": "drag to look around · tap a sign to open the menu",
+  "credit": "built from scratch by Ritesh",
+  "error": "scene error — use the Open menu button",
+  "mainSignLine": "RITESH BHANDARI  ·  DATA & AI",
+  "menuSignTitle": "MENU",
+  "menuSignFooter": "tap to open the menu",
+  "logSignTitle": "KITCHEN LOG",
+  "logSignItems": [
+    "— why a ramen stall",
+    "— a chess engine, my games"
+  ],
+  "logSignFooter": "fresh batches inside",
+  "specialsHotspot": "Specials",
+  "seatHotspot": "Take a seat",
+  "seatPrompt": "take a seat",
+  "seatAria": "Take the empty seat at the counter"
+}

@@ -1,0 +1,13 @@
+{
+  "title": "The Menu",
+  "subtitle": "Everything here was built by the cook. Ask the guide about any of it.",
+  "intro": "The chef's recommendation first, then the other big builds, the small sharp tools, and the ventures and research.",
+  "mainsTitle": "Mains",
+  "mainsNote": "the builds I most like explaining",
+  "smallPlatesTitle": "Small plates",
+  "smallPlatesNote": "focused tools and experiments",
+  "offMenuTitle": "Off the menu",
+  "offMenuNote": "ventures and research",
+  "closing": "Ask me about any of these. The code for most of them is on GitHub.",
+  "featuredLabel": "Chef's recommendation"
+}

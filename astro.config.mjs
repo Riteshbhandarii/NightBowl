@@ -11,7 +11,10 @@ import { readFileSync } from 'node:fs';
 import { siteOrigin } from './scripts/lib/site-origin.mjs';
 
 const origin = siteOrigin();
-const copy = JSON.parse(readFileSync(new URL('./src/content/site.json', import.meta.url), 'utf8'));
+const copy = {
+  guide: JSON.parse(readFileSync(new URL('./src/content/site/guide.json', import.meta.url), 'utf8')),
+  bill: JSON.parse(readFileSync(new URL('./src/content/site/bill.json', import.meta.url), 'utf8')),
+};
 // An unconfigured local/preview build must not advertise an invented launch URL.
 export default defineConfig({
   ...(origin ? { site: origin } : {}),

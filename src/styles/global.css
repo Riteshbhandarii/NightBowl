@@ -5,12 +5,12 @@
    ============================================================ */
 
 :root {
-  --paper: #221d17;
-  --paper-2: #2b241c;
-  --paper-edge: #15110c;
-  --ink: #efe4d0;
-  --ink-soft: #a99d87;
-  --line: #3b3226;
+  --paper: #070707;
+  --paper-2: #0f0f0f;
+  --paper-edge: #000000;
+  --ink: #ededed;
+  --ink-soft: #a1a1aa;
+  --line: #27272a;
   --accent: #ef9a4c;
   --accent-2: #e0b06a;
   --book-shadow: rgba(0, 0, 0, 0.55);
@@ -19,11 +19,11 @@
   --pill-bg: rgba(18, 14, 22, 0.6);
   --pill-line: rgba(247, 240, 226, 0.22);
   --focus: #f0b45a;
-  --shop-bg: #0a0a0b;
+  --shop-bg: #000000;
   /* the portfolio layer: neutral near-black, hairline borders, one lantern accent */
-  --bg: #0a0a0b;
-  --surface: #111113;
-  --surface-2: #18181b;
+  --bg: #000000;
+  --surface: #080808;
+  --surface-2: #101010;
   --border: rgba(255, 255, 255, 0.08);
   --border-strong: rgba(255, 255, 255, 0.16);
   --text: #ededed;
@@ -329,9 +329,9 @@ img { max-width: 100%; }
   max-height: calc(100dvh - 150px);
   overflow: auto;
   padding: 18px;
-  color: #f0dfc5;
-  background: rgba(31, 23, 27, 0.96);
-  border: 1px solid #735043;
+  color: #ededed;
+  background: rgba(8, 8, 8, 0.97);
+  border: 1px solid rgba(255, 255, 255, 0.16);
   border-radius: 4px;
   box-shadow: 0 8px 28px #0006;
 }
@@ -344,14 +344,14 @@ img { max-width: 100%; }
   width: 100%;
   text-align: left;
   color: inherit;
-  border: 1px solid #735043;
+  border: 1px solid rgba(255, 255, 255, 0.16);
   border-radius: 3px;
-  background: #493128;
+  background: #141414;
   padding: 10px 12px;
   cursor: pointer;
   overflow-wrap: anywhere;
 }
-.visitor-order button:hover { background: #604033; }
+.visitor-order button:hover { background: #1f1f1f; }
 .visitor-order button:focus-visible { outline: 2px solid #ffd093; outline-offset: 3px; }
 .visitor-order span, .visitor-order small { display: block; }
 .visitor-order small { margin-top: 3px; font-size: 12px; color: #d8bea3; }
@@ -445,7 +445,8 @@ img { max-width: 100%; }
   transform-origin: left center;
   transform: rotateY(0deg);
   transition: transform 0.7s cubic-bezier(0.5, 0, 0.2, 1);
-  background: linear-gradient(125deg, #7c2c1c, #5c1f13 60%, #491710);
+  background: linear-gradient(125deg, #121212, #080808 60%, #000000);
+  border: 1px solid rgba(255, 255, 255, 0.14);
   border-radius: 5px 9px 9px 5px;
   box-shadow: inset 0 0 60px rgba(0, 0, 0, 0.4), 2px 0 8px rgba(0, 0, 0, 0.3);
   display: flex;
@@ -453,13 +454,13 @@ img { max-width: 100%; }
   align-items: center;
   justify-content: center;
   gap: 18px;
-  color: #f0d9a8;
+  color: #ededed;
   backface-visibility: hidden;
 }
 .book.flipped .cover { transform: rotateY(-165deg); pointer-events: none; }
 .cover .seal {
   width: 92px; height: 92px;
-  border: 2px solid rgba(240, 217, 168, 0.6);
+  border: 2px solid rgba(255, 255, 255, 0.45);
   border-radius: 50%;
   display: grid;
   place-items: center;
@@ -582,15 +583,15 @@ img { max-width: 100%; }
   border: 1.5px solid var(--accent);
   border-radius: 3px;
   background: var(--paper-2);
-  background: color-mix(in srgb, var(--accent) 8%, var(--paper));
+  background: color-mix(in srgb, var(--accent) 4%, var(--paper));
 }
 .special h3 { margin: 0 0 8px; font-family: 'Zilla Slab', serif; font-size: 12px; letter-spacing: 0.2em; text-transform: uppercase; color: var(--accent); }
 .special .item .name { font-size: 15px; }
 
 .page[data-section='log'] {
-  background-color: color-mix(in srgb, var(--paper) 84%, #d8cab2);
+  background-color: color-mix(in srgb, var(--paper) 84%, #d8d8dc);
   background-image:
-    linear-gradient(rgba(122, 94, 54, 0.07) 1px, transparent 1px),
+    linear-gradient(rgba(255, 255, 255, 0.04) 1px, transparent 1px),
     radial-gradient(120% 80% at 0% 0%, rgba(255, 255, 255, 0.14), transparent 60%);
   background-size: 100% 28px, auto;
 }
@@ -604,7 +605,7 @@ img { max-width: 100%; }
   height: 20px;
   transform: translateX(-50%) rotate(-1.5deg);
   background: rgba(210, 184, 128, 0.38);
-  border: 1px solid rgba(122, 94, 54, 0.16);
+  border: 1px solid rgba(255, 255, 255, 0.12);
 }
 .log-sheet-intro { padding: 24px 4px 0; }
 .log-index-link {
@@ -950,3 +951,4 @@ body.home-page.book-open { overflow: hidden; }
 .pins, .hint, .visitor-order, .home-peek, .say, .you-pin, .seat-pin { transition: opacity 0.35s ease; }
 .leaving .pins, .leaving .hint, .leaving .visitor-order, .leaving .home-peek,
 .leaving .say, .leaving .you-pin, .leaving .seat-pin { opacity: 0 !important; pointer-events: none !important; }
+.site-foot a.site-foot-owner { color: inherit; }

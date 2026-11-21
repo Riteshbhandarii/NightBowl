@@ -1,4 +1,4 @@
-import content from '../content/site.json';
+import { siteCopy as content } from './site-copy';
 import { publicContact } from '../lib/public-contact';
 
 export const SITE = content.site;

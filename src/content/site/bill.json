@@ -1,0 +1,41 @@
+{
+  "eyebrow": "settle up",
+  "title": "The Bill",
+  "intro": "The short version. Take it with you.",
+  "rows": [
+    {
+      "label": "Order",
+      "value": "Data Engineering and AI, B.Eng., Turku UAS. Graduating Jan 2027 (expected)"
+    },
+    {
+      "label": "Now",
+      "value": "Student assistant, CoRe (Cognitive Technologies Research Group), Turku UAS"
+    },
+    {
+      "label": "Based",
+      "value": "Turku, Finland"
+    },
+    {
+      "label": "Focus",
+      "value": "Deep learning, data pipelines, backend and MLOps"
+    },
+    {
+      "label": "Kitchen",
+      "value": "Python, PyTorch, Airflow, FastAPI, Django, PostgreSQL, Redis, Docker, Linux"
+    },
+    {
+      "label": "Spoken",
+      "value": "Finnish, English, Nepali. Learning Swedish"
+    }
+  ],
+  "emptyCvMessage": "Want the full CV? Email me and I will send it.",
+  "cvUrl": "/Ritesh-Bhandari-CV.pdf",
+  "email": "bhanrit@gmail.com",
+  "emailConfirmed": true,
+  "cvLinkLabel": "download PDF",
+  "githubLabel": "github.com/Riteshbhandarii",
+  "linkedinLabel": "ritesh-bhandari",
+  "total": "Total, one hire. Service not included.",
+  "cvReady": true,
+  "draftCopy": false
+}
