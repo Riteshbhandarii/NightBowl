@@ -123,6 +123,16 @@ try {
     await ready();
     await sleep(32000);
     assert.equal(await shown(), false, 'a dismissed popup stays away');
+    // Ordering a bowl at the stall opens it a few seconds later, long before the 30-second timer.
+    await ctx.evaluate(`localStorage.clear()`);
+    await ctx.send('Page.navigate', { url: `${base}/` });
+    await ready();
+    assert.equal(await shown(), false);
+    await ctx.evaluate(`document.querySelector('[data-visitor-dish="house"]').click()`);
+    await sleep(1500);
+    assert.equal(await shown(), false, 'it does not jump out the instant the bowl is chosen');
+    await sleep(3000);
+    assert.equal(await shown(), true, 'choosing a bowl opens it a few seconds later');
     await ctx.send('Page.navigate', { url: `${base}/privacy/?subscribe=preview` });
     await ready();
     await sleep(2500);
@@ -132,7 +142,7 @@ try {
     await sleep(1500);
     await snap(ctx, 'owner-page.png');
   });
-  console.log('  ok   popup: opens after about 30 seconds, centred, traps focus, Escape closes, stays away once dismissed');
+  console.log('  ok   popup: opens after a bowl is ordered or 30 seconds of browsing, centred, traps focus, Escape closes, stays away once dismissed');
 } finally {
   writeFileSync(logPath, original);
   server?.kill('SIGTERM');

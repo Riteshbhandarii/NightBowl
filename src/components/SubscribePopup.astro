@@ -1,6 +1,6 @@
 ---
-// Kitchen Log email sign-up. A plain centred box that appears once the visitor has been
-// on the page for 30 seconds: one line, an email field and a button. It is a proper modal
+// Kitchen Log email sign-up. A plain centred box. It opens a few seconds after the
+// visitor orders a bowl at the stall, or after 30 seconds of browsing, whichever comes first. It is a proper modal
 // dialog: focus moves into it and stays there, Escape or the close button dismisses it, and it
 // stays away for 30 days after that (for good once someone has signed up). It only renders when
 // a Buttondown username is set in src/content/site/log.json.
@@ -49,9 +49,14 @@ const user = LOG.newsletterButtondown?.trim();
             document.documentElement.style.overflow = 'hidden';
             requestAnimationFrame(() => { wrap.classList.add('in'); email.focus({ preventScroll: true }); });
           };
-          // Shown once the visitor has been on the page for 30 seconds.
+          // Two ways in: the visitor picks a bowl at the stall (a few seconds later, once the
+          // order is under way), or they simply browse for 30 seconds.
           timer = window.setTimeout(show, preview ? 1500 : 30000);
-          function stopWaiting() { clearTimeout(timer); }
+          function stopWaiting() { clearTimeout(timer); clearTimeout(orderTimer); }
+          let orderTimer = 0;
+          document.querySelectorAll('[data-visitor-dish]').forEach((dish) => {
+            dish.addEventListener('click', () => { if (!shown && !orderTimer) orderTimer = window.setTimeout(show, 3000); });
+          });
 
           const hide = (state: string) => {
             remember(state);
