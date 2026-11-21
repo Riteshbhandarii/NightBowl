@@ -30,8 +30,10 @@ const user = LOG.newsletterButtondown?.trim();
       const KEY = 'nb-subscribe';
       const wrap = document.getElementById('subPop');
       if (wrap && !location.search.includes('nbtest')) {
+        // ?subscribe=preview is for the owner: it ignores an earlier dismissal and opens after 1.5 seconds.
+        const preview = location.search.includes('subscribe=preview');
         const saved = (() => { try { return JSON.parse(localStorage.getItem(KEY) || 'null'); } catch { return null; } })();
-        const quiet = saved && (saved.state === 'subscribed' || Date.now() - saved.at < 30 * 86400000);
+        const quiet = !preview && saved && (saved.state === 'subscribed' || Date.now() - saved.at < 30 * 86400000);
         if (!quiet) {
           const email = document.getElementById('subPopEmail') as HTMLInputElement;
           const remember = (state: string) => { try { localStorage.setItem(KEY, JSON.stringify({ state, at: Date.now() })); } catch { /* storage blocked */ } };
@@ -49,7 +51,7 @@ const user = LOG.newsletterButtondown?.trim();
             requestAnimationFrame(() => { wrap.classList.add('in'); email.focus({ preventScroll: true }); });
           };
           // Shown once the visitor has been on the page for 15 seconds.
-          timer = window.setTimeout(show, 15000);
+          timer = window.setTimeout(show, preview ? 1500 : 15000);
           function stopWaiting() { clearTimeout(timer); }
 
           const hide = (state: string) => {

@@ -123,6 +123,10 @@ try {
     await ready();
     await sleep(16500);
     assert.equal(await shown(), false, 'a dismissed popup stays away');
+    await ctx.send('Page.navigate', { url: `${base}/privacy/?subscribe=preview` });
+    await ready();
+    await sleep(2500);
+    assert.equal(await shown(), true, '?subscribe=preview opens it even after a dismissal');
     assert.deepEqual(ctx.errors, []);
     await ctx.send('Page.navigate', { url: `${base}/admin/subscribers` });
     await sleep(1500);
