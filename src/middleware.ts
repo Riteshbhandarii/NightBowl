@@ -1,5 +1,5 @@
 import { defineMiddleware } from 'astro:middleware';
-import { ADMIN_THEME_CSS } from './lib/admin-theme';
+import { ADMIN_GLOW_JS, ADMIN_THEME_CSS } from './lib/admin-theme';
 
 export const onRequest = defineMiddleware(async (context, next) => {
   const response = await next();
@@ -7,7 +7,7 @@ export const onRequest = defineMiddleware(async (context, next) => {
     const html = await response.text();
     const themed = new Headers(response.headers);
     themed.delete('content-length'); // the body grew
-    return new Response(html.replace(/^<!DOCTYPE html>/i, `<!DOCTYPE html><style id="nb-admin-theme">${ADMIN_THEME_CSS}</style>`), {
+    return new Response(html.replace(/^<!DOCTYPE html>/i, `<!DOCTYPE html><style id="nb-admin-theme">${ADMIN_THEME_CSS}</style><script>${ADMIN_GLOW_JS}</script>`), {
       status: response.status,
       statusText: response.statusText,
       headers: themed,
