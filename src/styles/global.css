@@ -943,35 +943,21 @@ body.home-page.book-open { overflow: hidden; }
 .leaving .say, .leaving .you-pin, .leaving .seat-pin { opacity: 0 !important; pointer-events: none !important; }
 .site-foot a.site-foot-owner { color: inherit; }
 
-/* Kitchen Log email sign-up: a see-through centred card, page still visible behind it */
+/* Kitchen Log email sign-up: a plain box in the middle of the page */
 .sub-pop {
   /* !important: reading pages force every direct child of the body to position: relative */
   position: fixed !important; z-index: 60 !important; inset: 0;
   display: grid; place-items: center; padding: 20px;
-  background: rgba(0, 0, 0, 0.22);
-  opacity: 0; transition: opacity 0.4s ease;
+  background: rgba(0, 0, 0, 0.5);
 }
 .sub-pop[hidden] { display: none; }
-.sub-pop.in { opacity: 1; }
-.sub-pop-card {
-  position: relative; width: min(440px, 100%); padding: 24px 24px 16px; border-radius: 18px;
-  background: rgba(14, 14, 14, 0.34); color: var(--text);
-  -webkit-backdrop-filter: blur(16px) saturate(1.2); backdrop-filter: blur(16px) saturate(1.2);
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.35);
-  transform: translateY(8px); transition: transform 0.4s ease;
-}
-.sub-pop.in .sub-pop-card { transform: none; }
-.sub-pop h2 { margin: 0 30px 14px 0; font: 500 17px/1.35 var(--font-sans); text-shadow: 0 1px 12px rgba(0, 0, 0, 0.6); }
+.sub-pop-card { position: relative; width: min(400px, 100%); padding: 22px; border-radius: 8px; background: #0b0b0b; border: 1px solid var(--border-strong); color: var(--text); }
+.sub-pop h2 { margin: 0 28px 14px 0; font: 600 16px/1.3 var(--font-sans); }
 .sub-pop form { display: flex; gap: 8px; }
-.sub-pop input[type='email'] { flex: 1; min-width: 0; padding: 11px 13px; border-radius: 11px; border: 1px solid rgba(255, 255, 255, 0.22); background: rgba(0, 0, 0, 0.35); color: var(--text); font: 400 15px/1.2 var(--font-sans); }
-.sub-pop input[type='email']::placeholder { color: rgba(237, 237, 237, 0.55); }
-.sub-pop input[type='email']:focus-visible { outline: 2px solid var(--glow); outline-offset: 1px; }
-.sub-pop form button { padding: 11px 16px; border-radius: 11px; border: 1px solid var(--glow); background: var(--glow); color: #000; font: 600 14.5px/1.2 var(--font-sans); cursor: pointer; white-space: nowrap; }
-.sub-pop .sub-pop-fine { display: inline-block; margin-top: 12px; font: 400 12px/1.4 var(--font-sans); color: rgba(237, 237, 237, 0.55); text-underline-offset: 3px; }
-.sub-pop .sub-pop-fine:hover { color: var(--text); }
-.sub-pop-close { position: absolute; top: 12px; right: 12px; width: 30px; height: 30px; border: 0; border-radius: 8px; background: transparent; color: rgba(237, 237, 237, 0.7); font-size: 22px; line-height: 1; cursor: pointer; }
-.sub-pop-close:hover, .sub-pop-close:focus-visible { color: var(--text); background: rgba(255, 255, 255, 0.1); }
-.sub-pop-thanks { margin: 0; padding: 6px 0 10px; font: 500 15px/1.5 var(--font-sans); color: var(--text); }
+.sub-pop input[type='email'] { flex: 1; min-width: 0; padding: 10px 12px; border-radius: 6px; border: 1px solid var(--border-strong); background: #000; color: var(--text); font: 400 15px/1.2 var(--font-sans); }
+.sub-pop input[type='email']:focus-visible { outline: 2px solid var(--text); outline-offset: 1px; }
+.sub-pop form button { padding: 10px 14px; border-radius: 6px; border: 1px solid var(--text); background: var(--text); color: #000; font: 600 14px/1.2 var(--font-sans); cursor: pointer; white-space: nowrap; }
+.sub-pop-close { position: absolute; top: 10px; right: 10px; width: 28px; height: 28px; border: 0; border-radius: 6px; background: transparent; color: var(--text-soft); font-size: 20px; line-height: 1; cursor: pointer; }
+.sub-pop-close:hover, .sub-pop-close:focus-visible { color: var(--text); }
+.sub-pop-thanks { margin: 0; padding: 4px 0; font: 400 15px/1.5 var(--font-sans); }
 @media (max-width: 460px) { .sub-pop form { flex-direction: column; } }
-@media (prefers-reduced-motion: reduce) { .sub-pop, .sub-pop-card { transition: none; transform: none; } }
